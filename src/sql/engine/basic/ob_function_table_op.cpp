@@ -15,6 +15,10 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#ifndef _WIN32
+#include "sql/engine/basic/file_scan_payload.h"
+#endif
+#include "common/timezone/ob_time_convert.h"
 
 #include "sql/engine/basic/ob_function_table_op.h"
 #include "sql/engine/ob_exec_context.h"
@@ -27,14 +31,117 @@ using namespace common;
 namespace sql
 {
 
-OB_SERIALIZE_MEMBER((ObFunctionTableSpec, ObOpSpec), value_expr_, column_exprs_, has_correlated_expr_);
+OB_SERIALIZE_MEMBER((ObFunctionTableSpec, ObOpSpec), value_expr_, column_exprs_, has_correlated_expr_, file_scan_payload_, file_column_indexes_);
+
+int ObFunctionTableOp::open_file_scan()
+{
+  int ret = OB_SUCCESS;
+#ifdef _WIN32
+  ret = OB_NOT_SUPPORTED;
+#else
+  using namespace file_sql;
+  ObObj enabled;
+  ObString secure;
+  ObSQLSessionInfo *session = ctx_.get_my_session();
+  if (OB_ISNULL(session)) { ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(session->get_sys_variable(share::SYS_VAR_ENABLE_FILE_SQL, enabled))) {
+  } else if (enabled.get_int() == 0) { ret = OB_NOT_SUPPORTED;
+  } else if (OB_FAIL(session->get_secure_file_priv(secure))) {
+  } else {
+    try {
+      delete file_cursor_;
+      file_cursor_ = nullptr;
+      const auto &payload = MY_SPEC.file_scan_payload_;
+      file_cursor_ = new Cursor(decode(payload.ptr(), payload.length()),
+                             std::string(secure.ptr(), secure.length()));
+      file_cursor_->reader.open();
+      if (!matches(std::string(payload.ptr(), payload.length()), file_cursor_->reader)) {
+        ret = OB_INVALID_DATA;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "file SQL: file changed after query compilation; recompile the query");
+      }
+      next_row_func_ = &ObFunctionTableOp::next_file_row;
+    } catch (const std::bad_alloc &) { ret = OB_ALLOCATE_MEMORY_FAILED;
+    } catch (const std::exception &error) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("cannot open file table", K(ret), "error", error.what());
+      LOG_USER_ERROR(OB_INVALID_ARGUMENT, error.what());
+    }
+    if (OB_FAIL(ret)) { delete file_cursor_; file_cursor_ = nullptr; }
+  }
+#endif
+  return ret;
+}
+
+int ObFunctionTableOp::next_file_row()
+{
+  int ret = OB_SUCCESS;
+#ifdef _WIN32
+  ret = OB_NOT_SUPPORTED;
+#else
+  using namespace file_sql;
+  clear_evaluated_flag();
+  if (OB_FAIL(ctx_.check_status())) {
+  } else if (OB_ISNULL(file_cursor_)) { ret = OB_ERR_UNEXPECTED;
+  } else {
+    try {
+      if (!file_cursor_->reader.next(file_cursor_->row)) { ret = OB_ITER_END;
+      } else if (MY_SPEC.file_column_indexes_.count() != MY_SPEC.column_exprs_.count()) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.column_exprs_.count(); ++i) {
+          const int64_t index = MY_SPEC.file_column_indexes_.at(i);
+          if (index < 0 || index >= file_cursor_->row.size()) { ret = OB_ERR_UNEXPECTED;
+          } else {
+            const Value &value = file_cursor_->row[index];
+            ObExpr &expr = *MY_SPEC.column_exprs_.at(i);
+            ObDatum &datum = expr.locate_datum_for_write(eval_ctx_);
+            const ObString text(static_cast<int32_t>(value.text.size()), value.text.data());
+            if (value.kind == Kind::Null) datum.set_null();
+            else if (expr.datum_meta_.type_ == ObIntType) {
+              int64_t integer = 0;
+              if (value.kind == Kind::Bool) integer = value.text == "true" || value.text == "TRUE";
+              else {
+                const auto parsed = std::from_chars(value.text.data(), value.text.data() + value.text.size(), integer);
+                if (parsed.ec != std::errc() || parsed.ptr != value.text.data() + value.text.size()) ret = OB_INVALID_DATA;
+              }
+              datum.set_int(integer);
+            } else if (expr.datum_meta_.type_ == ObDoubleType) {
+              char *end = nullptr;
+              const double number = std::strtod(value.text.c_str(), &end);
+              if (!std::isfinite(number) || end != value.text.c_str() + value.text.size()) ret = OB_INVALID_DATA;
+              else datum.set_double(number);
+            } else if (expr.datum_meta_.type_ == ObDateType) {
+              int32_t date = 0;
+              if (OB_FAIL(ObTimeConverter::str_to_date(text, date))) {
+              } else datum.set_date(date);
+            } else if (expr.datum_meta_.type_ == ObDateTimeType) {
+              int64_t datetime = 0;
+              const ObTimeConvertCtx convert(ctx_.get_my_session()->get_timezone_info(), false);
+              if (OB_FAIL(ObTimeConverter::str_to_datetime(text, convert, datetime))) {
+              } else datum.set_datetime(datetime);
+            } else datum.set_string(text);
+            if (OB_SUCC(ret)) expr.set_evaluated_projected(eval_ctx_);
+          }
+        }
+      }
+    } catch (const std::bad_alloc &) { ret = OB_ALLOCATE_MEMORY_FAILED;
+    } catch (const std::exception &error) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_USER_ERROR(OB_INVALID_ARGUMENT, error.what());
+    }
+  }
+#endif
+  return ret;
+}
 
 int ObFunctionTableOp::inner_open()
 {
   int ret = OB_SUCCESS;
   node_idx_ = 0;
   already_calc_ = false;
-  if (OB_ISNULL(MY_SPEC.value_expr_)) {
+  if (!MY_SPEC.file_scan_payload_.empty()) {
+    ret = open_file_scan();
+  } else if (OB_ISNULL(MY_SPEC.value_expr_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (ObExtendType == MY_SPEC.value_expr_->datum_meta_.type_) {
     next_row_func_ = &ObFunctionTableOp::inner_get_next_row_udf;
@@ -47,6 +154,9 @@ int ObFunctionTableOp::inner_open()
 int ObFunctionTableOp::inner_rescan()
 {
   int ret = OB_SUCCESS;
+  if (!MY_SPEC.file_scan_payload_.empty()) {
+    return open_file_scan();
+  }
   if (OB_FAIL(ObOperator::inner_rescan())) {
   } else {
     node_idx_ = 0;
@@ -62,6 +172,10 @@ int ObFunctionTableOp::inner_rescan()
 
 int ObFunctionTableOp::inner_close()
 {
+#ifndef _WIN32
+  delete file_cursor_;
+  file_cursor_ = nullptr;
+#endif
   int ret = OB_SUCCESS;
   node_idx_ = 0;
   row_count_ = 0;
@@ -72,6 +186,10 @@ int ObFunctionTableOp::inner_close()
 
 void ObFunctionTableOp::destroy()
 {
+#ifndef _WIN32
+  delete file_cursor_;
+  file_cursor_ = nullptr;
+#endif
   ObOperator::destroy();
 }
 

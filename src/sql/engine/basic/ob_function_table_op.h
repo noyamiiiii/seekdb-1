@@ -23,20 +23,24 @@
 
 namespace oceanbase
 {
+namespace pl { class ObPLCollection; }
 namespace sql
 {
 
+namespace file_sql { struct Cursor; }
 class ObExpr;
 class ObFunctionTableSpec : public ObOpSpec
 {
 OB_UNIS_VERSION_V(1);
 public:
   ObFunctionTableSpec(common::ObIAllocator &alloc, const ObPhyOperatorType type)
-    : ObOpSpec(alloc, type), value_expr_(nullptr), column_exprs_(alloc), has_correlated_expr_(false)
+    : ObOpSpec(alloc, type), value_expr_(nullptr), column_exprs_(alloc), has_correlated_expr_(false), file_column_indexes_(alloc)
   {}
   ObExpr *value_expr_;
   common::ObFixedArray<ObExpr*, common::ObIAllocator> column_exprs_;
   bool has_correlated_expr_;
+  common::ObString file_scan_payload_;
+  common::ObFixedArray<int64_t, common::ObIAllocator> file_column_indexes_;
 };
 
 class ObFunctionTableOp : public ObOperator
@@ -58,6 +62,9 @@ public:
   virtual int inner_close() override;
   virtual void destroy() override;
 private:
+  int open_file_scan();
+  int next_file_row();
+  file_sql::Cursor *file_cursor_ = nullptr;
   int inner_get_next_row_udf();
   int inner_get_next_row_sys_func();
   int get_current_result(common::ObObj &result);

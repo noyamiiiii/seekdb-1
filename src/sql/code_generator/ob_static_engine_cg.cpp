@@ -15,6 +15,9 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#ifndef _WIN32
+#include "sql/engine/basic/file_scan_payload.h"
+#endif
 
 #include "config_bridge.h"
 #include "ob_static_engine_cg.h"
@@ -5500,6 +5503,20 @@ int ObStaticEngineCG::generate_spec(ObLogFunctionTable &op, ObFunctionTableSpec 
   ObRawExpr *value_raw_expr = nullptr;
   ObExpr *value_expr = nullptr;
   int ret = OB_SUCCESS;
+  bool is_file_table = false;
+  if (op.get_value_expr() && op.get_value_expr()->is_const_expr()) {
+#ifndef _WIN32
+    const ObObj &value = static_cast<ObConstRawExpr *>(op.get_value_expr())->get_value();
+    if (value.is_string_type()) {
+      const ObString payload = value.get_string();
+      is_file_table = file_sql::is_payload(payload.ptr(), payload.length());
+      if (is_file_table) { ret = ob_write_string(alloc, payload, spec.file_scan_payload_); }
+    }
+#endif
+  }
+  if (OB_FAIL(ret)) { return ret; }
+  if (is_file_table && OB_ISNULL(op.get_stmt())) { return OB_ERR_UNEXPECTED; }
+  if (is_file_table && OB_FAIL(spec.file_column_indexes_.init(op.get_stmt()->get_column_size()))) { return ret; }
   if (OB_ISNULL(op.get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(spec.column_exprs_.init(op.get_stmt()->get_column_size()))) {
@@ -5526,6 +5543,7 @@ int ObStaticEngineCG::generate_spec(ObLogFunctionTable &op, ObFunctionTableSpec 
         OZ (mark_expr_self_produced(col_item->expr_));
         OZ (generate_rt_expr(*col_item->expr_, rt_expr));
         OZ (spec.column_exprs_.push_back(rt_expr));
+        if (is_file_table) { OZ (spec.file_column_indexes_.push_back(col_item->column_id_ - OB_APP_MIN_COLUMN_ID)); }
       }
     }
   }

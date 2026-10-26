@@ -259,6 +259,7 @@ END_P SET_VAR DELIMITER
 //-----------------------------reserved keyword end-------------------------------------------------
 %token <non_reserved_keyword>
 //-----------------------------non_reserved keyword begin-------------------------------------------
+        FILE_TABLE_FUNCTION
         ACCESS ACCOUNT ACTION ACTIVE ADDDATE AFTER AGAINST AGGREGATE AI ALGORITHM ALWAYS ALLOW ANALYSE ANY
         APPROX_COUNT_DISTINCT APPROX_COUNT_DISTINCT_SYNOPSIS APPROX_COUNT_DISTINCT_SYNOPSIS_MERGE
         ARRAY ASCII ASIS AT ATTRIBUTE AUTHORS AUTO AUTOEXTEND_SIZE AUTO_INCREMENT AUTO_INCREMENT_CACHE_SIZE
@@ -405,6 +406,7 @@ END_P SET_VAR DELIMITER
 %type <node> opt_limit_clause limit_expr opt_lock_type opt_for_update opt_for_update_wait opt_lock_in_share_mode
 %type <node> sort_list sort_key opt_asc_desc sort_list_for_group_by sort_key_for_group_by opt_asc_desc_for_group_by sort_list_opt_null sort_key_opt_null opt_asc_desc_null
 %type <node> opt_query_expression_option_list query_expression_option_list query_expression_option opt_distinct opt_distinct_or_all opt_separator projection
+%type <node> file_table_expr file_table_name
 %type <node> from_list table_references table_reference table_factor normal_relation_factor dot_relation_factor relation_factor
 %type <node> relation_factor_in_hint relation_factor_in_hint_list relation_factor_in_pq_hint opt_relation_factor_in_hint_list relation_factor_in_use_join_hint_list
 %type <node> relation_factor_in_leading_hint_list joined_table tbl_name table_subquery table_subquery_alias
@@ -10787,8 +10789,46 @@ table_factor
 }
 ;
 
+file_table_name:
+FILE_TABLE_FUNCTION
+{
+  make_name_node($$, result->malloc_pool_, $1->keyword_name);
+}
+;
+
+file_table_expr:
+file_table_name '(' expr_list ')' %prec LOWER_PARENS
+{
+  ParseNode *args = $3;
+  for (int i = 0; i < args->num_child_; ++i) {
+    args->children_[i]->is_forbid_parameter_ = true;
+  }
+  malloc_non_terminal_node($$, result->malloc_pool_, T_TABLE_COLLECTION_EXPRESSION, 3, $1, args, NULL);
+}
+| file_table_name '(' expr_list ')' relation_name
+{
+  ParseNode *args = $3;
+  for (int i = 0; i < args->num_child_; ++i) {
+    args->children_[i]->is_forbid_parameter_ = true;
+  }
+  malloc_non_terminal_node($$, result->malloc_pool_, T_TABLE_COLLECTION_EXPRESSION, 3, $1, args, $5);
+}
+| file_table_name '(' expr_list ')' AS relation_name
+{
+  ParseNode *args = $3;
+  for (int i = 0; i < args->num_child_; ++i) {
+    args->children_[i]->is_forbid_parameter_ = true;
+  }
+  malloc_non_terminal_node($$, result->malloc_pool_, T_TABLE_COLLECTION_EXPRESSION, 3, $1, args, $6);
+}
+;
+
 table_factor:
-tbl_name
+file_table_expr
+{
+  $$ = $1;
+}
+| tbl_name
 {
   $$ = $1;
 }
@@ -17753,6 +17793,7 @@ ACCOUNT
 |       JSON_OBJECTAGG
 |       JSON_QUERY
 |       JSON_TABLE
+|       FILE_TABLE_FUNCTION
 |       KEYWORD
 |       KEY_BLOCK_SIZE
 |       KEY_VERSION
