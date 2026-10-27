@@ -1,0 +1,93 @@
+########## tokenize ##########
+    15.62%  sql-nio-2       [kernel.kallsyms]  [k] _raw_spin_unlock_irqrestore
+     7.27%  ReqWorker       [kernel.kallsyms]  [k] _raw_spin_unlock_irq
+     2.88%  ReqWorker       seekdb-before      [.] oceanbase::storage::ObArrayHashMap::find(oceanbase::storage::ObFTSingleWord const&, int&) const
+     2.82%  ReqWorker       seekdb-before      [.] oceanbase::storage::ObFTDATReader<void>::match_with_hit(oceanbase::common::ObString const&, oceanbase::storage::ObDATrieHit const&, oceanbase::storage::ObDATrieHit&) const
+     2.40%  ReqWorker       seekdb-before      [.] oceanbase::common::ObLatch::unlock(unsigned int const*)
+     1.62%  ReqWorker       seekdb-before      [.] oceanbase::common::ObLatch::wrlock(unsigned int, long, unsigned int const*)
+     1.32%  ReqWorker       seekdb-before      [.] oceanbase::common::TCRWLock::wrlock(long)
+     1.02%  ReqWorker       libc.so.6          [.] __memcmp_avx2_movbe
+     1.02%  ReqWorker       seekdb-before      [.] ob_strnncoll_mb_bin(ObCharsetInfo const*, unsigned char const*, unsigned long, unsigned char const*, unsigned long, bool)
+     0.96%  ReqWorker       seekdb-before      [.] oceanbase::common::PageArena<char, oceanbase::common::ModulePageAllocator>::_alloc_aligned(long, long)
+     0.90%  ReqWorker       libc.so.6          [.] __memmove_avx_unaligned_erms
+     0.90%  ReqWorker       seekdb-before      [.] oceanbase::common::ObCharset::strcmp(oceanbase::common::ObCollationType, oceanbase::common::ObString const&, oceanbase::common::ObString const&)
+     0.78%  ReqWorker       seekdb-before      [.] oceanbase::common::ObCharset::get_charset(oceanbase::common::ObCollationType)
+     0.78%  ReqWorker       seekdb-before      [.] oceanbase::common::ObLatch::rdlock(unsigned int, long)
+     0.66%  ReqWorker       libc.so.6          [.] __strlen_avx2
+     0.66%  ReqWorker       libc.so.6          [.] pthread_spin_lock@@GLIBC_2.34
+     0.66%  ReqWorker       seekdb-before      [.] oceanbase::common::ObStringBuffer::append(char const*)
+     0.66%  ReqWorker       seekdb-before      [.] oceanbase::storage::ObFTRangeDict::find_first_char_range(oceanbase::common::ObString const&, oceanbase::storage::ObIFTDict*&) const
+     0.60%  ReqWorker       libc.so.6          [.] tolower
+     0.60%  ReqWorker       seekdb-before      [.] oceanbase::sql::ObFastParserMysql::process_string(char)
+     0.54%  ReqWorker       seekdb-before      [.] int oceanbase::common::hash::ObHashTable<oceanbase::storage::ObFTWord, oceanbase::common::hash::HashMapPair<oceanbase::storage::ObFTWord, long>, oceanbase::common::hash::hash_func<oceanbase::storage::ObFTWord>, oceanbase::common::hash::equal_to<oceanbase::storage::ObFTWord>, oceanbase::common::hash::pair_first<oceanbase::common::hash::HashMapPair<oceanbase::storage::ObFTWord, long> >, oceanbase::common::hash::SimpleAllocer<oceanbase::common::hash::ObHashTableNode<oceanbase::common::hash::HashMapPair<oceanbase::storage::ObFTWord, long> >, 97, oceanbase::common::hash::SpinMutexDefendMode, oceanbase::common::hash::DefaultSimpleAllocerAllocator>, oceanbase::common::hash::LatchReadWriteDefendMode, oceanbase::common::hash::NormalPointer, oceanbase::common::ObMalloc, 1l>::set_refactored<void, false>(oceanbase::storage::ObFTWord const&, oceanbase::common::hash::HashMapPair<oceanbase::storage::ObFTWord, long> const&, int, int, int, void*)
+     0.54%  ReqWorker       seekdb-before      [.] oceanbase::storage::ObFTParseHelper::make_token_array_json(oceanbase::common::hash::ObHashMap<oceanbase::storage::ObFTWord, long, oceanbase::common::hash::LatchReadWriteDefendMode, oceanbase::common::hash::hash_func<oceanbase::storage::ObFTWord>, oceanbase::common::hash::equal_to<oceanbase::storage::ObFTWord>, oceanbase::common::hash::SimpleAllocer<oceanbase::common::hash::ObHashTableNode<oceanbase::common::hash::HashMapPair<oceanbase::storage::ObFTWord, long> >, 97, oceanbase::common::hash::SpinMutexDefendMode, oceanbase::common::hash::DefaultSimpleAllocerAllocator>, oceanbase::common::hash::NormalPointer, oceanbase::common::ObMalloc, 1l> const&, oceanbase::common::ObIJsonBase*&)
+     0.48%  ReqWorker       seekdb-before      [.] oceanbase::common::ObCharset::is_argument_valid(oceanbase::common::ObCollationType const&, char const*, long, char const*, long)
+     0.48%  ReqWorker       seekdb-before      [.] oceanbase::common::ObKVCacheMap::get(long, oceanbase::common::ObIKVCacheKey const&, oceanbase::common::ObIKVCacheValue const*&, oceanbase::common::HazptrHolder&)
+     0.48%  ReqWorker       seekdb-before      [.] oceanbase::sql::ObFastParserMysql::parse_next_token()
+     0.48%  ReqWorker       seekdb-before      [.] oceanbase::storage::ObIIKProcessor::process(oceanbase::storage::TokenizeContext&)
+     0.48%  sql-nio-2       [kernel.kallsyms]  [k] ep_item_poll.isra.0
+     0.42%  ReqWorker       libc.so.6          [.] printf_positional
+     0.42%  ReqWorker       seekdb-before      [.] ob_casedn_utf8mb4(ObCharsetInfo const*, char*, unsigned long, char*, unsigned long)
+     0.42%  ReqWorker       seekdb-before      [.] ob_hash_sort_utf8mb4(ObCharsetInfo const*, unsigned char const*, unsigned long, unsigned long*, unsigned long*, bool, unsigned long (*)(void const*, unsigned long, unsigned long))
+
+---- call tree (top) ----
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 1K of event 'task-clock:ppp'
+# Event count (approx.): 3334669312
+#
+# Overhead  Command         Shared Object      Symbol                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
+# ........  ..............  .................  ..................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................
+#
+    15.62%  sql-nio-2       [kernel.kallsyms]  [k] _raw_spin_unlock_irqrestore
+            |
+            ---_raw_spin_unlock_irqrestore
+               |          
+               |--7.87%--try_to_wake_up
+               |          wake_up_q
+               |          futex_wake
+               |          do_futex
+               |          __x64_sys_futex
+               |          x64_sys_call
+               |          do_syscall_64
+               |          entry_SYSCALL_64_after_hwframe
+               |          syscall
+               |          oceanbase::common::SCondTemp<3>::signal(unsigned int, int, bool)
+               |          oceanbase::common::ObPriorityQueue2<1, 2, 3>::push(oceanbase::common::ObLink*, int, bool)
+               |          oceanbase::omt::ObServerRuntime::recv_request(oceanbase::rpc::ObRequest&)
+               |          oceanbase::observer::ObSrvDeliver::deliver_mysql_request(oceanbase::rpc::ObRequest&)
+               |          oceanbase::observer::ObSrvDeliver::deliver(oceanbase::rpc::ObRequest&)
+               |          oceanbase::obmysql::ObSqlSockHandler::on_readable(void*, char*, long, unsigned long, int, NioMysqlCommandView const*, unsigned long)
+               |          _RNvNtCs83mTycQP7D6_7sql_nio7request22deliver_decoded_packet
+               |          
+                --7.75%--__wake_up_sync_key
+                          sock_def_readable
+                          tcp_data_ready
+                          tcp_rcv_established
+                          tcp_v4_do_rcv
+                          tcp_v4_rcv
+                          ip_protocol_deliver_rcu
+                          ip_local_deliver_finish
+                          ip_local_deliver
+                          ip_rcv
+                          __netif_receive_skb_one_core
+                          __netif_receive_skb
+                          process_backlog
+                          __napi_poll
+                          net_rx_action
+                          handle_softirqs
+                          __do_softirq
+                          do_softirq
+                          __local_bh_enable_ip
+                          __dev_queue_xmit
+                          ip_finish_output2
+                          __ip_finish_output
+                          ip_finish_output
+                          ip_output
+                          ip_local_out
+                          __ip_queue_xmit
+                          ip_queue_xmit
+                          __tcp_transmit_skb

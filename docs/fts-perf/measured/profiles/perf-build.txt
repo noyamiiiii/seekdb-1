@@ -1,0 +1,93 @@
+########## build ##########
+     2.64%  PX_G0            seekdb-before      [.] oceanbase::sql::ObOperator::get_next_batch(long, oceanbase::sql::ObBatchRows const*&)
+     2.16%  PX_G0            seekdb-before      [.] ob_strnncollsp_utf8mb4(ObCharsetInfo const*, unsigned char const*, unsigned long, unsigned char const*, unsigned long, bool)
+     2.13%  MDS_MINI_MERGE   libc.so.6          [.] __memset_avx2_unaligned_erms
+     2.05%  PX_G0            seekdb-before      [.] oceanbase::common::ObIArrayWrap<int (*)(oceanbase::common::ObDatum const&, oceanbase::common::ObDatum const&, int&, oceanbase::common::ObDatumAccessContext const*)>::at(long) const
+     1.83%  PX_G0            libc.so.6          [.] __memmove_avx_unaligned_erms
+     1.80%  PX_G0            seekdb-before      [.] ob_mb_wc_utf8mb4(ObCharsetInfo const*, unsigned long*, unsigned char const*, unsigned char const*)
+     1.80%  PX_G0            seekdb-before      [.] oceanbase::sql::ObSortOpImpl::Compare::operator()(oceanbase::sql::ObChunkDatumStore::StoredRow const*, oceanbase::sql::ObChunkDatumStore::StoredRow const*)
+     1.59%  PX_G0            seekdb-before      [.] oceanbase::common::ObNullSafeDatumStrCmp<(oceanbase::common::ObCollationType)45, false, true>::cmp(oceanbase::common::ObDatum const&, oceanbase::common::ObDatum const&, int&, oceanbase::common::ObDatumAccessContext const*)
+     1.51%  PX_G0            libc.so.6          [.] __memcmp_avx2_movbe
+     1.37%  PX_G0            seekdb-before      [.] oceanbase::common::ObCharset::is_argument_valid(oceanbase::common::ObCollationType const&, char const*, long, char const*, long)
+     1.37%  PX_G0            seekdb-before      [.] oceanbase::common::crc64_sse42(unsigned long, char const*, long)
+     1.32%  PX_G0            seekdb-before      [.] oceanbase::common::ObCharset::get_charset(oceanbase::common::ObCollationType)
+     1.21%  PX_G0            seekdb-before      [.] oceanbase::common::ObNullSafeDatumStrCmp<(oceanbase::common::ObCollationType)63, false, true>::cmp(oceanbase::common::ObDatum const&, oceanbase::common::ObDatum const&, int&, oceanbase::common::ObDatumAccessContext const*)
+     1.05%  PX_G0            seekdb-before      [.] ZSTD_compressBlock_fast
+     1.02%  PX_G0            seekdb-before      [.] oceanbase::common::ObCharset::strcmpsp(oceanbase::common::ObCollationType, char const*, long, char const*, long, bool)
+     0.94%  PX_G0            seekdb-before      [.] oceanbase::sql::ObOperator::get_next_row()
+     0.92%  PX_G0            seekdb-before      [.] oceanbase::common::ObCharset::get_charset_uninit(oceanbase::common::ObCollationType)
+     0.89%  MDS_MINI_MERGE   [kernel.kallsyms]  [k] _raw_spin_unlock_irqrestore
+     0.89%  PX_G0            seekdb-before      [.] oceanbase::storage::ObArrayHashMap::find(oceanbase::storage::ObFTSingleWord const&, int&) const
+     0.86%  PX_G0            libc.so.6          [.] __memset_avx2_unaligned_erms
+     0.84%  PX_G0            [kernel.kallsyms]  [k] clear_page_erms
+     0.84%  PX_G0            seekdb-before      [.] oceanbase::common::ObLatch::unlock(unsigned int const*)
+     0.84%  PX_G0            seekdb-before      [.] oceanbase::storage::ObIIKProcessor::process(oceanbase::storage::TokenizeContext&)
+     0.81%  TimerWK0         [kernel.kallsyms]  [k] _raw_spin_unlock_irqrestore
+     0.78%  PX_G0            seekdb-before      [.] oceanbase::common::ObCharset::strcmp(oceanbase::common::ObCollationType, oceanbase::common::ObString const&, oceanbase::common::ObString const&)
+     0.73%  PX_G0            seekdb-before      [.] ZSTD_decompressSequences_bmi2
+     0.70%  PX_G0            seekdb-before      [.] oceanbase::common::ObIArrayWrap<oceanbase::sql::ObOptParamHint::OptParamType>::at(long) const
+     0.62%  PX_G0            seekdb-before      [.] void oceanbase::sql::ObChunkDatumStore::Iterator::attach_rows<false>(oceanbase::common::ObIArray<oceanbase::sql::ObExpr*> const&, oceanbase::sql::ObEvalCtx&, oceanbase::sql::ObChunkDatumStore::StoredRow const**, long)
+     0.59%  MDS_MINI_MERGE   seekdb-before      [.] oceanbase::common::ObLatchMutex::lock(unsigned int, long, bool)
+     0.57%  IO_GETEVENT0     [kernel.kallsyms]  [k] _raw_spin_unlock_irqrestore
+
+---- call tree (top) ----
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 3K of event 'task-clock:ppp'
+# Event count (approx.): 7438877696
+#
+# Overhead  Command          Shared Object      Symbol                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
+# ........  ...............  .................  .........................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................
+#
+     2.64%  PX_G0            seekdb-before      [.] oceanbase::sql::ObOperator::get_next_batch(long, oceanbase::sql::ObBatchRows const*&)
+            |
+            ---oceanbase::sql::ObOperator::get_next_batch(long, oceanbase::sql::ObBatchRows const*&)
+               |          
+               |--0.81%--oceanbase::sql::ObStatCollectorOp::inner_get_next_batch(long)
+               |          oceanbase::sql::ObOperator::get_next_batch(long, oceanbase::sql::ObBatchRows const*&)
+               |          oceanbase::sql::ObPxTransmitOp::next_batch(long)
+               |          oceanbase::sql::ObPxDistTransmitOp::next_batch(long)
+               |          oceanbase::sql::ObOperator::get_next_batch(long, oceanbase::sql::ObBatchRows const*&)
+               |          int oceanbase::sql::ObPxTransmitOp::send_rows_in_batch<(oceanbase::sql::ObSliceIdxCalc::SliceCalcType)10>(oceanbase::sql::ObSliceIdxCalc&)
+               |          oceanbase::sql::ObPxDistTransmitOp::do_range_dist()
+               |          oceanbase::sql::ObPxDistTransmitOp::do_transmit()
+               |          oceanbase::sql::ObPxTransmitOp::transmit()
+               |          oceanbase::sql::ObPxTaskProcess::execute(oceanbase::sql::ObOpSpec const&)
+               |          oceanbase::sql::ObPxTaskProcess::do_process()
+               |          oceanbase::sql::ObPxTaskProcess::process()
+               |          oceanbase::sql::ObPxTaskProcess::run()
+               |          oceanbase::sql::PxWorkerFunctor::operator()(bool)
+               |          oceanbase::omt::ObPxPool::handle(oceanbase::common::ObLink*)
+               |          oceanbase::omt::ObPxPool::run1()
+               |          oceanbase::omt::ObPxPool::run(long)
+               |          oceanbase::lib::Thread::run()
+               |          oceanbase::lib::Thread::__th_start(void*)
+               |          start_thread
+               |          clone3
+               |          
+                --0.51%--oceanbase::sql::ObPxTransmitOp::next_batch(long)
+                          oceanbase::sql::ObPxDistTransmitOp::next_batch(long)
+                          oceanbase::sql::ObOperator::get_next_batch(long, oceanbase::sql::ObBatchRows const*&)
+                          int oceanbase::sql::ObPxTransmitOp::send_rows_in_batch<(oceanbase::sql::ObSliceIdxCalc::SliceCalcType)10>(oceanbase::sql::ObSliceIdxCalc&)
+                          oceanbase::sql::ObPxDistTransmitOp::do_range_dist()
+                          oceanbase::sql::ObPxDistTransmitOp::do_transmit()
+                          oceanbase::sql::ObPxTransmitOp::transmit()
+                          oceanbase::sql::ObPxTaskProcess::execute(oceanbase::sql::ObOpSpec const&)
+                          oceanbase::sql::ObPxTaskProcess::do_process()
+                          oceanbase::sql::ObPxTaskProcess::process()
+                          oceanbase::sql::ObPxTaskProcess::run()
+                          oceanbase::sql::PxWorkerFunctor::operator()(bool)
+                          oceanbase::omt::ObPxPool::handle(oceanbase::common::ObLink*)
+                          oceanbase::omt::ObPxPool::run1()
+                          oceanbase::omt::ObPxPool::run(long)
+                          oceanbase::lib::Thread::run()
+                          oceanbase::lib::Thread::__th_start(void*)
+                          start_thread
+                          clone3
+
+     2.16%  PX_G0            seekdb-before      [.] ob_strnncollsp_utf8mb4(ObCharsetInfo const*, unsigned char const*, unsigned long, unsigned char const*, unsigned long, bool)
+            |
+            ---ob_strnncollsp_utf8mb4(ObCharsetInfo const*, unsigned char const*, unsigned long, unsigned char const*, unsigned long, bool)

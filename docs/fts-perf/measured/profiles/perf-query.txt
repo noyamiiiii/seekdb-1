@@ -1,0 +1,93 @@
+########## query ##########
+     4.82%  ReqWorker        seekdb-before      [.] oceanbase::storage::ObSRDaaTIterImpl::filter_on_demand(long, double, bool&)
+     4.65%  ReqWorker        seekdb-before      [.] oceanbase::common::ObIArrayWrap<oceanbase::common::hash::ObHashSet<unsigned long, oceanbase::common::hash::NoPthreadDefendMode, oceanbase::common::hash::hash_func<unsigned long>, oceanbase::common::hash::equal_to<unsigned long>, oceanbase::common::hash::SimpleAllocer<oceanbase::common::hash::ObHashTableNode<oceanbase::common::hash::HashMapPair<unsigned long, oceanbase::common::hash::HashNullObj> >, 108, oceanbase::common::hash::SpinMutexDefendMode, oceanbase::common::hash::DefaultSimpleAllocerAllocator>, oceanbase::common::hash::NormalPointer, oceanbase::common::ObMalloc, 1l>*>::at(long)
+     4.24%  ReqWorker        libc.so.6          [.] __memmove_avx_unaligned_erms
+     4.08%  ReqWorker        seekdb-before      [.] oceanbase::blocksstable::ObStringDiffDecoder::batch_decode(oceanbase::blocksstable::ObColumnDecoderCtx const&, oceanbase::blocksstable::ObIRowIndex const*, int const*, char const**, long, oceanbase::common::ObDatum*) const
+     3.76%  ReqWorker        seekdb-before      [.] oceanbase::sql::ObBitVectorImpl<unsigned long>::set(long)
+     3.51%  ReqWorker        seekdb-before      [.] oceanbase::sql::calc_bool_expr_for_double_type(oceanbase::sql::ObExpr const&, oceanbase::sql::ObEvalCtx&, oceanbase::common::ObDatum&)
+     3.35%  ReqWorker        seekdb-before      [.] oceanbase::sql::ObBitVectorImpl<unsigned long>::at(long) const
+     2.94%  ReqWorker        seekdb-before      [.] oceanbase::storage::ObSRDaaTIterImpl::fill_merge_heap()
+     2.78%  ReqWorker        seekdb-before      [.] oceanbase::sql::ObExprBM25::eval_batch_bm25_relevance_expr(oceanbase::sql::ObExpr const&, oceanbase::sql::ObEvalCtx&, oceanbase::sql::ObBitVectorImpl<unsigned long> const&, long)
+     2.61%  ReqWorker        seekdb-before      [.] oceanbase::storage::ObSimpleRowsMerger<oceanbase::storage::ObBlockStatIterator::ObBlockStatKeyItem, oceanbase::storage::ObBlockStatIterator::ObBlockStatKeyCmp>::empty() const
+     2.45%  ReqWorker        seekdb-before      [.] oceanbase::storage::ObSRDaaTIterImpl::collect_dims_by_id(oceanbase::common::ObDatum const*&, double&, bool&)
+     2.37%  ReqWorker        seekdb-before      [.] oceanbase::storage::ObSimpleRowsMerger<oceanbase::storage::ObSRMergeItem, oceanbase::storage::ObSRMergeCmp>::push(oceanbase::storage::ObSRMergeItem const&)
+     2.20%  ReqWorker        seekdb-before      [.] oceanbase::sql::ObExpr::eval_one_datum_of_batch(oceanbase::sql::ObEvalCtx&, oceanbase::common::ObDatum*&) const
+     2.20%  ReqWorker        seekdb-before      [.] oceanbase::storage::ObSRDaaTIterImpl::project_results(long)
+     1.96%  sql-nio-1        [kernel.kallsyms]  [k] _raw_spin_unlock_irqrestore
+     1.88%  ReqWorker        seekdb-before      [.] oceanbase::common::ObIArrayWrap<int (*)(oceanbase::common::ObDatum const&, oceanbase::common::ObDatum const&, int&, oceanbase::common::ObDatumAccessContext const*)>::at(long) const
+     1.71%  ReqWorker        seekdb-before      [.] oceanbase::common::ObNullSafeDatumStrCmp<(oceanbase::common::ObCollationType)63, false, true>::cmp(oceanbase::common::ObDatum const&, oceanbase::common::ObDatum const&, int&, oceanbase::common::ObDatumAccessContext const*)
+     1.63%  ReqWorker        seekdb-before      [.] memcpy@plt
+     1.63%  ReqWorker        seekdb-before      [.] oceanbase::storage::ObSimpleRowsMerger<oceanbase::storage::ObSRMergeItem, oceanbase::storage::ObSRMergeCmp>::pop()
+     1.55%  ReqWorker        seekdb-before      [.] oceanbase::storage::ObSRDaaTIterImpl::cache_result(long&, oceanbase::common::ObDatum const&, double)
+     1.55%  ReqWorker        seekdb-before      [.] oceanbase::storage::ObTextRetrievalDaaTTokenIter::get_curr_score(double&) const
+     1.47%  ReqWorker        seekdb-before      [.] oceanbase::storage::ObSRDaaTIterImpl::do_one_merge_round(long&)
+     1.39%  ReqWorker        seekdb-before      [.] oceanbase::common::ObCharset::is_argument_valid(oceanbase::common::ObCollationType const&, char const*, long, char const*, long)
+     1.31%  ReqWorker        libc.so.6          [.] __memcmp_avx2_movbe
+     1.22%  ReqWorker        seekdb-before      [.] oceanbase::blocksstable::ObIntegerBaseDiffDecoder::batch_get_bitpacked_values(oceanbase::blocksstable::ObColumnDecoderCtx const&, int const*, long, long, long, oceanbase::common::ObDatum*) const
+     1.22%  ReqWorker        seekdb-before      [.] oceanbase::common::ObIArrayWrap<oceanbase::data_plane::ObSparseRetrievalId>::at(long)
+     1.22%  ReqWorker        seekdb-before      [.] oceanbase::storage::ObTextRetrievalDaaTTokenIter::get_next_row()
+     1.14%  ReqWorker        [kernel.kallsyms]  [k] _raw_spin_unlock_irq
+     0.98%  ReqWorker        seekdb-before      [.] oceanbase::sql::ObDocIdExt::from_datum(oceanbase::common::ObDatum const&)
+     0.98%  ReqWorker        seekdb-before      [.] oceanbase::storage::ObTextRetrievalDaaTTokenIter::save_relevances_and_docids()
+
+---- call tree (top) ----
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 1K of event 'task-clock:ppp'
+# Event count (approx.): 2454909800
+#
+# Overhead  Command          Shared Object      Symbol                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+# ........  ...............  .................  ................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................
+#
+     4.82%  ReqWorker        seekdb-before      [.] oceanbase::storage::ObSRDaaTIterImpl::filter_on_demand(long, double, bool&)
+            |
+            ---oceanbase::storage::ObSRDaaTIterImpl::filter_on_demand(long, double, bool&)
+               |          
+                --4.33%--oceanbase::storage::ObSRDaaTIterImpl::do_one_merge_round(long&)
+                          oceanbase::storage::ObSRDaaTIterImpl::get_next_rows(long, long&)
+                          oceanbase::sql::ObDASMergeIter::get_next_seq_rows(long&, long)
+                          oceanbase::sql::ObDASMergeIter::inner_get_next_rows(long&, long)
+                          oceanbase::sql::ObTableScanOp::get_next_batch_with_das(long&, long)
+                          oceanbase::sql::ObTableScanOp::inner_get_next_batch_for_tsc(long)
+                          oceanbase::sql::ObOperator::get_next_batch(long, oceanbase::sql::ObBatchRows const*&)
+                          oceanbase::sql::ObScalarAggregateOp::inner_get_next_batch(long)
+                          oceanbase::sql::ObOperator::get_next_batch(long, oceanbase::sql::ObBatchRows const*&)
+                          oceanbase::sql::ObBatchRowIter::get_next_row()
+                          oceanbase::sql::ObExecuteResult::get_next_row(oceanbase::sql::ObExecContext&, oceanbase::common::ObNewRow const*&)
+                          oceanbase::sql::ObResultSet::get_next_row(oceanbase::common::ObNewRow const*&)
+                          oceanbase::observer::ObQueryDriver::response_query_result(oceanbase::sql::ObResultSet&, bool, bool, bool&, long)
+                          oceanbase::observer::ObSyncPlanDriver::response_result(oceanbase::observer::ObMySQLResultSet&)
+                          oceanbase::observer::ObMPQuery::process_single_stmt(oceanbase::sql::ObMultiStmtItem const&, oceanbase::observer::ObSMConnection*, oceanbase::sql::ObSQLSessionInfo&, bool, bool, bool&, bool&)
+                          oceanbase::observer::ObMPQuery::process()
+                          oceanbase::rpc::frame::ObSqlProcessor::run()
+                          oceanbase::omt::ObWorkerProcessor::process_one(oceanbase::rpc::ObRequest&)
+                          oceanbase::omt::ObWorkerProcessor::process(oceanbase::rpc::ObRequest&)
+                          oceanbase::omt::ObThWorker::process_request(oceanbase::rpc::ObRequest&)
+                          oceanbase::omt::ObThWorker::worker(long&, long&, int&)
+                          non-virtual thunk to oceanbase::omt::ObThWorker::run(long)
+                          oceanbase::lib::Thread::run()
+                          oceanbase::lib::Thread::__th_start(void*)
+                          start_thread
+                          clone3
+
+     4.65%  ReqWorker        seekdb-before      [.] oceanbase::common::ObIArrayWrap<oceanbase::common::hash::ObHashSet<unsigned long, oceanbase::common::hash::NoPthreadDefendMode, oceanbase::common::hash::hash_func<unsigned long>, oceanbase::common::hash::equal_to<unsigned long>, oceanbase::common::hash::SimpleAllocer<oceanbase::common::hash::ObHashTableNode<oceanbase::common::hash::HashMapPair<unsigned long, oceanbase::common::hash::HashNullObj> >, 108, oceanbase::common::hash::SpinMutexDefendMode, oceanbase::common::hash::DefaultSimpleAllocerAllocator>, oceanbase::common::hash::NormalPointer, oceanbase::common::ObMalloc, 1l>*>::at(long)
+            |
+            ---oceanbase::common::ObIArrayWrap<oceanbase::common::hash::ObHashSet<unsigned long, oceanbase::common::hash::NoPthreadDefendMode, oceanbase::common::hash::hash_func<unsigned long>, oceanbase::common::hash::equal_to<unsigned long>, oceanbase::common::hash::SimpleAllocer<oceanbase::common::hash::ObHashTableNode<oceanbase::common::hash::HashMapPair<unsigned long, oceanbase::common::hash::HashNullObj> >, 108, oceanbase::common::hash::SpinMutexDefendMode, oceanbase::common::hash::DefaultSimpleAllocerAllocator>, oceanbase::common::hash::NormalPointer, oceanbase::common::ObMalloc, 1l>*>::at(long)
+               |          
+               |--1.47%--oceanbase::storage::ObSRDaaTIterImpl::fill_merge_heap()
+               |          oceanbase::storage::ObSRDaaTIterImpl::do_one_merge_round(long&)
+               |          oceanbase::storage::ObSRDaaTIterImpl::get_next_rows(long, long&)
+               |          oceanbase::sql::ObDASMergeIter::get_next_seq_rows(long&, long)
+               |          oceanbase::sql::ObDASMergeIter::inner_get_next_rows(long&, long)
+               |          oceanbase::sql::ObTableScanOp::get_next_batch_with_das(long&, long)
+               |          oceanbase::sql::ObTableScanOp::inner_get_next_batch_for_tsc(long)
+               |          oceanbase::sql::ObOperator::get_next_batch(long, oceanbase::sql::ObBatchRows const*&)
+               |          oceanbase::sql::ObScalarAggregateOp::inner_get_next_batch(long)
+               |          oceanbase::sql::ObOperator::get_next_batch(long, oceanbase::sql::ObBatchRows const*&)
+               |          oceanbase::sql::ObBatchRowIter::get_next_row()
+               |          oceanbase::sql::ObExecuteResult::get_next_row(oceanbase::sql::ObExecContext&, oceanbase::common::ObNewRow const*&)
+               |          oceanbase::sql::ObResultSet::get_next_row(oceanbase::common::ObNewRow const*&)
+               |          oceanbase::observer::ObQueryDriver::response_query_result(oceanbase::sql::ObResultSet&, bool, bool, bool&, long)
