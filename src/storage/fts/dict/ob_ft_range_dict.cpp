@@ -36,6 +36,7 @@
 #include "storage/fts/dict/ob_ft_dict_iterator.h"
 #include "storage/fts/dict/ob_ft_dict_table_iter.h"
 #include "storage/fts/dict/ob_ft_trie.h"
+#include <algorithm>
 
 #define USING_LOG_PREFIX STORAGE_FTS
 
@@ -380,26 +381,24 @@ int ObFTRangeDict::match_with_hit(const ObString &single_word,
 
 int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict *&dict) const
 {
-  int ret = OB_SUCCESS;
-  bool found = false;
-  for (int i = 0; OB_SUCC(ret) && !found && i < range_dicts_.size(); ++i) {
-    if (ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                          range_dicts_[i].start_.get_word(),
-                          single_word)
-            <= 0
-        && ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                             range_dicts_[i].end_.get_word(),
-                             single_word)
-               >= 0) {
-      dict = range_dicts_[i].dict_;
-      found = true;
+  // Ranges are disjoint and inclusive. Find the final start <= the key, then
+  // check its end so gaps and out-of-dictionary characters remain unmatched.
+  int64_t low = 0;
+  int64_t high = range_dicts_.size();
+  dict = nullptr;
+  while (low < high) {
+    const int64_t mid = low + (high - low) / 2;
+    if (ObCharset::strcmp(CS_TYPE_UTF8MB4_BIN, range_dicts_[mid].start_.get_word(), single_word) <= 0) {
+      low = mid + 1;
+    } else {
+      high = mid;
     }
   }
-  if (!found) {
-    // not found, dis match
-    ret = OB_ENTRY_NOT_EXIST;
+  if (low > 0 && ObCharset::strcmp(CS_TYPE_UTF8MB4_BIN,
+                                  range_dicts_[low - 1].end_.get_word(), single_word) >= 0) {
+    dict = range_dicts_[low - 1].dict_;
   }
-  return ret;
+  return dict == nullptr ? OB_ENTRY_NOT_EXIST : OB_SUCCESS;
 }
 
 int ObFTRangeDict::build_dict_from_cache(const ObFTCacheRangeContainer &range_container)
@@ -421,6 +420,11 @@ int ObFTRangeDict::build_dict_from_cache(const ObFTCacheRangeContainer &range_co
       if (OB_FAIL(range_dicts_.push_back(range))) {
       }
     }
+  }
+  if (OB_SUCC(ret) && range_dicts_.size() > 1) {
+    std::sort(range_dicts_.begin(), range_dicts_.end(), [](const ObFTRange &a, const ObFTRange &b) {
+      return ObCharset::strcmp(CS_TYPE_UTF8MB4_BIN, a.start_.get_word(), b.start_.get_word()) < 0;
+    });
   }
   return ret;
 }

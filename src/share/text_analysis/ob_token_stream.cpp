@@ -295,7 +295,16 @@ int ObBasicEnglishNormalizer::get_next(ObDatum &next_token, int64_t &token_freq)
     } else {
       ObString norm_alnum_token(norm_token_len, norm_token_ptr);
       ObString norm_lower_token;
-      if (OB_FAIL(ObCharset::tolower(cs_, norm_alnum_token, norm_lower_token, norm_allocator_))) {
+      bool already_lower_ascii = ObCharset::charset_type_by_coll(static_cast<ObCollationType>(cs_->number)) == CHARSET_UTF8MB4;
+      for (uint32_t i = 0; already_lower_ascii && i < norm_token_len; ++i) {
+        const unsigned char ch = static_cast<unsigned char>(norm_token_ptr[i]);
+        already_lower_ascii = ch < 128 && !(ch >= 'A' && ch <= 'Z');
+      }
+      if (already_lower_ascii) {
+        // Like the tokenizer's input view, this is valid until the next token.
+        // Persistent consumers already copy the result before advancing.
+        next_token.set_string(norm_alnum_token);
+      } else if (OB_FAIL(ObCharset::tolower(cs_, norm_alnum_token, norm_lower_token, norm_allocator_))) {
       } else {
         next_token.set_string(norm_lower_token);
       }
