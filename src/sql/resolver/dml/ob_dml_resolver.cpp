@@ -1854,6 +1854,17 @@ int ObDMLResolver::resolve_basic_column_item(const TableItem &table_item,
                          && !table_item.is_fake_cte_table())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (NULL != (col_item = stmt->get_column_item(table_item.table_id_, column_name))) {
+    // UPDATE/DELETE may register result columns before resolving WHERE. A
+    // reference served from that cache still requires the strict-read check.
+    if (session_info_->get_cur_exec_ctx() && current_scope_ != T_UPDATE_SCOPE
+        && current_scope_ != T_INSERT_SCOPE) {
+      const ObTableSchema *owner = nullptr;
+      if (OB_FAIL(schema_checker_->get_table_schema(table_item.ref_id_, owner))) {
+      } else if (owner) {
+        const auto *column = owner->get_column_schema(col_item->column_id_);
+        if (column) ret = ai_column::strict_read(*session_info_->get_cur_exec_ctx(), *owner, *column);
+      }
+    }
     if (!include_hidden) {
       if (!ObCharset::case_insensitive_equal(column_name, OB_HIDDEN_PK_INCREMENT_COLUMN_NAME)) {
         //do nothing

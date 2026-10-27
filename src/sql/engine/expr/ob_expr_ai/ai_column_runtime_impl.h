@@ -234,6 +234,11 @@ int prepare_alter(const ObTableSchema &original,AlterTableSchema &changes) {
     if(!is_internal(**it)||existing.count(string((*it)->get_column_name_str())))continue;
     AlterColumnSchema column;if(OB_FAIL(column.ObColumnSchemaV2::assign(**it)))return ret;column.alter_type_=OB_DDL_ADD_COLUMN;
     if(OB_FAIL(changes.add_column(column)))return ret;
+    // add_column copies the base schema through a virtual assign operation;
+    // restore the ALTER action on its owned derived object after that copy.
+    auto *added=static_cast<AlterColumnSchema *>(changes.get_column_schema(column.get_column_id()));
+    if(!added)return OB_SCHEMA_ERROR;
+    added->alter_type_=OB_DDL_ADD_COLUMN;
   }
   return ret;
 }
