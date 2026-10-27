@@ -25,7 +25,7 @@ inline std::string encode(const Options &options, const Reader &reader)
   writer.Key("columns"); writer.StartArray();
   for (const auto &column : reader.columns()) {
     writer.StartArray(); writer.String(column.name.data(), static_cast<rapidjson::SizeType>(column.name.size()));
-    writer.Int(static_cast<int>(column.kind)); writer.EndArray();
+    writer.Int(static_cast<int>(column.kind)); writer.Bool(column.nullable); writer.Int(column.scale); writer.EndArray();
   }
   writer.EndArray();
   writer.Key("identity"); writer.StartArray();

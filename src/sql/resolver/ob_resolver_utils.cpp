@@ -15,6 +15,9 @@
  */
 
 #define USING_LOG_PREFIX SQL_RESV
+#ifndef _WIN32
+#include "sql/engine/basic/file_scan_payload.h"
+#endif
 
 #include "config_bridge.h"
 #include "share/config/ob_config_helper.h"
@@ -121,6 +124,26 @@ int ObResolverUtils::get_all_function_table_column_names(const TableItem &table_
                                                          ObIArray<ObString> &column_names)
 {
   int ret = OB_SUCCESS;
+#ifndef _WIN32
+  if (table_item.function_table_expr_ && table_item.function_table_expr_->is_const_raw_expr()) {
+    const auto &value=static_cast<const ObConstRawExpr *>(table_item.function_table_expr_)->get_value();
+    if(value.is_string_type()){
+      const auto payload=value.get_string();
+      if(file_sql::is_payload(payload.ptr(),payload.length())){
+        rapidjson::Document document;
+        document.Parse(payload.ptr()+sizeof(file_sql::PREFIX)-1,payload.length()-sizeof(file_sql::PREFIX)+1);
+        if(document.HasParseError()||!document.IsObject()||!document.HasMember("columns")||!document["columns"].IsArray())return OB_INVALID_DATA;
+        for(const auto &field:document["columns"].GetArray()){
+          if(!field.IsArray()||field.Size()<2||!field[0].IsString())return OB_INVALID_DATA;
+          ObString name;
+          ObString view(field[0].GetStringLength(),field[0].GetString());
+          if(OB_FAIL(ob_write_string(*params.allocator_,view,name))||OB_FAIL(column_names.push_back(name)))return ret;
+        }
+        return ret;
+      }
+    }
+  }
+#endif
   ObRawExpr *table_expr = NULL;
   ObPLPackageGuard *package_guard = nullptr;
   const ObUserDefinedType *user_type = NULL;

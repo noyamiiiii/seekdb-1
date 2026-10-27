@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "sql/engine/expr/ob_expr_ai/ai_column_runtime.h"
 #include "config_bridge.h"
 #include "config_checkers.h"
 #ifndef _WIN32
@@ -1347,6 +1348,7 @@ int ObServer::start()
     // with _Exit(0), which would turn a failed bootstrap into a false success.
     set_stop();
   } else if (!stop_) {
+    ret = sql::ai_column::start_worker(sql_proxy_);
     GCTX.status_ = SS_SERVING;
     GCTX.start_service_time_ = start_service_time;
     FLOG_INFO("[OBSERVER_NOTICE] observer start service", "start_service_time", GCTX.start_service_time_);
@@ -1614,6 +1616,7 @@ int ObServer::stop()
     FLOG_INFO("ctas clean up timer stopped");
 
     FLOG_INFO("begin to stop inner sql proxy");
+    sql::ai_column::stop_worker();
     sql_proxy_.stop();
     ddl_sql_proxy_.stop();
     FLOG_INFO("inner sql proxy stopped");

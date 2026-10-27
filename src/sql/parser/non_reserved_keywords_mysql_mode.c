@@ -32,6 +32,7 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"read_ndjson", FILE_TABLE_FUNCTION},
   {"read_parquet", FILE_TABLE_FUNCTION},
   {"glob", FILE_TABLE_FUNCTION},
+  {"retry", AI_RETRY},
   {"access", ACCESS},
   {"accessible", ACCESSIBLE},
   {"ai", AI},

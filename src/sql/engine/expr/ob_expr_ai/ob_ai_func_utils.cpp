@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_ai_func_utils.h"
 #include "ob_ai_func_client.h"
+#include "sql/engine/expr/ob_expr_ai/ai_column_runtime.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -1333,6 +1334,7 @@ int ObAIFuncModel::call_completion(ObString &prompt, ObJsonObject *config, ObStr
   ObIJsonBase *result_base = nullptr;
   ObAIFuncIComplete *complete_provider = nullptr;
   ObString prompt_str;
+  if (sql::ai_column::model_request()) { prompt_str = sql::ai_column::system_prompt(); }
   ObString result_str;
   ObAIFuncClient client;
   ObString unencrypted_access_key;
@@ -1777,3 +1779,5 @@ int ObAIModelResolver::resolve_model_name(
 
 } // namespace query
 } // namespace oceanbase
+
+#include "sql/engine/expr/ob_expr_ai/ai_column_runtime_impl.h"

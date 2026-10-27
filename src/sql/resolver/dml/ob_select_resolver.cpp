@@ -15,6 +15,9 @@
  */
 
 #define USING_LOG_PREFIX SQL_RESV
+#ifndef _WIN32
+#include "sql/engine/basic/file_scan_export.h"
+#endif
 #include "sql/resolver/dml/ob_select_resolver.h"
 #include "sql/resolver/dml/ob_del_upd_resolver.h"
 #include "share/ob_time_utility2.h"
@@ -3048,6 +3051,36 @@ int ObSelectResolver::resolve_into_outfile_without_format(const ParseNode *node,
                                                           ObSelectIntoItem &into_item)
 {
   int ret = OB_SUCCESS;
+#ifndef _WIN32
+  if(node->value_==73002){
+    ObObj enabled;if(OB_FAIL(session_info_->get_sys_variable(share::SYS_VAR_ENABLE_FILE_SQL,enabled)))return ret;
+    if(!enabled.get_int())return OB_NOT_SUPPORTED;
+    if(node->num_child_!=5||!node->children_[0])return OB_INVALID_ARGUMENT;
+    try{
+      using namespace file_sql;
+      const auto text=[](const ParseNode *n){if(!n||!n->str_value_||n->str_len_<0)throw std::runtime_error("COPY option must be a constant");return std::string(n->str_value_,n->str_len_);};
+      ExportOptions options;options.csv.path=text(node->children_[0]);options.csv.header=false;
+      std::set<std::string> seen;
+      const auto *list=node->children_[2];
+      for(int64_t i=0;list&&i<list->num_child_;++i){auto *entry=list->children_[i];if(!entry||entry->num_child_!=2)return OB_INVALID_ARGUMENT;
+        auto key=text(entry->children_[0]);std::transform(key.begin(),key.end(),key.begin(),[](unsigned char c){return std::tolower(c);});
+        if(!seen.insert(key).second)return OB_INVALID_ARGUMENT;const auto *value=entry->children_[1];
+        if(key=="header"){if(!value)options.csv.header=true;else if(value->type_==T_BOOL)options.csv.header=value->value_!=0;else return OB_INVALID_ARGUMENT;}
+        else if(key=="format"){auto format=text(value);if(format!="csv"&&format!="CSV")return OB_NOT_SUPPORTED;}
+        else if(key=="nullstr")options.csv.nullstr=text(value);
+        else if(key=="delimiter"||key=="delim"||key=="sep"||key=="quote"||key=="escape"){
+          auto s=text(value);if(s.size()!=1||s[0]<=0||s[0]=='\n'||s[0]=='\r')return OB_INVALID_ARGUMENT;
+          if(key=="quote")options.csv.quote=s[0];else if(key=="escape")options.csv.escape=s[0];else options.csv.delimiter=s[0];
+        }else return OB_NOT_SUPPORTED;
+      }
+      if(options.csv.delimiter==options.csv.quote)return OB_INVALID_ARGUMENT;
+      for(int64_t i=0;i<get_select_stmt()->get_select_item_size();++i){const auto &name=get_select_stmt()->get_select_item(i).alias_name_;options.names.emplace_back(name.ptr(),name.length());}
+      const auto encoded=export_plan(options);ObString payload;
+      if(OB_FAIL(ob_write_string(*allocator_,ObString(encoded.size(),encoded.data()),payload)))return ret;
+      into_item.outfile_name_.set_varchar(payload);return OB_SUCCESS;
+    }catch(const std::exception &error){LOG_USER_ERROR(OB_INVALID_ARGUMENT,error.what());return OB_INVALID_ARGUMENT;}
+  }
+#endif
   if (node->num_child_ != 5) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(resolve_into_const_node(node->children_[0], into_item.outfile_name_))) {

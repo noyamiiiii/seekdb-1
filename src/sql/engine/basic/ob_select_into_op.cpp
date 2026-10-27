@@ -15,6 +15,10 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#ifndef _WIN32
+#include "sql/engine/basic/file_scan_export.h"
+#endif
+#include "sql/engine/expr/ob_expr_lob_utils.h"
 
 #include <cmath>
 #include <memory>
@@ -41,8 +45,68 @@ OB_SERIALIZE_MEMBER((ObSelectIntoSpec, ObOpSpec), into_type_, user_vars_, outfil
     external_properties_);
 
 
+bool ObSelectIntoOp::is_copy_export() const
+{
+#ifdef _WIN32
+  return false;
+#else
+  if(!MY_SPEC.outfile_name_.is_string_type())return false;
+  const auto value=MY_SPEC.outfile_name_.get_string();return file_sql::is_export(value.ptr(),value.length());
+#endif
+}
+
+int ObSelectIntoOp::copy_export()
+{
+#ifdef _WIN32
+  return OB_NOT_SUPPORTED;
+#else
+  using namespace file_sql;
+  int ret=OB_SUCCESS;ObObj enabled;ObString secure;
+  auto *session=ctx_.get_my_session();
+  if(!session||!child_)return OB_ERR_UNEXPECTED;
+  if(OB_FAIL(session->get_sys_variable(share::SYS_VAR_ENABLE_FILE_SQL,enabled)))return ret;
+  if(!enabled.get_int())return OB_NOT_SUPPORTED;
+  if(OB_FAIL(session->get_secure_file_priv(secure)))return ret;
+  try{
+    const auto payload=MY_SPEC.outfile_name_.get_string();
+    Exporter exporter(export_options(payload.ptr(),payload.length()),std::string(secure.ptr(),secure.length()));
+    int64_t count=0;
+    while(OB_SUCC(ret)){
+      clear_evaluated_flag();
+      if(OB_FAIL(ctx_.check_status()))break;
+      ret=child_->get_next_row();if(ret==OB_ITER_END)break;if(OB_FAIL(ret))break;
+      ObEvalCtx::TempAllocGuard guard(eval_ctx_);std::vector<Value> row;row.reserve(MY_SPEC.select_exprs_.count());
+      for(int64_t i=0;OB_SUCC(ret)&&i<MY_SPEC.select_exprs_.count();++i){const auto *expr=MY_SPEC.select_exprs_.at(i);ObDatum *datum=nullptr;Value value;
+        if(!expr){ret=OB_ERR_UNEXPECTED;break;}
+        if(OB_FAIL(expr->eval(eval_ctx_,datum)))break;
+        if(!datum->is_null()){
+          value.kind=Kind::String;
+          if(ob_is_string_or_lob_type(expr->datum_meta_.type_)){
+            ObString text;ret=ObTextStringHelper::read_real_string_data(ctx_,guard.get_allocator(),*datum,expr->datum_meta_,expr->obj_meta_.has_lob_header(),text);
+            if(OB_SUCC(ret))value.text.assign(text.ptr(),text.length());
+          }else{
+            ObObj object;ret=datum->to_obj(object,expr->obj_meta_,expr->obj_datum_map_);
+            char text[8192];int64_t pos=0;if(OB_SUCC(ret))ret=object.print_plain_str_literal(text,sizeof(text),pos);
+            if(OB_SUCC(ret))value.text.assign(text,pos);
+          }
+        }
+        if(value.text.size()>Reader::MAX_RECORD){ret=OB_SIZE_OVERFLOW;break;}row.push_back(std::move(value));
+      }
+      if(OB_SUCC(ret)){exporter.row(row);++count;}
+    }
+    if(ret==OB_ITER_END){exporter.finish();ctx_.get_physical_plan_ctx()->set_affected_rows(count);return OB_SUCCESS;}
+    return ret;
+  }catch(const std::bad_alloc&){return OB_ALLOCATE_MEMORY_FAILED;}
+  catch(const std::exception &error){LOG_USER_ERROR(OB_INVALID_ARGUMENT,error.what());return OB_INVALID_ARGUMENT;}
+#endif
+}
+
 int ObSelectIntoOp::inner_open()
 {
+  if(is_copy_export()){
+    opened_=true;
+    return copy_export();
+  }
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = NULL;
   if (OB_ISNULL(session = ctx_.get_my_session())) {
@@ -188,6 +252,7 @@ int ObSelectIntoOp::calc_outfile_path()
 }
 int ObSelectIntoOp::inner_get_next_row()
 {
+  if(is_copy_export())return OB_ITER_END;
   int ret = 0 == top_limit_cnt_ ? OB_ITER_END : OB_SUCCESS;
   int64_t row_count = 0;
   const ObItemType into_type = MY_SPEC.into_type_;
@@ -236,6 +301,7 @@ int ObSelectIntoOp::inner_get_next_row()
 
 int ObSelectIntoOp::inner_get_next_batch(const int64_t max_row_cnt)
 {
+  if(is_copy_export()){brs_.size_=0;brs_.end_=true;return OB_SUCCESS;}
   int ret = OB_SUCCESS;
   const ObBatchRows *child_brs = NULL;
   int64_t batch_size = min(max_row_cnt, MY_SPEC.max_batch_size_);
@@ -1215,7 +1281,7 @@ int ObSelectIntoOp::check_secure_file_path(ObString file_name)
 #endif
     ret = OB_FILE_NOT_EXIST;
   } else if (OB_FAIL(ObSchemaUtils::get_runtime_varchar_variable(*GCTX.schema_service_,
-                                                                SYS_VAR_SECURE_FILE_PRIV,
+                                                                share::SYS_VAR_SECURE_FILE_PRIV,
                                                                 ctx_.get_allocator(),
                                                                 secure_file_priv))) {
   } else if (OB_FAIL(ObResolverUtils::check_secure_path(secure_file_priv, actual_path))) {

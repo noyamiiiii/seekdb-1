@@ -50,6 +50,7 @@
   if (0 != display_type) { \
     malloc_terminal_node(display_node, result->malloc_pool_, display_type); \
   } \
+  if (0 == explain_type && no_use) { type_node = no_use; } \
   malloc_non_terminal_node(explain_stmt, result->malloc_pool_, T_EXPLAIN, 5, \
                            type_node, display_node, into_table, set_statement_id, stmt);
 %}
@@ -259,7 +260,7 @@ END_P SET_VAR DELIMITER
 //-----------------------------reserved keyword end-------------------------------------------------
 %token <non_reserved_keyword>
 //-----------------------------non_reserved keyword begin-------------------------------------------
-        FILE_TABLE_FUNCTION
+        FILE_TABLE_FUNCTION AI_RETRY
         ACCESS ACCOUNT ACTION ACTIVE ADDDATE AFTER AGAINST AGGREGATE AI ALGORITHM ALWAYS ALLOW ANALYSE ANY
         APPROX_COUNT_DISTINCT APPROX_COUNT_DISTINCT_SYNOPSIS APPROX_COUNT_DISTINCT_SYNOPSIS_MERGE
         ARRAY ASCII ASIS AT ATTRIBUTE AUTHORS AUTO AUTOEXTEND_SIZE AUTO_INCREMENT AUTO_INCREMENT_CACHE_SIZE
@@ -374,6 +375,7 @@ END_P SET_VAR DELIMITER
 //-----------------------------non_reserved keyword end---------------------------------------------
 %type <node> sql_stmt stmt_list stmt opt_end_p
 %type <node> select_stmt update_stmt delete_stmt
+%type <node> copy_stmt opt_copy_options copy_options copy_option
 %type <node> insert_stmt single_table_insert values_clause dml_table_name
 %type <node> create_table_stmt create_table_like_stmt fork_table_stmt fork_database_stmt diff_table_stmt merge_table_stmt opt_table_option_list table_option_list table_option table_option_list_space_seperated parallel_option lob_storage_clause lob_storage_parameter lob_storage_parameters lob_chunk_size
 %type <node> index_or_heap
@@ -406,6 +408,7 @@ END_P SET_VAR DELIMITER
 %type <node> opt_limit_clause limit_expr opt_lock_type opt_for_update opt_for_update_wait opt_lock_in_share_mode
 %type <node> sort_list sort_key opt_asc_desc sort_list_for_group_by sort_key_for_group_by opt_asc_desc_for_group_by sort_list_opt_null sort_key_opt_null opt_asc_desc_null
 %type <node> opt_query_expression_option_list query_expression_option_list query_expression_option opt_distinct opt_distinct_or_all opt_separator projection
+%type <node> opt_ai_column_options
 %type <node> file_table_expr file_table_name
 %type <node> from_list table_references table_reference table_factor normal_relation_factor dot_relation_factor relation_factor
 %type <node> relation_factor_in_hint relation_factor_in_hint_list relation_factor_in_pq_hint opt_relation_factor_in_hint_list relation_factor_in_use_join_hint_list
@@ -558,6 +561,7 @@ opt_end_p:
 /* only preparable statement will set question mark size */
 stmt:
     select_stmt             { $$ = $1; question_mark_issue($$, result); }
+  | copy_stmt               { $$ = $1; question_mark_issue($$, result); }
   | insert_stmt             { $$ = $1; question_mark_issue($$, result); }
   | create_table_stmt       {
     $$ = $1;
@@ -4851,6 +4855,11 @@ column_definition_ref data_type opt_column_attribute_list opt_column_reference o
   merge_nodes(attributes, result, T_COLUMN_ATTRIBUTES, $10);
   malloc_non_terminal_node($$, result->malloc_pool_, T_COLUMN_DEFINITION, 7, $1, $2, attributes, $7, $9, $12, $4);
 }
+| column_definition_ref data_type AI COLUMN '(' expr ')' opt_ai_column_options opt_position_column
+{
+  dup_expr_string($6, result, @6.first_column, @6.last_column);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_COLUMN_DEFINITION, 6, $1, $2, NULL, $6, $8, $9);
+}
 | column_definition_ref SERIAL opt_column_attribute_list opt_position_column 
 {
   ParseNode *unsigned_bigint_type = NULL;
@@ -4877,6 +4886,11 @@ column_definition_ref data_type opt_column_attribute_list opt_column_reference o
   merge_nodes(attributes, result, T_COLUMN_ATTRIBUTES, attributes);
   malloc_non_terminal_node($$, result->malloc_pool_, T_COLUMN_DEFINITION, 4, $1, unsigned_bigint_type, attributes, $4);
 }
+;
+
+opt_ai_column_options:
+/* empty */ { $$ = NULL; }
+| WITH '(' expr_list ')' { $$ = $3; }
 ;
 
 constraint_definition:
@@ -8905,6 +8919,47 @@ LIMIT limit_expr OFFSET limit_expr
 }
 ;
 
+copy_stmt:
+COPY '(' select_stmt ')' TO STRING_VALUE opt_copy_options
+{
+  $$=$3;ParseNode *into=NULL;
+  malloc_non_terminal_node(into,result->malloc_pool_,T_INTO_OUTFILE,5,$6,NULL,$7,NULL,NULL);
+  into->value_=73002;
+  if($$->children_[PARSE_SELECT_INTO]||$$->children_[PARSE_SELECT_INTO_EXTRA]){yyerror(&@3,result,"COPY query cannot contain INTO");YYERROR;}
+  $$->children_[PARSE_SELECT_INTO_EXTRA]=into;
+  $6->is_forbid_parameter_=true;
+}
+| COPY relation_factor TO STRING_VALUE opt_copy_options
+{
+  ParseNode *star=NULL,*project=NULL,*projects=NULL,*from=NULL,*into=NULL;
+  malloc_terminal_node(star,result->malloc_pool_,T_STAR);
+  malloc_non_terminal_node(project,result->malloc_pool_,T_PROJECT_STRING,1,star);
+  dup_string_to_node(project,result->malloc_pool_,"*");
+  merge_nodes(projects,result,T_PROJECT_LIST,project);
+  ParseNode *table=NULL;malloc_non_terminal_node(table,result->malloc_pool_,T_ORG,5,$2,NULL,NULL,NULL,NULL);
+  merge_nodes(from,result,T_FROM_LIST,table);
+  malloc_select_node($$,result->malloc_pool_);
+  $$->children_[PARSE_SELECT_SELECT]=projects;$$->children_[PARSE_SELECT_FROM]=from;
+  malloc_non_terminal_node(into,result->malloc_pool_,T_INTO_OUTFILE,5,$4,NULL,$5,NULL,NULL);
+  into->value_=73002;$$->children_[PARSE_SELECT_INTO_EXTRA]=into;$4->is_forbid_parameter_=true;
+}
+;
+opt_copy_options:
+/*empty*/ {$$=NULL;}
+| '(' copy_options ')' {merge_nodes($$,result,T_EXPR_LIST,$2);}
+;
+copy_options:
+copy_option {$$=$1;}
+| copy_options ',' copy_option {malloc_non_terminal_node($$,result->malloc_pool_,T_LINK_NODE,2,$1,$3);}
+;
+copy_option:
+column_name {malloc_non_terminal_node($$,result->malloc_pool_,T_OP_EQ,2,$1,NULL);}
+| column_name column_name {malloc_non_terminal_node($$,result->malloc_pool_,T_OP_EQ,2,$1,$2);}
+| column_name STRING_VALUE {malloc_non_terminal_node($$,result->malloc_pool_,T_OP_EQ,2,$1,$2);}
+| column_name BOOL_VALUE {malloc_non_terminal_node($$,result->malloc_pool_,T_OP_EQ,2,$1,$2);}
+| column_name COMP_EQ STRING_VALUE {malloc_non_terminal_node($$,result->malloc_pool_,T_OP_EQ,2,$1,$3);}
+;
+
 into_clause:
 INTO OUTFILE STRING_VALUE opt_charset field_opt line_opt file_opt
 {
@@ -12346,8 +12401,8 @@ explain_or_desc relation_factor opt_desc_column_option
 
 explain_or_desc:
 EXPLAIN {$$ = NULL;}
-| DESCRIBE {$$ = NULL;}
-| DESC  {$$ = NULL;}
+| DESCRIBE {malloc_terminal_node($$, result->malloc_pool_, T_SHOW_COLUMNS);}
+| DESC  {malloc_terminal_node($$, result->malloc_pool_, T_SHOW_COLUMNS);}
 ;
 
 explainable_stmt:
@@ -12665,6 +12720,12 @@ CLASS_ORIGIN
  *
  *****************************************************************************/
 show_stmt:
+SHOW AI COLUMNS FROM relation_factor
+{
+  ParseNode *kind=NULL;malloc_terminal_node(kind,result->malloc_pool_,T_SHOW_TABLES);kind->value_=73003;
+  malloc_non_terminal_node($$,result->malloc_pool_,T_EXPLAIN,5,kind,NULL,NULL,NULL,$5);
+}
+|
 SHOW opt_extended_or_full TABLES opt_from_or_in_database_clause opt_show_condition
 {
   ParseNode *value = NULL;
@@ -14699,6 +14760,20 @@ alter_with_opt_hint TABLE relation_factor alter_table_actions
   merge_nodes(table_actions, result, T_ALTER_TABLE_ACTION_LIST, $4);
   malloc_non_terminal_node($$, result->malloc_pool_, T_ALTER_TABLE, 4, $3, table_actions, NULL, $1);
   $$->value_ = 0;
+}
+| alter_with_opt_hint TABLE relation_factor AI_RETRY AI COLUMN column_name opt_where
+{
+  (void)($1);
+  if($8)dup_expr_string($8,result,@8.first_column,@8.last_column);
+  ParseNode *retry=NULL;malloc_terminal_node(retry,result->malloc_pool_,T_INT);retry->value_=73001;
+  malloc_non_terminal_node($$,result->malloc_pool_,T_ALTER_TABLE,4,$3,$7,$8,retry);
+  $$->value_=0;
+}
+| alter_with_opt_hint TABLE relation_factor AI_RETRY AI COLUMN column_name opt_where ',' alter_table_action_list
+{
+  (void)($1);(void)($8);(void)($10);
+  ParseNode *retry=NULL;malloc_terminal_node(retry,result->malloc_pool_,T_INT);retry->value_=73004;
+  malloc_non_terminal_node($$,result->malloc_pool_,T_ALTER_TABLE,4,$3,$7,NULL,retry);$$->value_=0;
 }
 ;
 
@@ -17794,6 +17869,7 @@ ACCOUNT
 |       JSON_QUERY
 |       JSON_TABLE
 |       FILE_TABLE_FUNCTION
+|       AI_RETRY
 |       KEYWORD
 |       KEY_BLOCK_SIZE
 |       KEY_VERSION

@@ -55,6 +55,9 @@ int ObFunctionTableOp::open_file_scan()
       file_cursor_ = new Cursor(decode(payload.ptr(), payload.length()),
                              std::string(secure.ptr(), secure.length()));
       file_cursor_->reader.open();
+      std::vector<size_t> projection;
+      for(int64_t i=0;i<MY_SPEC.file_column_indexes_.count();++i)projection.push_back(MY_SPEC.file_column_indexes_.at(i));
+      file_cursor_->reader.projection(projection);
       if (!matches(std::string(payload.ptr(), payload.length()), file_cursor_->reader)) {
         ret = OB_INVALID_DATA;
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, "file SQL: file changed after query compilation; recompile the query");

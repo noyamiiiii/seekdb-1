@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_RESV
+#include "sql/engine/expr/ob_expr_ai/ai_column_runtime.h"
 #ifndef _WIN32
 #include "sql/engine/basic/file_scan_payload.h"
 #include <set>
@@ -1886,9 +1887,12 @@ int ObDMLResolver::resolve_basic_column_item(const TableItem &table_item,
     if (OB_FAIL(ret)) {
       //do nothing
     } else if (OB_FAIL(schema_checker_->get_table_schema( tid, table_schema))) {
-    } else if (OB_FAIL(get_column_schema(tid, column_name, col_schema, include_hidden))) {
+    } else if (OB_FAIL(get_column_schema(tid, column_name, col_schema, include_hidden || ai_column::internal_read() || ai_column::retry_resolution()))) {
     } else if (OB_ISNULL(col_schema)) {
       ret = OB_ERR_UNEXPECTED;
+    } else if (params_.session_info_->get_cur_exec_ctx() && current_scope_ != T_UPDATE_SCOPE
+               && current_scope_ != T_INSERT_SCOPE && OB_FAIL(ai_column::strict_read(
+                   *params_.session_info_->get_cur_exec_ctx(), *table_schema, *col_schema))) {
     } else if (OB_FAIL(ObRawExprUtils::build_column_expr(*params_.expr_factory_, *col_schema, session_info_, col_expr))) {
     } else if (OB_FAIL(table_schema->is_unique_key_column(*schema_guard,
                                                           col_schema->get_column_id(),
@@ -3971,7 +3975,7 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &node, TableItem *&it
       for (int64_t i = first_option; i < args.num_child_; ++i) {
         const ParseNode *arg = args.children_[i];
         if (!arg || arg->type_ != T_OP_EQ || arg->num_child_ != 2)
-          throw std::runtime_error("file SQL: options must use name = constant");
+          return OB_ERR_PARSE_SQL;
         const std::string key = name_of(arg->children_[0]);
         const ParseNode *value = arg->children_[1];
         if (!value || !seen.insert(key).second) throw std::runtime_error("file SQL: duplicate option");
@@ -3982,7 +3986,7 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &node, TableItem *&it
           const bool minus_one = (value->type_ == T_INT && value->value_ == -1)
               || (value->type_ == T_OP_NEG && value->num_child_ == 1 && value->children_[0]
                   && value->children_[0]->type_ == T_INT && value->children_[0]->value_ == 1);
-          if (!minus_one) throw std::runtime_error("file SQL: sample_size only supports -1");
+          if (!minus_one) {LOG_USER_ERROR(OB_NOT_SUPPORTED,"file SQL sample_size other than -1");return OB_NOT_SUPPORTED;}
         } else {
           if (value->type_ != T_VARCHAR) throw std::runtime_error("file SQL: option must be a constant string");
           const std::string setting = text(value);
@@ -3997,7 +4001,7 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &node, TableItem *&it
             if (key == "quote") options.quote = setting[0];
             else if (key == "escape") options.escape = setting[0];
             else options.delimiter = setting[0];
-          } else throw std::runtime_error("file SQL: unknown or incompatible option");
+          } else {LOG_USER_ERROR(OB_NOT_SUPPORTED,"unknown or incompatible file SQL option");return OB_NOT_SUPPORTED;}
         }
       }
       Reader reader(options, std::string(secure.ptr(), secure.length()));
@@ -4010,6 +4014,7 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &node, TableItem *&it
       if (OB_FAIL(ob_write_string(*allocator_, serialized_view, payload))) {
       } else if (OB_FAIL(ObRawExprUtils::build_const_string_expr(*params_.expr_factory_, ObVarcharType,
                          payload, CS_TYPE_UTF8MB4_BIN, constant))) {
+      } else if (OB_FAIL(constant->formalize(session_info_))) {
       } else if (OB_ISNULL(item = get_stmt()->create_table_item(*allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else {
@@ -4047,7 +4052,7 @@ int ObDMLResolver::resolve_file_table_columns(const TableItem &table, ObIArray<C
   ret = OB_NOT_SUPPORTED;
 #else
   using namespace file_sql;
-  if (OB_ISNULL(table.function_table_expr_) || !table.function_table_expr_->is_const_expr()) {
+  if (OB_ISNULL(table.function_table_expr_) || !table.function_table_expr_->is_const_raw_expr()) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     const ObObj &value = static_cast<const ObConstRawExpr *>(table.function_table_expr_)->get_value();
@@ -4062,7 +4067,7 @@ int ObDMLResolver::resolve_file_table_columns(const TableItem &table, ObIArray<C
         const auto &fields = document["columns"];
         for (rapidjson::SizeType i = 0; OB_SUCC(ret) && i < fields.Size(); ++i) {
           const auto &field = fields[i];
-          if (!field.IsArray() || field.Size() != 2 || !field[0].IsString() || !field[1].IsInt()) {
+          if (!field.IsArray() || field.Size() < 2 || !field[0].IsString() || !field[1].IsInt()) {
             ret = OB_INVALID_DATA;
           } else {
             ObString name;
@@ -4081,9 +4086,12 @@ int ObDMLResolver::resolve_file_table_columns(const TableItem &table, ObIArray<C
               }
               ObAccuracy accuracy = ObAccuracy::DDL_DEFAULT_ACCURACY[meta.get_type()];
               if (meta.get_type() == ObVarcharType) accuracy.set_length(16 * 1024 * 1024);
-              if (meta.get_type() == ObDateTimeType) accuracy.set_scale(6);
+              if (meta.get_type() == ObDateTimeType) accuracy.set_scale(field.Size()>3?field[3].GetInt():0);
               ret = resolve_function_table_column_item(table, meta, accuracy, name,
                         OB_APP_MIN_COLUMN_ID + i, column);
+              if (OB_SUCC(ret) && column && ob_is_string_type(meta.get_type())) {
+                column->expr_->set_collation_level(CS_LEVEL_IMPLICIT);
+              }
             }
             if (OB_SUCC(ret) && OB_NOT_NULL(column)) ret = columns.push_back(*column);
           }

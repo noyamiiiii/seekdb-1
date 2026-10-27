@@ -195,6 +195,8 @@ public:
   virtual void destroy() override;
 
 private:
+  bool is_copy_export() const;
+  int copy_export();
   int init_env_common();
   int init_csv_env();
   void set_csv_format_options();

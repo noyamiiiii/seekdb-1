@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
+#include "sql/engine/expr/ob_expr_ai/ai_column_runtime.h"
 #include "ob_table_sql_service.h"
 #include "lib/literals/ob_literals.h"
 #include "share/ob_global_stat_proxy.h"
@@ -29,6 +30,20 @@ namespace share
 {
 namespace schema
 {
+namespace {
+int clear_ai_table_metadata(const ObTableSchema &table,ObISQLClient &client)
+{
+  bool has_ai=false;
+  for(auto it=table.column_begin();it!=table.column_end();++it)has_ai=has_ai||sql::ai_column::is_ai(**it);
+  if(!has_ai)return OB_SUCCESS;
+  int ret=OB_SUCCESS;int64_t affected=0;
+  for(const char *name:{"__all_ai_column_task","__all_ai_column"}){
+    ObSqlString query;if(OB_FAIL(query.append_fmt("DELETE FROM oceanbase.%s WHERE table_id=%lu",name,table.get_table_id())))break;
+    if(OB_FAIL(client.write(query.ptr(),affected)))break;
+  }
+  return ret;
+}
+}
 
 int ObTableSqlService::exec_update(
     ObISQLClient &sql_client,
@@ -674,7 +689,8 @@ int ObTableSqlService::drop_table(const ObTableSchema &table_schema,
   ObSqlString sql;
   
   const uint64_t table_id = table_schema.get_table_id();
-  if (OB_FAIL(check_ddl_allowed(table_schema))) {
+  if (OB_FAIL(clear_ai_table_metadata(table_schema,sql_client))) {
+  } else if (OB_FAIL(check_ddl_allowed(table_schema))) {
   } else {
     // delete from __all_table_history
     if (OB_FAIL(delete_from_all_table_history(
@@ -1809,6 +1825,11 @@ int ObTableSqlService::update_table_options(ObISQLClient &sql_client,
   uint64_t table_id = table_schema.get_table_id();
   if (OB_FAIL(inner_update_table_options_(sql_client, new_table_schema))) {
   }
+  if(OB_SUCC(ret)){
+    if(operation_type==OB_DDL_DROP_TABLE_TO_RECYCLEBIN||operation_type==OB_DDL_TRUNCATE_DROP_TABLE_TO_RECYCLEBIN)
+      ret=clear_ai_table_metadata(table_schema,sql_client);
+    else ret=sql::ai_column::persist_metadata(new_table_schema,sql_client);
+  }
 
   if (OB_SUCC(ret)) {
     if ((OB_DDL_DROP_TABLE_TO_RECYCLEBIN == operation_type)
@@ -2163,6 +2184,7 @@ int ObTableSqlService::batch_create_table(ObIArray<ObTableSchema> &tables,
       for (int64_t i = 0; i < tables.count() && OB_SUCC(ret); i++) {
         if (is_inner_table(tables.at(i).get_table_id())) {
         } else if (OB_FAIL(add_foreign_key(sql_client, tables.at(i), false/*only_history*/))) {
+        } else if (OB_FAIL(sql::ai_column::persist_metadata(tables.at(i), sql_client))) {
         }
       }
       time_guard.click("add_foreign_key");

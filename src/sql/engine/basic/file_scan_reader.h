@@ -12,6 +12,8 @@
 #include <glob.h>
 #include <limits>
 #include <map>
+#include <memory>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <sys/stat.h>
@@ -19,27 +21,10 @@
 #include <fcntl.h>
 #include <vector>
 #include <rapidjson/document.h>
+#include "sql/engine/basic/file_scan_types.h"
+#include "sql/engine/basic/file_scan_parquet.h"
 
 namespace oceanbase { namespace sql { namespace file_sql {
-
-enum class Kind { Null, Int, Double, Bool, String, Date, DateTime };
-struct Value {
-  std::string text;
-  Kind kind = Kind::Null;
-};
-struct Column {
-  std::string name;
-  Kind kind = Kind::Null;
-};
-struct Options {
-  std::string path;
-  std::string format;
-  std::string nullstr;
-  char delimiter = ',';
-  char quote = '"';
-  char escape = '"';
-  bool header = true;
-};
 
 inline bool valid_utf8(const std::string &value)
 {
@@ -149,6 +134,7 @@ public:
   const std::string &path() const { return path_; }
   const std::string &error() const { return error_; }
   const struct stat &identity() const { return identity_; }
+  void projection(const std::vector<size_t> &columns) { if(parquet_)parquet_->projection(columns); }
 
   void open()
   {
@@ -185,6 +171,13 @@ public:
     }
     file_ = ::fdopen(fd, "rb");
     if (!file_) { ::close(fd); throw std::runtime_error("file SQL: cannot create input stream"); }
+    if (options_.format == "parquet") {
+      parquet_.reset(new parquet::Reader(file_,identity_.st_size));
+      columns_=parquet_->columns();
+      std::set<std::string> names;
+      for(const auto &c:columns_)if(c.name.empty()||!valid_utf8(c.name)||!names.insert(c.name).second)fail("invalid or duplicate Parquet column name");
+      verify();return;
+    }
     if (options_.format != "csv" && options_.format != "jsonl")
       throw std::runtime_error("file SQL: unsupported file format");
     std::vector<Value> row;
@@ -202,7 +195,11 @@ public:
       if (options_.format == "csv" && columns_.empty())
         for (size_t i = 0; i < row.size(); ++i) columns_.push_back({"column" + std::to_string(i), Kind::Null});
       if (row.size() != columns_.size()) fail("record has an inconsistent field count");
-      for (size_t i = 0; i < row.size(); ++i) columns_[i].kind = widen(columns_[i].kind, row[i].kind);
+      for (size_t i = 0; i < row.size(); ++i) {
+        columns_[i].kind = widen(columns_[i].kind, row[i].kind);
+        columns_[i].nullable = columns_[i].nullable || row[i].kind==Kind::Null;
+        if(row[i].kind==Kind::DateTime){const auto point=row[i].text.find('.');if(point!=std::string::npos)columns_[i].scale=std::max(columns_[i].scale,static_cast<int>(row[i].text.size()-point-1));}
+      }
     }
     verify();
     if (columns_.empty()) fail("input contains no columns");
@@ -213,6 +210,7 @@ public:
   {
     if (options_.format == "glob") { glob_index_ = 0; return; }
     verify();
+    if (parquet_) { parquet_->rewind();return; }
     if (::fseeko(file_, 0, SEEK_SET)) fail("cannot rewind file");
     record_number_ = 0;
     if (options_.format == "csv" && options_.header) { std::vector<Value> ignored; read_csv(ignored); }
@@ -227,6 +225,11 @@ public:
       return true;
     }
     verify();
+    if (parquet_) {
+      const bool available=parquet_->next(row);
+      for(const auto &value:row)if(value.kind==Kind::String&&!valid_utf8(value.text))fail("invalid UTF-8 field");
+      return available;
+    }
     const bool available = next_raw(row, false);
     if (available && row.size() != columns_.size()) fail("record has an inconsistent field count");
     return available;
@@ -339,7 +342,7 @@ private:
       if (!fields.emplace(name, std::move(value)).second) fail("duplicate JSON field name");
       if (infer && std::none_of(columns_.begin(), columns_.end(), [&](const Column &c) { return c.name == name; })) {
         if (columns_.size() >= MAX_COLUMNS) fail("too many columns");
-        columns_.push_back({name, Kind::Null});
+        columns_.push_back({name, Kind::Null,record_number_>0});
       }
     }
     row.clear();
@@ -359,6 +362,7 @@ private:
   struct stat identity_ {};
   uint64_t record_number_ = 0;
   std::vector<Column> columns_;
+  std::unique_ptr<parquet::Reader> parquet_;
   std::vector<std::string> glob_paths_;
   size_t glob_index_ = 0;
 };

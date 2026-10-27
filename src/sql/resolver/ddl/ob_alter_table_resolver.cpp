@@ -15,6 +15,9 @@
  */
 
 #define USING_LOG_PREFIX SQL_RESV
+#include "sql/engine/expr/ob_expr_ai/ai_column_runtime.h"
+#include "sql/parser/ob_parser.h"
+#include "sql/resolver/ob_resolver.h"
 #include "config_bridge.h"
 #include "sql/resolver/ddl/ob_alter_table_resolver.h"
 #include "sql/resolver/expr/ob_raw_expr_part_expr_checker.h"
@@ -55,6 +58,32 @@ ObAlterTableResolver::~ObAlterTableResolver()
 int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
+  if(parse_tree.type_==T_ALTER_TABLE&&parse_tree.num_child_==4&&parse_tree.children_[3]
+      &&parse_tree.children_[3]->type_==T_INT&&parse_tree.children_[3]->value_==73004){
+    LOG_USER_ERROR(OB_NOT_SUPPORTED,"combining AI COLUMN RETRY with another ALTER action");return OB_NOT_SUPPORTED;
+  }
+  if(parse_tree.type_==T_ALTER_TABLE&&parse_tree.num_child_==4&&parse_tree.children_[3]
+      &&parse_tree.children_[3]->type_==T_INT&&parse_tree.children_[3]->value_==73001){
+    ObString table,database;
+    if(OB_FAIL(resolve_table_relation_node(parse_tree.children_[0],table,database,false)))return ret;
+    const ObTableSchema *schema=nullptr;
+    if(OB_FAIL(schema_checker_->get_table_schema(database,table,false,schema)))return ret;
+    if(!schema||!parse_tree.children_[1])return OB_SCHEMA_ERROR;
+    const auto *target=parse_tree.children_[1];const auto *where=parse_tree.children_[2];
+    ObString column(target->str_len_,target->str_value_);
+    ObString predicate=where?ObString(where->str_len_,where->str_value_):ObString();
+    ObSqlString query;
+    if(OB_FAIL(ai_column::retry_sql(*schema,database,column,predicate,query)))return ret;
+    ObParser parser(*allocator_,session_info_->get_sql_mode(),session_info_->get_charsets4parser());
+    ParseResult result;
+    if(OB_FAIL(parser.parse(query.string(),result)))return ret;
+    const bool previous=ai_column::set_retry_resolution(true);
+    ObResolver resolver(params_);ObStmt *update=nullptr;
+    ret=resolver.resolve(ObResolver::IS_NOT_PREPARED_STMT,*result.result_tree_->children_[0],update);
+    ai_column::set_retry_resolution(previous);
+    if(OB_SUCC(ret))stmt_=update;
+    return ret;
+  }
   if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "session_info should not be null", K(ret));
@@ -236,6 +265,7 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
       }
     }
   }
+  if(OB_SUCC(ret)&&table_schema_&&stmt_){ret=ai_column::prepare_alter(*table_schema_,get_alter_table_stmt()->get_alter_table_arg().alter_table_schema_);}
   DEBUG_SYNC(HANG_BEFORE_RESOLVER_FINISH);
   return ret;
 }
@@ -3541,7 +3571,7 @@ int ObAlterTableResolver::resolve_alter_table_column_definition(AlterColumnSchem
   // }
   if (OB_SUCC(ret)) {
     ParseNode *pos_node = NULL;
-    if (OB_UNLIKELY(GEN_COLUMN_DEFINITION_NUM_CHILD == node->num_child_)) {
+    if (node->num_child_==6 || OB_UNLIKELY(GEN_COLUMN_DEFINITION_NUM_CHILD == node->num_child_)) {
     // generated column with pos_column
       pos_node = node->children_[5];
     } else {

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_ai_func_client.h"
+#include "sql/engine/expr/ob_expr_ai/ai_column_runtime.h"
 
 namespace oceanbase 
 {
@@ -148,7 +149,8 @@ int ObAIFuncClient::send_post(ObJsonObject *data, ObJsonObject *&response)
     if (OB_FAIL(init_easy_handle(curl_, data, response_buf))) {
     } 
     // retry if need
-    for (int64_t i = 0; OB_SUCC(ret) && i <= max_retry_times_; ++i) {
+    const int64_t retries = sql::ai_column::model_request() ? 0 : max_retry_times_;
+    for (int64_t i = 0; OB_SUCC(ret) && i <= retries; ++i) {
       response_buf.reset();
       http_code = 0;
       if (CURLE_OK != (res = curl_easy_perform(curl_))) {
@@ -164,6 +166,7 @@ int ObAIFuncClient::send_post(ObJsonObject *data, ObJsonObject *&response)
         break;
       } else {
         LOG_WARN("retryable http status code", K(http_code), K(i));
+        if (i == retries) { break; }
         int64_t delay_ms = 1000 * (1 << i) + rand() % 1000;
         ob_usleep(delay_ms * 1000);
         response_buf.reset();

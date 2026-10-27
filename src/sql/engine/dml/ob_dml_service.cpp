@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "sql/engine/expr/ob_expr_ai/ai_column_runtime.h"
 #include "config_bridge.h"
 #include "sql/engine/dml/ob_dml_service.h"
 #include "sql/engine/expr/ob_datum_cast.h"
@@ -632,6 +633,7 @@ int ObDMLService::process_insert_row(const ObInsCtDef &ins_ctdef,
     }
 
   }
+  if (OB_SUCC(ret) && !is_skipped) { ret=ai_column::on_row(ins_ctdef,dml_op,false); }
   return ret;
 }
 
@@ -734,6 +736,7 @@ int ObDMLService::process_delete_row(const ObDelCtDef &del_ctdef,
                "old_row", ROWEXPR2STR(dml_op.get_eval_ctx(), del_ctdef.old_row_));
   }
 
+  if (OB_SUCC(ret) && !is_skipped) { ret=ai_column::on_row(del_ctdef,dml_op,true); }
   return ret;
 }
 
@@ -780,7 +783,8 @@ int ObDMLService::process_update_row(const ObUpdCtDef &upd_ctdef,
     if (OB_SUCC(ret) && !is_skipped) {
       bool is_filtered = false;
       //first, check assignment column whether matched column type
-      if (OB_FAIL(check_column_type(upd_ctdef.new_row_,
+      if (OB_FAIL(ai_column::on_row(upd_ctdef,dml_op,false))) {
+      } else if (OB_FAIL(check_column_type(upd_ctdef.new_row_,
                                     upd_rtdef.cur_row_num_,
                                     upd_ctdef.assign_columns_,
                                     dml_op))) {

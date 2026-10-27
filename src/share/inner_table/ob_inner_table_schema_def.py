@@ -2396,6 +2396,8 @@ def_table_schema(
 
 
 
+
+
 all_ai_model_def = dict(
     owner = 'shenyunlong.syl',
     table_name = '__all_ai_model',
@@ -2445,6 +2447,22 @@ all_ai_model_endpoint_def = dict(
     ]
 )
 def_table_schema(**all_ai_model_endpoint_def)
+
+def_table_schema(owner='database-competition',table_name='__all_ai_column',table_id='1131',
+  table_type='SYSTEM_TABLE',gm_columns=['gmt_create','gmt_modified'],
+  rowkey_columns=[('table_id','int'),('column_id','int')],
+  is_cluster_private=False,meta_record_in_sys=False,
+  normal_columns=[('column_name','varchar:128'),('normalized_expr','varchar:65535'),
+   ('max_retries','int'),('state_column_id','int'),('request_column_id','int'),
+   ('result_spec_column_id','int'),('definition_version','int')])
+def_table_schema(owner='database-competition',table_name='__all_ai_column_task',table_id='1132',
+  table_type='SYSTEM_TABLE',gm_columns=['gmt_create','gmt_modified'],
+  rowkey_columns=[('table_id','int'),('column_id','int'),('rowkey_predicate','varchar:2048')],
+  is_cluster_private=False,meta_record_in_sys=False,
+  normal_columns=[('request_id','int'),('definition_version','int'),('qualified_table','varchar:512'),
+   ('column_name','varchar:128'),('expression','longtext'),('state','int'),('retry_count','int'),
+   ('max_retries','int'),('eligible_ts','timestamp'),('result_value','longtext'),('result_type','int')])
+
 
 
 all_objauth_mysql_def = dict(

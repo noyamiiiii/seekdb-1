@@ -15,6 +15,8 @@
  */
 
 #define USING_LOG_PREFIX SQL_RESV
+#include "sql/engine/expr/ob_expr_ai/ai_column_runtime.h"
+#include "sql/engine/expr/ob_expr_ai/ob_ai_func_utils.h"
 #include "config_bridge.h"
 #include "ob_ddl_resolver.h"
 #include "data_plane/blocksstable/ob_index_block_util.h"
@@ -1773,6 +1775,56 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
                                              const bool allow_has_default)
 {
   int ret = OB_SUCCESS;
+  if (node && node->num_child_ == 6) {
+    ParseNode normal = *node;
+    ParseNode *children[] = {node->children_[0],node->children_[1],node->children_[2],node->children_[5]};
+    normal.num_child_ = 4; normal.children_ = children;
+    ret = resolve_column_definition(column,&normal,resolve_stat,is_modify_column_visibility,pk_name,
+                                   table_schema,unused_flag,is_create_table_as,allow_has_default);
+    int64_t retries = 3;
+    ParseNode *options = node->children_[4];
+    for (int64_t i=0; OB_SUCC(ret) && options && i<options->num_child_; ++i) {
+      ParseNode *option=options->children_[i];
+      if (!option || option->type_ != T_OP_EQ || option->num_child_ != 2) { ret=OB_INVALID_ARGUMENT; break; }
+      ParseNode *key=option->children_[0],*value=option->children_[1];
+      if (key && key->type_ == T_COLUMN_REF) key=key->children_[2];
+      if (!key || !value) { ret=OB_INVALID_ARGUMENT; break; }
+      ObString name(key->str_len_,key->str_value_);
+      if (name.case_compare("max_retries")==0 && value->type_==T_INT) retries=value->value_;
+      else if (name.case_compare("sync_mode")==0 && value->type_==T_VARCHAR
+               && ObString(value->str_len_,value->str_value_).case_compare("async")==0) {}
+      else ret=OB_INVALID_ARGUMENT;
+    }
+    if (OB_SUCC(ret)) {
+      ParseNode *expression=node->children_[3];
+      if (!expression || expression->type_!=T_FUN_SYS || expression->num_child_!=2
+          || !expression->children_[0] || !expression->children_[1]) ret=OB_NOT_SUPPORTED;
+      else {
+        auto *name=expression->children_[0];auto *args=expression->children_[1];
+        ObString function(name->str_len_,name->str_value_);
+        const bool embedding=function.case_compare("AI_EMBED")==0;
+        if((!embedding&&function.case_compare("AI_COMPLETE")!=0)||args->num_child_<2||args->num_child_>3
+            ||!args->children_[0]||args->children_[0]->type_!=T_VARCHAR)ret=OB_INVALID_ARGUMENT;
+        else{
+          ObAIFuncExprInfo *model=nullptr;auto *argument=args->children_[0];
+          ObString model_name(argument->str_len_,argument->str_value_);
+          if(OB_FAIL(ObAIFuncUtils::get_ai_func_info(*allocator_,model_name,model))){}
+          else ret=embedding?ObAIFuncUtils::check_info_type_dense_embedding(model):ObAIFuncUtils::check_info_type_completion(model);
+        }
+        std::string source(expression->str_value_,expression->str_len_);
+        if(OB_SUCC(ret)&&embedding){
+          int64_t dimension=0;
+          if(!ob_is_collection_sql_type(column.get_data_type()))ret=OB_NOT_SUPPORTED;
+          else if(OB_FAIL(ObVectorIndexUtil::get_vector_dim_from_extend_type_info(column.get_extended_type_info(),dimension))){}
+          else if(args->num_child_==3){auto *dim=args->children_[2];if(!dim||dim->type_!=T_INT||dim->value_!=dimension){
+            ret=OB_ERR_INVALID_VECTOR_DIM;LOG_USER_ERROR(OB_ERR_INVALID_VECTOR_DIM,static_cast<unsigned>(dimension),static_cast<unsigned>(dim?dim->value_:0));
+          }}else{const auto close=source.find_last_of(')');if(close==std::string::npos)ret=OB_INVALID_ARGUMENT;else source.insert(close,","+std::to_string(dimension));}
+        }else if(OB_SUCC(ret)&&ob_is_collection_sql_type(column.get_data_type()))ret=OB_NOT_SUPPORTED;
+        if(OB_SUCC(ret))ret=ai_column::define_column(column,ObString(source.size(),source.data()),retries);
+      }
+    }
+    return ret;
+  }
   bool is_modify_column = stmt::T_ALTER_TABLE == stmt_->get_stmt_type()
                   && OB_DDL_MODIFY_COLUMN == (static_cast<AlterColumnSchema &>(column)).alter_type_;
   ParseNode *column_definition_ref_node = NULL;

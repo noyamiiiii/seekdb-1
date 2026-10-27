@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_RESV
+#include "sql/engine/expr/ob_expr_ai/ai_column_runtime.h"
 #include "ob_del_upd_resolver.h"
 #include "sql/resolver/dml/ob_default_value_utils.h"
 #include "sql/resolver/dml/ob_update_stmt.h"
@@ -119,6 +120,17 @@ int ObDelUpdResolver::resolve_assignments(const ParseNode &parse_node,
           }
         }
       }
+      if (OB_SUCC(ret) && !ai_column::publishing()) {
+        const ObTableSchema *schema=nullptr;
+        if (OB_FAIL(schema_checker_->get_table_schema(table->get_base_table_item().ref_id_,schema))) {}
+        else if (schema) {
+          const auto *c=schema->get_column_schema(ref_expr->get_column_id());
+          if (c && (ai_column::is_ai(*c) || (ai_column::is_internal(*c)&&!ai_column::retry_resolution()))) {
+            ret=OB_NOT_SUPPORTED;
+            LOG_USER_ERROR(OB_NOT_SUPPORTED,"assigning an AI result column directly");
+          }
+        }
+      }
       if (OB_SUCC(ret) && T_INSERT_SCOPE == scope) {
         if (OB_FAIL(mock_values_column_ref(ref_expr))) {
         }
@@ -164,8 +176,11 @@ int ObDelUpdResolver::resolve_assignments(const ParseNode &parse_node,
               }
             }
             if (OB_SUCC(ret)) {
+              if (ai_column::retry_resolution()) {
+                ret=ObRawExprUtils::build_wrapper_inner_expr(*params_.expr_factory_,*session_info_,expr,expr);
+              }
               assignment.expr_ = expr;
-              if (OB_FAIL(add_assignment(table_assigns, table, column, assignment))) {
+              if (OB_SUCC(ret) && OB_FAIL(add_assignment(table_assigns, table, column, assignment))) {
               }
             }
           }
@@ -478,6 +493,16 @@ int ObDelUpdResolver::check_update_vector_col_with_vector_index(const ObTableSch
       }
     }
   }
+  // AI result assignments are appended after this check. Include indexed AI
+  // vectors now so invalidating a result advances its VID just like an explicit
+  // vector update. Otherwise the later publication can reuse a deleted VID.
+  for (auto it = table_schema->column_begin();
+       OB_SUCC(ret) && !update_with_vector_index && it != table_schema->column_end(); ++it) {
+    if (ai_column::is_ai(**it) && ob_is_collection_sql_type((*it)->get_data_type())) {
+      ret = ObVectorIndexUtil::check_column_has_vector_index(*table_schema, *schema_guard,
+          (*it)->get_column_id(), update_with_vector_index, index_type);
+    }
+  }
   return ret;
 }
 
@@ -558,6 +583,9 @@ int ObDelUpdResolver::resolve_additional_assignments(ObIArray<ObTableAssignment>
               ObDefaultValueUtils utils(stmt, &params_, this);
               if (OB_FAIL(utils.build_now_expr(col_item, assignment.expr_))) {
               }
+            } else if (ai_column::is_ai(*column_schema) || ai_column::is_internal(*column_schema)) {
+              ret = ObRawExprUtils::build_wrapper_inner_expr(*params_.expr_factory_,
+                  *session_info_, col_item->expr_, assignment.expr_);
             } else if (column_schema->is_generated_column()) {
               if (OB_FAIL(copy_schema_expr(*params_.expr_factory_,
                                            col_item->expr_->get_dependant_expr(),
@@ -712,6 +740,9 @@ int ObDelUpdResolver::check_need_assignment(const common::ObIArray<ObAssignment>
   ObDMLStmt *stmt = get_stmt();
   if (OB_ISNULL(stmt)) {
     ret = OB_NOT_INIT;
+  } else if ((ai_column::is_ai(column) || ai_column::is_internal(column)) && !ai_column::publishing()) {
+    if (OB_FAIL(ObResolverUtils::check_whether_assigned(stmt, assigns, table_id, column.get_column_id(), exist))) {
+    } else need_assign=!exist;
   } else if (column.is_generated_column()) {
     if (OB_FAIL(ObResolverUtils::check_whether_assigned(stmt, assigns, table_id, column.get_column_id(), exist))) {
     } else if (!exist) {
@@ -2171,6 +2202,17 @@ int ObDelUpdResolver::resolve_insert_columns(const ParseNode *node,
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "specify __sess_create_time value");
       } else if (OB_FAIL(mock_values_column_ref(column_expr))) {
+      }
+      if (OB_SUCC(ret) && table_item->is_basic_table() && !ai_column::publishing()) {
+        const ObTableSchema *schema = nullptr;
+        if (OB_FAIL(schema_checker_->get_table_schema(table_item->ref_id_, schema))) {
+        } else if (schema) {
+          const auto *column = schema->get_column_schema(column_expr->get_column_id());
+          if (column && (ai_column::is_ai(*column) || ai_column::is_internal(*column))) {
+            ret = OB_NOT_SUPPORTED;
+            LOG_USER_ERROR(OB_NOT_SUPPORTED, "inserting an AI result column directly");
+          }
+        }
       }
     }//end for
   } else {
