@@ -30,7 +30,8 @@ int ObTextDaaTIter::init(const ObTextDaaTParam &param)
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(ObSRDaaTIterImpl::init(*param.base_param_, *param.dim_iters_,
                                             *param.allocator_, *param.relevance_collector_))) {
-  } else if (OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
+  } else if (nullptr != param.base_param_->relevance_expr_ &&
+             OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
   } else {
     mode_flag_ = param.mode_flag_;
     function_lookup_mode_ = param.function_lookup_mode_;
@@ -54,7 +55,7 @@ void ObTextDaaTIter::reuse(const bool switch_tablet)
 {
   if ((OB_NOT_NULL(dim_iters_) && 0 == dim_iters_->count())) {
     // do nothing
-  } else {
+  } else if (nullptr != iter_param_ && nullptr != iter_param_->relevance_expr_) {
     bm25_param_estimator_.reuse(switch_tablet);
   }
   if (OB_NOT_NULL(dim_iters_)) {
@@ -70,7 +71,7 @@ int ObTextDaaTIter::pre_process()
   int ret = OB_SUCCESS;
   if (dim_iters_->count() == 0) {
     ret = OB_ITER_END;
-  } else if (iter_param_->need_project_relevance()) {
+  } else if (nullptr != iter_param_->relevance_expr_) {
     if (OB_FAIL(bm25_param_estimator_.do_estimation(*iter_param_->eval_ctx_))) {
     }
   }
@@ -83,7 +84,9 @@ ObTextBMWIter::ObTextBMWIter()
 
 void ObTextBMWIter::reuse(const bool switch_tablet)
 {
-  bm25_param_estimator_.reuse(switch_tablet);
+  if (nullptr != iter_param_ && nullptr != iter_param_->relevance_expr_) {
+    bm25_param_estimator_.reuse(switch_tablet);
+  }
   if (OB_NOT_NULL(dim_iters_)) {
     for (int64_t i = 0; i < dim_iters_->count(); ++i) {
       static_cast<ObTextRetrievalBlockMaxIter *>(dim_iters_->at(i))->reuse();
@@ -111,7 +114,8 @@ int ObTextBMWIter::init(const ObTextDaaTParam &param)
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(ObSRBMWIterImpl::init(*param.base_param_, *param.dim_iters_,
                                            *param.allocator_, *param.relevance_collector_))) {
-  } else if (OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
+  } else if (nullptr != param.base_param_->relevance_expr_ &&
+             OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
   }
   return ret;
 }

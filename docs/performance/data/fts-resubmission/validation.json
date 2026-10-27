@@ -1,0 +1,46 @@
+{
+  "passed": true,
+  "native_tests": 6,
+  "unicode_scalars_checked": 1112064,
+  "exact_sql_outputs": 2096,
+  "exact_output_sha256": "1b2cc9af5f79c2a2aac0af4a87f09eea4d311a0040fd6f4f1b408f4309c20209",
+  "aggregate_guard_outputs": 38,
+  "concurrent_documents": 160,
+  "concurrent_sessions": 8,
+  "existing_mysqltests": {
+    "basic_dml_sequel": "PASS",
+    "create_fts_index_afterward": "PASS",
+    "create_table_with_fts_index": "PASS",
+    "domain_id_merge_with_compare_null": "PASS",
+    "drop_index": "PASS",
+    "index_view": "PASS",
+    "load_data": "PASS",
+    "offline_ddl_with_fts_index": "PASS",
+    "online_ddl_on_table_with_fts_index": "PASS",
+    "parser_properties": "PASS",
+    "tokenize_function": "PASS",
+    "simple_query": "PASS"
+  },
+  "new_aggregate_mysqltest": "PASS on both the previous and candidate binaries",
+  "new_regression_edges": [
+    "empty table",
+    "NULL/empty/stopword-only search",
+    "score projection",
+    "numeric thresholds",
+    "prepared parameter changes",
+    "explicit rank and LIMIT",
+    "correlated subquery",
+    "262-term TAAT query"
+  ],
+  "benchmark_integrity_sha256": {
+    "tools/benchmark/fts_large_bench.sh": "596ea5d1c0038e666b78aa94bef22d2dfb87ffc9e84dbc7e2a1da1f746424462",
+    "tools/benchmark/fts_large_bench_gen.py": "b0c816dd8211ac0471f60b72a37a3fb5c62580357a5b6d7ac95f5a8c2e3f143d",
+    "tools/benchmark/fts_large_bench_setup.sql": "311826751df7f51ac45156fb4284aeca9bd9197370aceb88f4fb92832b458108",
+    "tools/benchmark/fts_large_bench_score.py": "bea52eb1c68d05693bb3ac5b910ab0e2fa0e70e01582f40466898ee1e2e3ef55",
+    "tools/benchmark/fts_large_bench_baseline.json": "f4e97eddb2e49c982b967fc8047f7cf37177eebe53d648f6746d85aacda91f0c"
+  },
+  "candidate_binary_sha256": "ada6d772e1118c0e11dc27c923e4fc90868491464b85be828985fa04eabd0e01",
+  "remote_previous_mean_improvement": -0.1304113643255896,
+  "remote_previous_raw_score": 0,
+  "final_remote_score": null
+}

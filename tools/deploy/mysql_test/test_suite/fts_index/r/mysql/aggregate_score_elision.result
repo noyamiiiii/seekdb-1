@@ -1,0 +1,75 @@
+DROP DATABASE IF EXISTS fts_aggregate_guard;
+CREATE DATABASE fts_aggregate_guard;
+USE fts_aggregate_guard;
+CREATE TABLE docs(id INT PRIMARY KEY, body TEXT, FULLTEXT KEY ft(body) WITH PARSER beng);
+SELECT COUNT(*) AS empty_hits FROM docs WHERE MATCH(body) AGAINST('database');
+empty_hits
+0
+INSERT INTO docs VALUES (1,'database search database'),(2,'search engine'),(3,'storage database'),(4,'other words'),(5,NULL),(6,''),(7,'the the the');
+SELECT COUNT(*) AS hits FROM docs WHERE MATCH(body) AGAINST('database search');
+hits
+3
+SELECT COUNT(id) AS hits,SUM(id) AS id_sum FROM docs WHERE MATCH(body) AGAINST('database search');
+hits	id_sum
+3	6
+SELECT COUNT(*) AS hits FROM docs WHERE MATCH(body) AGAINST('database search')>0;
+hits
+3
+SELECT COUNT(*) AS hits FROM docs WHERE MATCH(body) AGAINST('database search') AND id>1;
+hits
+2
+SELECT COUNT(*) AS hits FROM docs WHERE MATCH(body) AGAINST('missingterm');
+hits
+0
+SELECT COUNT(*) AS hits FROM docs WHERE MATCH(body) AGAINST('the');
+hits
+0
+SELECT COUNT(*) AS hits FROM docs WHERE MATCH(body) AGAINST('');
+hits
+0
+SELECT COUNT(*) AS hits FROM docs WHERE MATCH(body) AGAINST(NULL);
+hits
+0
+SELECT COUNT(*) AS hits FROM docs WHERE MATCH(body) AGAINST('database search') OR id=4;
+hits
+4
+SELECT COUNT(*) AS hits FROM docs WHERE NOT (MATCH(body) AGAINST('database search'));
+hits
+4
+SELECT COUNT(*) AS hits,MAX(MATCH(body) AGAINST('database search'))>0 AS positive_score FROM docs WHERE MATCH(body) AGAINST('database search');
+hits	positive_score
+3	1
+SELECT id FROM docs WHERE MATCH(body) AGAINST('database search') ORDER BY MATCH(body) AGAINST('database search') DESC,id LIMIT 2;
+id
+1
+2
+SELECT id FROM docs WHERE MATCH(body) AGAINST('database search') ORDER BY id LIMIT 2;
+id
+1
+2
+SELECT COUNT(*) AS hits FROM (SELECT id FROM docs WHERE MATCH(body) AGAINST('database search') LIMIT 2) AS ranked;
+hits
+2
+PREPARE score_guard FROM 'SELECT COUNT(*) AS hits FROM docs WHERE MATCH(body) AGAINST(\'database search\')>?';
+SET @cutoff=0;
+EXECUTE score_guard USING @cutoff;
+hits
+3
+SET @cutoff=100;
+EXECUTE score_guard USING @cutoff;
+hits
+0
+DEALLOCATE PREPARE score_guard;
+SELECT id,(SELECT COUNT(*) FROM docs WHERE MATCH(body) AGAINST('database search') AND docs.id<=outer_docs.id) AS hits FROM docs AS outer_docs ORDER BY id;
+id	hits
+1	1
+2	2
+3	3
+4	3
+5	3
+6	3
+7	3
+SELECT COUNT(*) AS many_term_hits FROM docs WHERE MATCH(body) AGAINST('database search term000 term001 term002 term003 term004 term005 term006 term007 term008 term009 term010 term011 term012 term013 term014 term015 term016 term017 term018 term019 term020 term021 term022 term023 term024 term025 term026 term027 term028 term029 term030 term031 term032 term033 term034 term035 term036 term037 term038 term039 term040 term041 term042 term043 term044 term045 term046 term047 term048 term049 term050 term051 term052 term053 term054 term055 term056 term057 term058 term059 term060 term061 term062 term063 term064 term065 term066 term067 term068 term069 term070 term071 term072 term073 term074 term075 term076 term077 term078 term079 term080 term081 term082 term083 term084 term085 term086 term087 term088 term089 term090 term091 term092 term093 term094 term095 term096 term097 term098 term099 term100 term101 term102 term103 term104 term105 term106 term107 term108 term109 term110 term111 term112 term113 term114 term115 term116 term117 term118 term119 term120 term121 term122 term123 term124 term125 term126 term127 term128 term129 term130 term131 term132 term133 term134 term135 term136 term137 term138 term139 term140 term141 term142 term143 term144 term145 term146 term147 term148 term149 term150 term151 term152 term153 term154 term155 term156 term157 term158 term159 term160 term161 term162 term163 term164 term165 term166 term167 term168 term169 term170 term171 term172 term173 term174 term175 term176 term177 term178 term179 term180 term181 term182 term183 term184 term185 term186 term187 term188 term189 term190 term191 term192 term193 term194 term195 term196 term197 term198 term199 term200 term201 term202 term203 term204 term205 term206 term207 term208 term209 term210 term211 term212 term213 term214 term215 term216 term217 term218 term219 term220 term221 term222 term223 term224 term225 term226 term227 term228 term229 term230 term231 term232 term233 term234 term235 term236 term237 term238 term239 term240 term241 term242 term243 term244 term245 term246 term247 term248 term249 term250 term251 term252 term253 term254 term255 term256 term257 term258 term259');
+many_term_hits
+3
+DROP DATABASE fts_aggregate_guard;

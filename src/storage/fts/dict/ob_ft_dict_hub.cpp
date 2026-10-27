@@ -28,6 +28,63 @@ namespace oceanbase
 {
 namespace storage
 {
+struct ObFTDictHub::BuiltinDict
+{
+  explicit BuiltinDict(const ObFTDictDesc &desc)
+    : allocator_(lib::ObMemAttr("FtBuiltinDict")), container_(allocator_),
+      dict_(allocator_, &container_, desc) {}
+  ObArenaAllocator allocator_;
+  ObFTCacheRangeContainer container_;
+  ObFTRangeDict dict_;
+};
+
+int ObFTDictHub::get_builtin_dict(const ObFTDictDesc &desc, ObIFTDict *&dict)
+{
+  int ret = OB_SUCCESS;
+  dict = nullptr;
+  int slot = -1;
+  switch (desc.type_) {
+    case ObFTDictType::DICT_IK_MAIN: slot = 0; break;
+    case ObFTDictType::DICT_IK_QUAN: slot = 1; break;
+    case ObFTDictType::DICT_IK_STOP: slot = 2; break;
+    default: break;
+  }
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else if (slot < 0 || desc.coll_type_ != CS_TYPE_UTF8MB4_BIN) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    BuiltinDict *entry = builtin_dicts_[slot].load(std::memory_order_acquire);
+    if (nullptr == entry) {
+      std::lock_guard<std::mutex> guard(builtin_dict_mutex_);
+      entry = builtin_dicts_[slot].load(std::memory_order_relaxed);
+      if (nullptr == entry) {
+        if (OB_ISNULL(entry = OB_NEW(BuiltinDict, "FtBuiltinDict", desc))) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+        } else {
+          ret = load_cache(desc, entry->container_);
+          if (OB_ENTRY_NOT_EXIST == ret) {
+            ret = build_cache(desc, entry->container_);
+          }
+          if (OB_SUCC(ret)) {
+            ret = entry->dict_.init();
+          }
+          if (OB_SUCC(ret)) {
+            builtin_dicts_[slot].store(entry, std::memory_order_release);
+          } else {
+            OB_DELETE(BuiltinDict, "FtBuiltinDict", entry);
+            entry = nullptr;
+          }
+        }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      dict = &entry->dict_;
+    }
+  }
+  return ret;
+}
+
 int ObFTDictHub::init()
 {
   static constexpr int K_MAX_DICT_BUCKET = 128; // for now, only built-in dicts.
@@ -43,6 +100,15 @@ int ObFTDictHub::init()
 int ObFTDictHub::destroy()
 {
   int ret = OB_SUCCESS;
+  // Global full-text shutdown runs after parser users have stopped. Destroy
+  // range views before releasing the cache handles that back their DATs.
+  for (auto &slot : builtin_dicts_) {
+    BuiltinDict *entry = slot.exchange(nullptr, std::memory_order_relaxed);
+    if (nullptr != entry) {
+      OB_DELETE(BuiltinDict, "FtBuiltinDict", entry);
+    }
+  }
+  dict_map_.destroy();
   is_inited_ = false;
   return ret;
 }

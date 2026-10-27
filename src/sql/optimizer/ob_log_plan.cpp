@@ -63,6 +63,10 @@ using share::schema::ObSchemaGetterGuard;
 
 ERRSIM_POINT_DEF(EN_FORCE_GBY_PUSHDOWN_STORAGE, "force pushdown group by to storage layer");
 
+static int check_aggregate_match_score_usage(const ObDMLStmt *stmt,
+                                            const ObMatchFunRawExpr *match,
+                                            bool &need_calc);
+
 static const char *ExplainColumnName[] =
 {
   "ID",
@@ -12044,7 +12048,10 @@ int ObLogPlan::prepare_text_retrieval_scan(const ObIArray<ObRawExpr *> &scan_mat
     if (table_scan->is_vec_adaptive_scan() || table_scan->is_vec_idx_scan_post_filter()) {
       table_scan->set_rowkey_doc_table_id(tr_info.rowkey_idx_tid_);
     }
-    if (OB_FAIL(table_scan->set_is_skip_rowkey_doc(tr_info.doc_id_idx_tid_ == OB_INVALID_ID))) {
+    // Function lookup, score projection and index-merge paths retain their
+    // existing BM25 setup; elision is limited to the primary retrieval scan.
+    if (OB_FAIL(check_aggregate_match_score_usage(get_stmt(), match_against, tr_info.need_calc_relevance_))) {
+    } else if (OB_FAIL(table_scan->set_is_skip_rowkey_doc(tr_info.doc_id_idx_tid_ == OB_INVALID_ID))) {
     } else if (OB_FAIL(table_scan->set_is_skip_rowkey_doc(tr_info.rowkey_idx_tid_ == OB_INVALID_ID))) {
     }
   }
@@ -12167,6 +12174,71 @@ int ObLogPlan::prepare_text_retrieval_merge(const ObIArray<ObRawExpr *> &merge_m
   return ret;
 }
 
+// This conservative score-use check only changes scalar aggregate scans.
+// Row-producing and top-k plans keep relevance and their implicit ranking.
+static int expression_uses_match_score(const ObRawExpr *expr,
+                                        const ObRawExpr *match,
+                                        bool &uses_score)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (expr == match) {
+    uses_score = true;
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && !uses_score && i < expr->get_param_count(); ++i) {
+      if (OB_FAIL(SMART_CALL(expression_uses_match_score(expr->get_param_expr(i), match, uses_score)))) {
+      }
+    }
+  }
+  return ret;
+}
+
+static int check_aggregate_match_score_usage(const ObDMLStmt *stmt,
+                                            const ObMatchFunRawExpr *match,
+                                            bool &need_calc)
+{
+  int ret = OB_SUCCESS;
+  need_calc = true;
+  if (OB_ISNULL(stmt) || OB_ISNULL(match)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (stmt->is_select_stmt() && match->get_mode_flag() == NATURAL_LANGUAGE_MODE &&
+             match->get_columns_boosts().empty()) {
+    const ObSelectStmt *select = static_cast<const ObSelectStmt *>(stmt);
+    if (select->is_scala_group_by() && !select->has_limit() && !select->has_order_by()) {
+      ObSEArray<ObRawExpr *, 16> expressions;
+      ObStmtExprGetter getter;
+      getter.set_relation_scope();
+      getter.remove_scope(SCOPE_WHERE);
+      if (OB_FAIL(stmt->get_relation_exprs(expressions, getter))) {
+      } else {
+        need_calc = false;
+        for (int64_t i = 0; OB_SUCC(ret) && !need_calc && i < expressions.count(); ++i) {
+          if (OB_FAIL(expression_uses_match_score(expressions.at(i), match, need_calc))) {
+          }
+        }
+        const ObIArray<ObRawExpr *> &conditions = stmt->get_condition_exprs();
+        for (int64_t i = 0; OB_SUCC(ret) && !need_calc && i < conditions.count(); ++i) {
+          const ObRawExpr *condition = conditions.at(i);
+          if (condition == match) {
+            // A bare WHERE MATCH consumes only truth, not the numeric score.
+          } else if (nullptr != condition && condition->get_expr_type() == T_OP_BOOL &&
+                     condition->get_param_count() == 1 && condition->get_param_expr(0) == match) {
+          } else if (nullptr != condition && condition->get_expr_type() == T_OP_GT &&
+                     condition->get_param_count() == 2 && condition->get_param_expr(0) == match &&
+                     nullptr != condition->get_param_expr(1) &&
+                     condition->get_param_expr(1)->is_const_raw_expr() &&
+                     condition->get_param_expr(1)->get_expr_type() != T_QUESTIONMARK &&
+                     static_cast<const ObConstRawExpr *>(condition->get_param_expr(1))->get_value().is_zero()) {
+          } else if (OB_FAIL(expression_uses_match_score(condition, match, need_calc))) {
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 int ObLogPlan::prepare_text_retrieval_info(const uint64_t ref_table_id,
                                            const uint64_t index_table_id,
                                            ObMatchFunRawExpr *match_against,
@@ -12251,18 +12323,6 @@ int ObLogPlan::prepare_text_retrieval_info(const uint64_t ref_table_id,
     }
   }
   if (OB_SUCC(ret)) {
-    /*
-    if (OB_FAIL(ObTransformUtils::check_need_calc_match_score(get_optimizer_context().get_exec_ctx(),
-                                                              get_stmt(),
-                                                              match_against,
-                                                              need_calc_relevance,
-                                                              constraints))) {
-      LOG_WARN("failed to check need calc relevance", K(ret));
-    } else if (!need_calc_relevance &&
-               OB_FAIL(append_array_no_dup(get_optimizer_context().get_query_ctx()->all_expr_constraints_, constraints))) {
-      LOG_WARN("failed to append array no dup", K(ret));
-    }
-    */
     tr_info.match_expr_ = match_against;
     tr_info.inv_idx_tid_ = inv_idx_tid;
     tr_info.fwd_idx_tid_ = fwd_idx_tid;

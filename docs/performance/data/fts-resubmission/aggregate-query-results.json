@@ -1,0 +1,290 @@
+[
+  [
+    "SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title,content) AGAINST('全文索引 分词器')",
+    [
+      "8001"
+    ]
+  ],
+  [
+    "SELECT COUNT(id),SUM(id) FROM fts_large_bench.docs WHERE MATCH(title,content) AGAINST('全文索引 分词器')",
+    [
+      "8001\t80002665"
+    ]
+  ],
+  [
+    "SELECT COUNT(*),ROUND(SUM(MATCH(title,content) AGAINST('全文索引 分词器')),6),ROUND(MAX(MATCH(title,content) AGAINST('全文索引 分词器')),8) FROM fts_large_bench.docs WHERE MATCH(title,content) AGAINST('全文索引 分词器')",
+    [
+      "8001\t8708.539439\t1.62604993"
+    ]
+  ],
+  [
+    "SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title,content) AGAINST('全文索引 分词器') > 0",
+    [
+      "8001"
+    ]
+  ],
+  [
+    "SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title,content) AGAINST('全文索引 分词器') > 1",
+    [
+      "4668"
+    ]
+  ],
+  [
+    "SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title,content) AGAINST('全文索引 分词器') AND id%7=0",
+    [
+      "1144"
+    ]
+  ],
+  [
+    "SELECT COUNT(*) FROM fts_large_bench.docs WHERE NOT (MATCH(title,content) AGAINST('全文索引 分词器'))",
+    [
+      "11999"
+    ]
+  ],
+  [
+    "SELECT COUNT(*) FROM fts_large_bench.docs WHERE (MATCH(title,content) AGAINST('全文索引 分词器')) OR id<10",
+    [
+      "8005"
+    ]
+  ],
+  [
+    "SELECT id,ROUND(MATCH(title,content) AGAINST('全文索引 分词器'),10) FROM fts_large_bench.docs WHERE MATCH(title,content) AGAINST('全文索引 分词器') ORDER BY 2 DESC,id LIMIT 20",
+    [
+      "25\t1.6260499288",
+      "49\t1.6260499288",
+      "55\t1.6260499288",
+      "73\t1.6260499288",
+      "79\t1.6260499288",
+      "103\t1.6260499288",
+      "145\t1.6260499288",
+      "169\t1.6260499288",
+      "175\t1.6260499288",
+      "193\t1.6260499288",
+      "199\t1.6260499288",
+      "223\t1.6260499288",
+      "265\t1.6260499288",
+      "289\t1.6260499288",
+      "295\t1.6260499288",
+      "313\t1.6260499288",
+      "319\t1.6260499288",
+      "343\t1.6260499288",
+      "385\t1.6260499288",
+      "409\t1.6260499288"
+    ]
+  ],
+  [
+    "SELECT id FROM fts_large_bench.docs WHERE MATCH(title,content) AGAINST('全文索引 分词器') ORDER BY id LIMIT 20",
+    [
+      "1",
+      "2",
+      "3",
+      "7",
+      "9",
+      "12",
+      "13",
+      "15",
+      "19",
+      "21",
+      "25",
+      "27",
+      "31",
+      "32",
+      "33",
+      "37",
+      "39",
+      "42",
+      "43",
+      "45"
+    ]
+  ],
+  [
+    "SELECT COUNT(*) FROM (SELECT id FROM fts_large_bench.docs WHERE MATCH(title,content) AGAINST('全文索引 分词器') LIMIT 20) t",
+    [
+      "20"
+    ]
+  ],
+  [
+    "SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title,content) AGAINST('全文索引 分词器') HAVING COUNT(*)>0",
+    [
+      "8001"
+    ]
+  ],
+  [
+    "SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title,content) AGAINST('全文索引 分词器') ORDER BY COUNT(*) LIMIT 1",
+    [
+      "8001"
+    ]
+  ],
+  [
+    "PREPARE query_guard FROM 'SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title,content) AGAINST(''全文索引 分词器'') > ?'",
+    []
+  ],
+  [
+    "SET @cutoff=0",
+    []
+  ],
+  [
+    "EXECUTE query_guard USING @cutoff",
+    [
+      "8001"
+    ]
+  ],
+  [
+    "SET @cutoff=1",
+    []
+  ],
+  [
+    "EXECUTE query_guard USING @cutoff",
+    [
+      "4668"
+    ]
+  ],
+  [
+    "DEALLOCATE PREPARE query_guard",
+    []
+  ],
+  [
+    "SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title_en,content_en) AGAINST('database performance audit')",
+    [
+      "11000"
+    ]
+  ],
+  [
+    "SELECT COUNT(id),SUM(id) FROM fts_large_bench.docs WHERE MATCH(title_en,content_en) AGAINST('database performance audit')",
+    [
+      "11000\t110002500"
+    ]
+  ],
+  [
+    "SELECT COUNT(*),ROUND(SUM(MATCH(title_en,content_en) AGAINST('database performance audit')),6),ROUND(MAX(MATCH(title_en,content_en) AGAINST('database performance audit')),8) FROM fts_large_bench.docs WHERE MATCH(title_en,content_en) AGAINST('database performance audit')",
+    [
+      "11000\t15808.129115\t2.94136066"
+    ]
+  ],
+  [
+    "SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title_en,content_en) AGAINST('database performance audit') > 0",
+    [
+      "11000"
+    ]
+  ],
+  [
+    "SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title_en,content_en) AGAINST('database performance audit') > 1",
+    [
+      "6500"
+    ]
+  ],
+  [
+    "SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title_en,content_en) AGAINST('database performance audit') AND id%7=0",
+    [
+      "1572"
+    ]
+  ],
+  [
+    "SELECT COUNT(*) FROM fts_large_bench.docs WHERE NOT (MATCH(title_en,content_en) AGAINST('database performance audit'))",
+    [
+      "9000"
+    ]
+  ],
+  [
+    "SELECT COUNT(*) FROM fts_large_bench.docs WHERE (MATCH(title_en,content_en) AGAINST('database performance audit')) OR id<10",
+    [
+      "11004"
+    ]
+  ],
+  [
+    "SELECT id,ROUND(MATCH(title_en,content_en) AGAINST('database performance audit'),10) FROM fts_large_bench.docs WHERE MATCH(title_en,content_en) AGAINST('database performance audit') ORDER BY 2 DESC,id LIMIT 20",
+    [
+      "3\t2.9413606650",
+      "43\t2.9413606650",
+      "83\t2.9413606650",
+      "123\t2.8449555853",
+      "163\t2.8449555853",
+      "203\t2.8449555853",
+      "243\t2.8449555853",
+      "283\t2.8449555853",
+      "323\t2.8449555853",
+      "363\t2.8449555853",
+      "403\t2.8449555853",
+      "443\t2.8449555853",
+      "483\t2.8449555853",
+      "523\t2.8449555853",
+      "563\t2.8449555853",
+      "603\t2.8449555853",
+      "643\t2.8449555853",
+      "683\t2.8449555853",
+      "723\t2.8449555853",
+      "763\t2.8449555853"
+    ]
+  ],
+  [
+    "SELECT id FROM fts_large_bench.docs WHERE MATCH(title_en,content_en) AGAINST('database performance audit') ORDER BY id LIMIT 20",
+    [
+      "2",
+      "3",
+      "4",
+      "7",
+      "8",
+      "11",
+      "12",
+      "13",
+      "17",
+      "18",
+      "19",
+      "20",
+      "22",
+      "23",
+      "27",
+      "28",
+      "32",
+      "33",
+      "35",
+      "36"
+    ]
+  ],
+  [
+    "SELECT COUNT(*) FROM (SELECT id FROM fts_large_bench.docs WHERE MATCH(title_en,content_en) AGAINST('database performance audit') LIMIT 20) t",
+    [
+      "20"
+    ]
+  ],
+  [
+    "SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title_en,content_en) AGAINST('database performance audit') HAVING COUNT(*)>0",
+    [
+      "11000"
+    ]
+  ],
+  [
+    "SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title_en,content_en) AGAINST('database performance audit') ORDER BY COUNT(*) LIMIT 1",
+    [
+      "11000"
+    ]
+  ],
+  [
+    "PREPARE query_guard FROM 'SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title_en,content_en) AGAINST(''database performance audit'') > ?'",
+    []
+  ],
+  [
+    "SET @cutoff=0",
+    []
+  ],
+  [
+    "EXECUTE query_guard USING @cutoff",
+    [
+      "11000"
+    ]
+  ],
+  [
+    "SET @cutoff=1",
+    []
+  ],
+  [
+    "EXECUTE query_guard USING @cutoff",
+    [
+      "6500"
+    ]
+  ],
+  [
+    "DEALLOCATE PREPARE query_guard",
+    []
+  ]
+]
