@@ -446,19 +446,23 @@ inline int ObFTCharUtil::do_classify(const char *input, const uint8_t char_len, 
 {
   int ret = OB_SUCCESS;
   bool checker = false;
+  ob_wc_t unicode = 0;
   type = CharType::USELESS;
 
-  if (OB_FAIL(is_alpha<CS_TYPE>(input, char_len, checker))) {
-  } else if (checker) {
+  // Decode the code point once. The four classifiers below all take an
+  // ob_wc_t and are pure range checks, so decoding separately for each of
+  // them (as is_alpha/is_arabic/is_chinese/is_other_cjk used to do) paid the
+  // same UTF-8 decode 4 times for a single character. Behaviour is unchanged:
+  // decode_unicode is a pure function of (input, char_len), so every call
+  // returned the same code point and the same status.
+  if (OB_FAIL(decode_unicode<CS_TYPE>(input, char_len, unicode))) {
+  } else if (ObUnicodeBlockUtils::is_alpha(unicode)) {
     type = CharType::ENGLISH_LETTER;
-  } else if (OB_FAIL(is_arabic<CS_TYPE>(input, char_len, checker))) {
-  } else if (checker) {
+  } else if (ObUnicodeBlockUtils::is_arabic(unicode)) {
     type = CharType::ARABIC_LETTER;
-  } else if (OB_FAIL(is_chinese<CS_TYPE>(input, char_len, checker))) {
-  } else if (checker) {
+  } else if (ObUnicodeBlockUtils::is_chinese(unicode)) {
     type = CharType::CHINESE;
-  } else if (OB_FAIL(is_other_cjk<CS_TYPE>(input, char_len, checker))) {
-  } else if (checker) {
+  } else if (ObUnicodeBlockUtils::is_other_cjk(unicode)) {
     type = CharType::OTHER_CJK;
   } else if (OB_FAIL(is_surrogate_high<CS_TYPE>(input, char_len, checker))) {
   } else if (checker) {
