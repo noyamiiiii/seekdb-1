@@ -1,0 +1,79 @@
+{
+  "stage": "completed",
+  "summary": {
+    "batch_speedup": 0.7877964867365553,
+    "recall_at_10_relative_gate": true,
+    "results": [
+      {
+        "kind": "baseline",
+        "round": 0,
+        "elapsed_sec": 3.3772490862756968,
+        "recall_at_10": 0.996875,
+        "gpu_devices": [
+          "/dev/dri/renderD131",
+          "/dev/kfd"
+        ],
+        "ids_and_distances_valid": true
+      },
+      {
+        "kind": "candidate",
+        "round": 0,
+        "elapsed_sec": 3.8277206141501665,
+        "recall_at_10": 1.0,
+        "gpu_devices": [
+          "/dev/dri/renderD131",
+          "/dev/kfd"
+        ],
+        "ids_and_distances_valid": true
+      },
+      {
+        "kind": "candidate",
+        "round": 1,
+        "elapsed_sec": 4.286956267431378,
+        "recall_at_10": 1.0,
+        "gpu_devices": [
+          "/dev/dri/renderD131",
+          "/dev/kfd"
+        ],
+        "ids_and_distances_valid": true
+      },
+      {
+        "kind": "baseline",
+        "round": 1,
+        "elapsed_sec": 3.4178661480545998,
+        "recall_at_10": 0.996875,
+        "gpu_devices": [
+          "/dev/dri/renderD131",
+          "/dev/kfd"
+        ],
+        "ids_and_distances_valid": true
+      },
+      {
+        "kind": "baseline",
+        "round": 2,
+        "elapsed_sec": 3.342423355206847,
+        "recall_at_10": 0.9875,
+        "gpu_devices": [
+          "/dev/dri/renderD131",
+          "/dev/kfd"
+        ],
+        "ids_and_distances_valid": true
+      },
+      {
+        "kind": "candidate",
+        "round": 2,
+        "elapsed_sec": 4.783870369195938,
+        "recall_at_10": 1.0,
+        "gpu_devices": [
+          "/dev/dri/renderD131",
+          "/dev/kfd"
+        ],
+        "ids_and_distances_valid": true,
+        "recall_at_100": 0.9909375
+      }
+    ],
+    "scope": "SQL batch call including scan, GPU build, query and result materialization; supplied server binary",
+    "official_score": null,
+    "full_server_source_build": false
+  }
+}

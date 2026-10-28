@@ -1,0 +1,41 @@
+{
+  "stage": "completed",
+  "summary": [
+    {
+      "n": 2048,
+      "dim": 32,
+      "baseline_build_first_sec": 0.8033844158053398,
+      "candidate_build_first_sec": 0.3001006916165352,
+      "build_speedup": 2.677049531201661,
+      "batch_speedup": 0.9955689890349841,
+      "quality_gate": true,
+      "candidate_min_recall": {
+        "10": 1.0
+      }
+    },
+    {
+      "n": 10000,
+      "dim": 128,
+      "baseline_build_first_sec": 1.0292210131883621,
+      "candidate_build_first_sec": 0.4609612226486206,
+      "build_speedup": 2.2327713538995706,
+      "batch_speedup": 0.9822043754514403,
+      "quality_gate": true,
+      "candidate_min_recall": {
+        "10": 0.90078125
+      }
+    },
+    {
+      "n": 50000,
+      "dim": 128,
+      "baseline_build_first_sec": 1.2108804415911436,
+      "candidate_build_first_sec": 1.177253421396017,
+      "build_speedup": 1.0285639604727168,
+      "batch_speedup": 0.994901819037692,
+      "quality_gate": true,
+      "candidate_min_recall": {
+        "10": 0.6421875
+      }
+    }
+  ]
+}

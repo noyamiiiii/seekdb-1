@@ -1,0 +1,15 @@
+{
+  "passed": true,
+  "meaning": "changed bridge source compiled and GPU functional/relative performance checks completed; not all official hard gates established",
+  "source_sha256": "00457f9acb93bda253de1c419e1e0f97758804e389f4096ff84c8f506a67bc84",
+  "frozen_parent": "08c76418a8e1fef3c1aae83010658ff56a4faa57",
+  "bridge_compiled_from_source": true,
+  "server_rebuilt_from_source": false,
+  "full_marks_established": false,
+  "official_score": null,
+  "sql_batch_speedup": 1.0059659305102593,
+  "sql_batch_recall10_baseline_median": 0.9875,
+  "sql_batch_recall10_candidate_median": 0.984375,
+  "sql_batch_worst_same_round_recall10_delta": -0.012499999999999956,
+  "official_recall_floor_and_dataset_weights": "not provided in public statement; not invented"
+}

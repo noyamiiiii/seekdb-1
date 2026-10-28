@@ -1,0 +1,41 @@
+{
+  "passed": true,
+  "checks": [
+    {
+      "nq": 1,
+      "k": 10,
+      "recall": 1.0
+    },
+    {
+      "nq": 64,
+      "k": 100,
+      "recall": 0.97484375
+    },
+    {
+      "nq": 128,
+      "k": 100,
+      "recall": 0.97296875
+    },
+    {
+      "nq": 1,
+      "k": 1,
+      "recall": 1.0
+    },
+    {
+      "nq": 128,
+      "k": 10,
+      "recall": 0.99609375
+    },
+    {
+      "nq": 32,
+      "k": 100,
+      "recall": 0.973125
+    }
+  ],
+  "concurrent_threads": 4,
+  "concurrent_searches": 16,
+  "ids_and_fp32_distances_valid": true,
+  "invalid_input_and_overflow_rejected": true,
+  "full_server_build": false,
+  "official_score": null
+}
