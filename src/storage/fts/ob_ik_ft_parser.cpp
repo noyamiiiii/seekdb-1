@@ -178,9 +178,7 @@ int ObIKFTParser::process_next_batch()
     }
 
     if (OB_SUCC(ret) || OB_ITER_END == ret) {
-      ObIKArbitrator arb;
-      if (OB_FAIL(arb.process(*ctx_))) {
-      } else if (OB_FAIL(arb.output_result(*ctx_))) {
+      if (OB_FAIL(ObIKArbitrator::process_with_scratch(*ctx_))) {
       }
     } else {
       // Already logged.

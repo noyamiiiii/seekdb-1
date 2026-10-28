@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX STORAGE_FTS
 #include "ob_fts_index_builder_util.h"
+#include "lib/alloc/ob_malloc_allocator.h"
+#include <thread>
 #include "ob_index_builder_util.h"
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
@@ -1048,6 +1050,12 @@ int ObFtsIndexBuilderUtil::decide_parallelism(
       case share::schema::ObIndexType::INDEX_TYPE_FTS_INDEX_LOCAL:
       case share::schema::ObIndexType::INDEX_TYPE_FTS_DOC_WORD_LOCAL:
         decided_parallelism = MAX(original_parallelism / 3, 1L);
+        if ((index_type == share::schema::ObIndexType::INDEX_TYPE_FTS_INDEX_LOCAL ||
+             index_type == share::schema::ObIndexType::INDEX_TYPE_FTS_DOC_WORD_LOCAL) &&
+            ObMallocAllocator::get_instance()->get_total_limit() >= (2L << 30) &&
+            std::thread::hardware_concurrency() >= 4) {
+          decided_parallelism = MAX(decided_parallelism, 2L);
+        }
         break;
       case share::schema::ObIndexType::INDEX_TYPE_NORMAL_MULTIVALUE_LOCAL:
       case share::schema::ObIndexType::INDEX_TYPE_UNIQUE_MULTIVALUE_LOCAL:

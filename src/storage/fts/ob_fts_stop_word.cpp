@@ -26,6 +26,59 @@ namespace oceanbase
 {
 namespace storage
 {
+namespace {
+constexpr uint64_t ascii_stopword_key(const char *word)
+{
+  uint64_t key = 0;
+  int i = 0;
+  for (; word[i] != '\0'; ++i) key |= uint64_t(word[i]) << (8 * i);
+  return key | (uint64_t(i) << 56);
+}
+
+bool check_ascii_stopword(const ObFTWord &word, bool &is_stopword)
+{
+  const ObCollationType coll = word.get_collation_type();
+  if (coll != CS_TYPE_BINARY && coll != CS_TYPE_UTF8MB4_BIN && coll != CS_TYPE_UTF8MB4_GENERAL_CI) {
+    return false;
+  }
+  const ObString value = word.get_word().get_string();
+  // GENERAL_CI, the built-in stopword set's collation, ignores trailing spaces.
+  int64_t length = value.length();
+  while (length > 0 && value.ptr()[length - 1] == ' ') --length;
+  uint64_t key = 0;
+  for (int64_t i = 0; i < length; ++i) {
+    unsigned char ch = static_cast<unsigned char>(value.ptr()[i]);
+    if (ch >= 0x80) return false; // Preserve charset conversion/Unicode weights.
+    if (i < 8) {
+      if (ch >= 'A' && ch <= 'Z') ch += 'a' - 'A';
+      key |= uint64_t(ch) << (8 * i);
+    }
+  }
+  is_stopword = false;
+  if (length < 1 || length > 5) return true;
+  key |= uint64_t(length) << 56;
+  switch (key) {
+#define FTS_ASCII_STOPWORD(text) case ascii_stopword_key(text):
+    FTS_ASCII_STOPWORD("a") FTS_ASCII_STOPWORD("about") FTS_ASCII_STOPWORD("an")
+    FTS_ASCII_STOPWORD("are") FTS_ASCII_STOPWORD("as") FTS_ASCII_STOPWORD("at")
+    FTS_ASCII_STOPWORD("be") FTS_ASCII_STOPWORD("by") FTS_ASCII_STOPWORD("com")
+    FTS_ASCII_STOPWORD("de") FTS_ASCII_STOPWORD("en") FTS_ASCII_STOPWORD("for")
+    FTS_ASCII_STOPWORD("from") FTS_ASCII_STOPWORD("how") FTS_ASCII_STOPWORD("i")
+    FTS_ASCII_STOPWORD("in") FTS_ASCII_STOPWORD("is") FTS_ASCII_STOPWORD("it")
+    FTS_ASCII_STOPWORD("la") FTS_ASCII_STOPWORD("of") FTS_ASCII_STOPWORD("on")
+    FTS_ASCII_STOPWORD("or") FTS_ASCII_STOPWORD("that") FTS_ASCII_STOPWORD("the")
+    FTS_ASCII_STOPWORD("this") FTS_ASCII_STOPWORD("to") FTS_ASCII_STOPWORD("was")
+    FTS_ASCII_STOPWORD("what") FTS_ASCII_STOPWORD("when") FTS_ASCII_STOPWORD("where")
+    FTS_ASCII_STOPWORD("who") FTS_ASCII_STOPWORD("will") FTS_ASCII_STOPWORD("with")
+    FTS_ASCII_STOPWORD("und") FTS_ASCII_STOPWORD("www")
+      is_stopword = true;
+      break;
+#undef FTS_ASCII_STOPWORD
+    default: break;
+  }
+  return true;
+}
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // class ObStopWordChecker
@@ -76,12 +129,14 @@ int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
   int ret = OB_SUCCESS;
   
   
-  common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(word.empty())) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (check_ascii_stopword(word, is_stopword)) {
+    // The immutable built-in ASCII set needs neither conversion nor hashing.
   } else {
+    common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
     common::ObString cmp_str;
     // do nothing set out with in if type is the same.
     if (OB_FAIL(common::ObCharset::charset_convert(

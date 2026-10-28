@@ -1,0 +1,24 @@
+--- /home/ubuntu/seekdb-competition/tools/deploy/mysql_test/test_suite/fts_index/r/mysql/partitioned_simple_query.result	2026-10-26 11:06:59.000000000 +0800
++++ /home/ubuntu/seekdb-test-results/partitioned_simple_query.reject	2026-10-28 15:01:08.551713919 +0800
+@@ -826,7 +826,7 @@
+   0 - output([t_ir_single_column.digest], [t_ir_single_column.seq], [t_dim_table.seq], [t_dim_table.log], [MATCH(t_ir_single_column.detail) AGAINST('computer')]), filter(nil), rowset=16
+       sort_keys([t_ir_single_column.seq, ASC], [t_dim_table.seq, ASC])
+   1 - output([t_ir_single_column.seq], [t_dim_table.seq], [t_ir_single_column.digest], [t_dim_table.log], [MATCH(t_ir_single_column.detail) AGAINST('computer')]), filter(nil), rowset=16
+-      conds(nil), nl_params_([t_dim_table.seq(:0)]), use_batch=false
++      conds(nil), nl_params_([t_dim_table.seq(:1)]), use_batch=false
+   2 - output([t_dim_table.seq], [t_dim_table.log]), filter(nil), rowset=16
+       access([t_dim_table.seq], [t_dim_table.log]), partitions(p0)
+       is_index_back=false, is_global_index=false, 
+@@ -836,7 +836,7 @@
+       access([t_ir_single_column.seq], [t_ir_single_column.digest]), partitions(p[0-1])
+       is_index_back=false, is_global_index=false, filter_before_indexback[false], 
+       range_key([t_ir_single_column.seq]), range(MIN ; MAX), 
+-      range_cond([t_ir_single_column.seq < :0]), has_functional_lookup=true
++      range_cond([t_ir_single_column.seq < :1]), has_functional_lookup=true
+ 
+ select /*+ use_das(t_ir_single_column) */
+     t_ir_single_column.digest, t_ir_single_column.seq, t_dim_table.seq, t_dim_table.log as log , match (detail) against ("computer") as score
+
+[2026-10-28 15:01:08] mysqltest: Result content mismatch
+
+not ok

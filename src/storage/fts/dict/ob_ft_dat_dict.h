@@ -18,6 +18,7 @@
 #define _OCEANBASE_STORAGE_FTS_DICT_OB_FT_DAT_DICT_H_
 
 #include "lib/allocator/ob_allocator.h"
+#include "lib/allocator/page_arena.h"
 #include "lib/ob_errno.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "ob_ft_dict_def.h"
@@ -66,6 +67,7 @@ public:
   int insert(const ObString &key, ObFTWordCode code);
 
   int find(const ObFTSingleWord &word, ObFTWordCode &code) const;
+  void fill_utf8_bmp_codes(ObFTWordCode *codes) const;
 
 private:
   struct Header header_;
@@ -167,7 +169,11 @@ template <typename DataType = void>
 class ObFTDATReader
 {
 public:
-  ObFTDATReader(ObFTDAT *dat) : dat_(dat) {}
+  ObFTDATReader(ObFTDAT *dat)
+      : dat_(dat), lookup_allocator_(common::ObMemAttr("FtsCharCodes")), bmp_codes_(nullptr) {}
+
+  // Optional immutable acceleration; allocation failure retains hash lookup.
+  void init_character_lookup(const ObCollationType coll_type);
 
   // Match single word with hit.
   int match_with_hit(const ObString &single_word,
@@ -176,6 +182,8 @@ public:
 
 private:
   ObFTDAT *dat_;
+  common::ObArenaAllocator lookup_allocator_;
+  ObFTWordCode *bmp_codes_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObFTDATReader);

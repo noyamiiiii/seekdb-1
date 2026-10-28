@@ -412,12 +412,15 @@ int ObFTRangeDict::build_dict_from_cache(const ObFTCacheRangeContainer &range_co
     ObFTDAT *dat = ptr->value_->dat_block_;
     if (OB_ISNULL(dict = OB_NEWx(ObFTCacheDict, &range_alloc_, ObCollationType::CS_TYPE_UTF8MB4_BIN, dat))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_FAIL(dict->init())) {
+      dict->~ObFTCacheDict();
     } else {
       ObFTRange range;
       range.start_ = dat->start_word_;
       range.end_ = dat->end_word_;
       range.dict_ = dict;
       if (OB_FAIL(range_dicts_.push_back(range))) {
+        dict->~ObFTCacheDict();
       }
     }
   }

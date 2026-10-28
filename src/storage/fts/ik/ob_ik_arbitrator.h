@@ -37,6 +37,7 @@ public:
   int process(TokenizeContext &ctx);
 
   int output_result(TokenizeContext &ctx);
+  static int process_with_scratch(TokenizeContext &ctx);
 
 private:
   int prepare(TokenizeContext &ctx);
@@ -63,6 +64,7 @@ private:
   ObArenaAllocator alloc_;
   // Arbitration and all of its chains are private to this parser invocation.
   hash::ObHashMap<int64_t, ObIKTokenChain *, hash::NoPthreadDefendMode> chains_;
+  int64_t bucket_count_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObIKArbitrator);

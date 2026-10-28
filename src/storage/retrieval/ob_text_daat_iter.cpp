@@ -51,6 +51,8 @@ void ObTextDaaTIter::reset()
   use_score_free_union_ = false;
   union_started_ = false;
   MEMSET(union_heads_, 0, sizeof(union_heads_));
+  MEMSET(union_blocks_, 0, sizeof(union_blocks_));
+  MEMSET(union_block_counts_, 0, sizeof(union_block_counts_));
   bm25_param_estimator_.reset();
   // this class can know the type of dim_iters_, but ObSRDaaTIterImpl maybe not
   if (OB_NOT_NULL(dim_iters_)) {
@@ -65,6 +67,8 @@ void ObTextDaaTIter::reuse(const bool switch_tablet)
 {
   union_started_ = false;
   MEMSET(union_heads_, 0, sizeof(union_heads_));
+  MEMSET(union_blocks_, 0, sizeof(union_blocks_));
+  MEMSET(union_block_counts_, 0, sizeof(union_block_counts_));
   if ((OB_NOT_NULL(dim_iters_) && 0 == dim_iters_->count())) {
     // do nothing
   } else if (nullptr != iter_param_ && nullptr != iter_param_->relevance_expr_) {
@@ -88,16 +92,32 @@ int ObTextDaaTIter::advance_union_head(const int64_t index)
 {
   int ret = OB_SUCCESS;
   union_heads_[index] = nullptr;
-  ObISRDaaTDimIter *iter = dim_iters_->at(index);
-  if (OB_ISNULL(iter)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(iter->get_next_row())) {
-    if (OB_ITER_END == ret) {
-      ret = OB_SUCCESS;
+  if (union_block_counts_[index] == 0) {
+    auto *iter = static_cast<ObTextRetrievalDaaTTokenIter *>(dim_iters_->at(index));
+    if (OB_ISNULL(iter)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(iter->get_next_docid_block(union_blocks_[index], union_block_counts_[index]))) {
+      if (OB_ITER_END == ret) {
+        ret = OB_SUCCESS;
+      }
     }
-  } else if (OB_FAIL(iter->get_curr_id(union_heads_[index]))) {
-  } else if (OB_ISNULL(union_heads_[index]) || union_heads_[index]->is_null()) {
-    ret = OB_ERR_UNEXPECTED;
+  }
+  if (OB_SUCC(ret) && union_block_counts_[index] > 0) {
+    union_heads_[index] = &union_blocks_[index]->get_datum();
+    ++union_blocks_[index];
+    --union_block_counts_[index];
+    if (union_heads_[index]->is_null()) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (union_heads_[index]->len_ == 16) {
+      // Construct a portable big-endian key. Compilers lower these fixed
+      // loads/shifts to byte swaps; comparisons retain exact binary ordering.
+      const auto *bytes = reinterpret_cast<const unsigned char *>(union_heads_[index]->ptr_);
+      for (int part = 0; part < 2; ++part) {
+        uint64_t key = 0;
+        for (int offset = 0; offset < 8; ++offset) key = (key << 8) | bytes[part * 8 + offset];
+        union_keys_[index][part] = key;
+      }
+    }
   }
   return ret;
 }
@@ -119,6 +139,8 @@ int ObTextDaaTIter::get_next_union_rows(const int64_t capacity, int64_t &count)
       union_started_ = OB_SUCC(ret);
     }
     const int64_t real_capacity = MIN(capacity, iter_param_->max_batch_size_);
+    ObDocIdExt *buffered_ids = &buffered_domain_ids_.at(0);
+    double *buffered_scores = &buffered_relevances_.at(0);
     while (OB_SUCC(ret) && count < real_capacity) {
       int64_t minimum = -1;
       uint64_t matching = 0;
@@ -130,9 +152,15 @@ int ObTextDaaTIter::get_next_union_rows(const int64_t capacity, int64_t &count)
         } else {
           const ObString left = union_heads_[i]->get_string();
           const ObString right = union_heads_[minimum]->get_string();
-          int cmp = MEMCMP(left.ptr(), right.ptr(), MIN(left.length(), right.length()));
-          if (0 == cmp) {
-            cmp = left.length() - right.length();
+          int cmp = 0;
+          if (left.length() == 16 && right.length() == 16) {
+            const uint64_t *lkey = union_keys_[i];
+            const uint64_t *rkey = union_keys_[minimum];
+            if (lkey[0] != rkey[0]) cmp = lkey[0] < rkey[0] ? -1 : 1;
+            else if (lkey[1] != rkey[1]) cmp = lkey[1] < rkey[1] ? -1 : 1;
+          } else {
+            cmp = MEMCMP(left.ptr(), right.ptr(), MIN(left.length(), right.length()));
+            if (0 == cmp) cmp = left.length() - right.length();
           }
           if (cmp < 0) {
             minimum = i;
@@ -144,8 +172,11 @@ int ObTextDaaTIter::get_next_union_rows(const int64_t capacity, int64_t &count)
       }
       if (minimum < 0) {
         ret = OB_ITER_END;
-      } else if (OB_FAIL(cache_result(count, *union_heads_[minimum], 1.0))) {
+      } else if (OB_FAIL(buffered_ids[count].from_datum(*union_heads_[minimum]))) {
       } else {
+        buffered_scores[count++] = 1.0;
+        ++input_row_cnt_;
+        ++output_row_cnt_;
         // cache_result copies the document ID before advancing any iterator.
         // Equal IDs in multiple postings contribute exactly one union row.
         for (int64_t i = 0; OB_SUCC(ret) && i < dim_count; ++i) {
@@ -158,10 +189,35 @@ int ObTextDaaTIter::get_next_union_rows(const int64_t capacity, int64_t &count)
     if ((OB_SUCC(ret) || OB_ITER_END == ret) && count > 0) {
       // As in the generic path, return a nonempty final batch successfully;
       // the following call reports OB_ITER_END with zero rows.
-      ret = project_results(count);
+      ret = project_union_results(count);
     }
   }
   return ret;
+}
+
+int ObTextDaaTIter::project_union_results(const int64_t count)
+{
+  ObEvalCtx &ctx = *iter_param_->eval_ctx_;
+  ObExpr *id_expr = iter_param_->id_proj_expr_;
+  ObExpr *score_expr = iter_param_->relevance_proj_expr_;
+  if (!ctx.is_vectorized() || !id_expr->is_batch_result() ||
+      (nullptr != score_expr && !score_expr->is_batch_result())) {
+    return project_results(count);
+  }
+  ObDatum *ids = id_expr->locate_batch_datums(ctx);
+  const ObDocIdExt *buffered = &buffered_domain_ids_.at(0);
+  for (int64_t i = 0; i < count; ++i) ids[i].set_datum(buffered[i].get_datum());
+  id_expr->get_evaluated_flags(ctx).set_all(count);
+  id_expr->set_evaluated_projected(ctx);
+  if (nullptr != score_expr) {
+    // Numeric setters write through datum.ptr_, which must be restored to
+    // each expression's result buffer before writing a new batch.
+    ObDatum *scores = score_expr->locate_datums_for_update(ctx, count);
+    for (int64_t i = 0; i < count; ++i) scores[i].set_double(1.0);
+    score_expr->get_evaluated_flags(ctx).set_all(count);
+    score_expr->set_evaluated_projected(ctx);
+  }
+  return OB_SUCCESS;
 }
 
 int ObTextDaaTIter::pre_process()

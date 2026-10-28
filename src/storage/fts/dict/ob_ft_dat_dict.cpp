@@ -246,6 +246,53 @@ int ObFTDATBuilder<DATA_TYPE>::encode(const ObString &word, ObFTWordCode &code, 
   return ret;
 }
 
+namespace {
+// Accept canonical UTF8 BMP sequences only. Malformed and supplementary
+// characters keep the exact existing byte-key lookup.
+int32_t utf8_bmp_index(const ObString &word)
+{
+  const auto *s = reinterpret_cast<const unsigned char *>(word.ptr());
+  int32_t point = -1;
+  if (word.length() == 1 && s[0] < 0x80) {
+    point = s[0];
+  } else if (word.length() == 2 && s[0] >= 0xc2 && s[0] <= 0xdf &&
+             (s[1] & 0xc0) == 0x80) {
+    point = ((s[0] & 0x1f) << 6) | (s[1] & 0x3f);
+  } else if (word.length() == 3 && s[0] >= 0xe0 && s[0] <= 0xef &&
+             (s[1] & 0xc0) == 0x80 && (s[2] & 0xc0) == 0x80 &&
+             (s[0] != 0xe0 || s[1] >= 0xa0) && (s[0] != 0xed || s[1] < 0xa0)) {
+    point = ((s[0] & 0x0f) << 12) | ((s[1] & 0x3f) << 6) | (s[2] & 0x3f);
+  }
+  return point;
+}
+}
+
+void ObArrayHashMap::fill_utf8_bmp_codes(ObFTWordCode *codes) const
+{
+  MEMSET(codes, 0, 65536 * sizeof(ObFTWordCode));
+  for (uint32_t i = 0; i < header_.capacity_; ++i) {
+    if (header_.data[i].used) {
+      int32_t point = utf8_bmp_index(header_.data[i].word.get_word());
+      if (point >= 0) {
+        codes[point] = header_.data[i].code;
+      }
+    }
+  }
+}
+
+template <typename DATA_TYPE>
+void ObFTDATReader<DATA_TYPE>::init_character_lookup(const ObCollationType coll_type)
+{
+  if (nullptr == bmp_codes_ && nullptr != dat_ &&
+      ObCharset::charset_type_by_coll(coll_type) == CHARSET_UTF8MB4) {
+    auto *codes = static_cast<ObFTWordCode *>(lookup_allocator_.alloc(65536 * sizeof(ObFTWordCode)));
+    if (nullptr != codes) {
+      dat_->get_map()->fill_utf8_bmp_codes(codes);
+      bmp_codes_ = codes;
+    }
+  }
+}
+
 template <typename DATA_TYPE>
 int ObFTDATReader<DATA_TYPE>::match_with_hit(const ObString &ft_char,
                                              const ObDATrieHit &last_hit,
@@ -258,9 +305,16 @@ int ObFTDATReader<DATA_TYPE>::match_with_hit(const ObString &ft_char,
   int32_t *base = reinterpret_cast<int32_t *>(dat_->buff + dat_->base_offset_);
   int32_t *check = reinterpret_cast<int32_t *>(dat_->buff + dat_->check_offset_);
 
-  ObFTSingleWord word;
-  word.set_word(ft_char.ptr(), ft_char.length());
-  if (OB_FAIL(dat_->get_map()->find(word, code)) && OB_ENTRY_NOT_EXIST != ret) {
+  const int32_t point = nullptr == bmp_codes_ ? -1 : utf8_bmp_index(ft_char);
+  if (point >= 0) {
+    code = bmp_codes_[point];
+    ret = code == 0 ? OB_ENTRY_NOT_EXIST : OB_SUCCESS;
+  } else {
+    ObFTSingleWord word;
+    word.set_word(ft_char.ptr(), ft_char.length());
+    ret = dat_->get_map()->find(word, code);
+  }
+  if (OB_SUCCESS != ret && OB_ENTRY_NOT_EXIST != ret) {
   } else if (OB_ENTRY_NOT_EXIST == ret) {
     ret = OB_SUCCESS;
     hit.set_unmatch();

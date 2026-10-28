@@ -1,0 +1,18 @@
+{
+  "passed": true,
+  "full_release_build": true,
+  "native_tests": 10,
+  "sql_outputs_equal": 2096,
+  "sql_output_sha256": "1b2cc9af5f79c2a2aac0af4a87f09eea4d311a0040fd6f4f1b408f4309c20209",
+  "query_guard_outputs": 38,
+  "concurrent_documents": 160,
+  "concurrent_sessions": 8,
+  "existing_mysqltests_passed": 12,
+  "new_mysqltests_passed": 2,
+  "cn_word_with_local_root_connection": "PASS",
+  "partitioned_simple_query": "two pre-existing EXPLAIN placeholder differences; not a pass",
+  "all_grading_files_unchanged": true,
+  "official_score": null,
+  "local_mean_improvement": 0.4414968822481633,
+  "full_marks_established": false
+}

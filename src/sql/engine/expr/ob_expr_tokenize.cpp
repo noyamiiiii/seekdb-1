@@ -39,6 +39,63 @@ namespace oceanbase
 {
 namespace sql
 {
+namespace {
+// Scratch storage contains no retained tokens or results between evaluations.
+// One bounded bucket array and one node block can be reused per SQL worker.
+class TokenizeWordMapScratch
+{
+public:
+  TokenizeWordMapScratch() : bucket_count_(0), in_use_(false) {}
+  storage::ObFTWordMap words_;
+  int64_t bucket_count_;
+  bool in_use_;
+};
+
+class TokenizeWordMapLease
+{
+public:
+  TokenizeWordMapLease() : scratch_(nullptr), words_(&local_words_) {}
+  ~TokenizeWordMapLease()
+  {
+    if (nullptr != scratch_) {
+      scratch_->words_.reuse();
+      scratch_->in_use_ = false;
+    }
+  }
+  int init(const int64_t bucket_count)
+  {
+    int ret = OB_SUCCESS;
+    static thread_local TokenizeWordMapScratch scratch;
+    if (scratch.in_use_) {
+      // Reentrant evaluations use private storage instead of corrupting the
+      // outer invocation's map. Ordinary calls never share a map concurrently.
+      ret = local_words_.create(bucket_count, common::ObMemAttr("FTWordMap"));
+    } else {
+      scratch_ = &scratch;
+      scratch.in_use_ = true;
+      words_ = &scratch.words_;
+      if (scratch.bucket_count_ != bucket_count || !words_->created()) {
+        words_->destroy();
+        scratch.bucket_count_ = 0;
+        if (OB_FAIL(words_->create(bucket_count, common::ObMemAttr("FTWordMap")))) {
+        } else {
+          scratch.bucket_count_ = bucket_count;
+          // Cache just one allocator block. Longer documents may allocate
+          // additional blocks, which clear() releases normally.
+          (void)words_->get_local_allocer().reserve(97);
+        }
+      }
+    }
+    return ret;
+  }
+  storage::ObFTWordMap &words() { return *words_; }
+private:
+  storage::ObFTWordMap local_words_;
+  TokenizeWordMapScratch *scratch_;
+  storage::ObFTWordMap *words_;
+};
+}
+
 ObExprTokenize::ObExprTokenize(common::ObIAllocator &alloc)
     : ObStringExprOperator(alloc,
                            T_FUN_TOKENIZE,
@@ -84,14 +141,14 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
   storage::ObFTParseHelper tokenize_helper;
   const int64_t ft_word_bkt_cnt = MIN(MAX(param.fulltext_.length() / 2, 2), 997);
   int64_t doc_len = 0;
-  storage::ObFTWordMap token_map;
-
-  ObArenaAllocator tmp_parse_alloc(ObMemAttr("Tmp buffer"));
+  TokenizeWordMapLease token_map_lease;
+  const int map_ret = token_map_lease.init(ft_word_bkt_cnt);
+  storage::ObFTWordMap &token_map = token_map_lease.words();
 
   if (TokenizeParam::OUTPUT_MODE::DEFAULT != mode && TokenizeParam::OUTPUT_MODE::ALL != mode) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(tokenize_helper.init(&allocator, param.parser_name_, param.properties_))) {
-  } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
+  } else if (OB_FAIL(map_ret)) {
   } else if (
       (0 != param.fulltext_.length())
       && OB_FAIL(tokenize_helper.segment(

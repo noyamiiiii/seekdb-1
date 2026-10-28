@@ -304,12 +304,47 @@ int ObIKArbitrator::prepare(TokenizeContext &ctx)
 
   int cal_bucket_num = MAX(ctx.fulltext_len() / 100, 10);
   cal_bucket_num = MIN(cal_bucket_num, 100);
-  if (OB_FAIL(chains_.create(cal_bucket_num, ObMemAttr("IK ARBITRATE")))) {
+  if (bucket_count_ == cal_bucket_num && chains_.created()) {
+  } else {
+    chains_.destroy();
+    bucket_count_ = 0;
+    if (OB_FAIL(chains_.create(cal_bucket_num, ObMemAttr("IK ARBITRATE")))) {
+    } else {
+      bucket_count_ = cal_bucket_num;
+      (void)chains_.get_local_allocer().reserve(97);
+    }
   }
   return ret;
 }
 
-ObIKArbitrator::ObIKArbitrator() : alloc_(lib::ObMemAttr("IK Arbitrator")) {}
+ObIKArbitrator::ObIKArbitrator() : alloc_(lib::ObMemAttr("IK Arbitrator")), bucket_count_(0) {}
+
+int ObIKArbitrator::process_with_scratch(TokenizeContext &ctx)
+{
+  struct Scratch {
+    ObIKArbitrator arbitrator_;
+    bool busy_ = false;
+  };
+  static thread_local Scratch scratch;
+  ObIKArbitrator local;
+  const bool reusable = !scratch.busy_;
+  ObIKArbitrator &arbitrator = reusable ? scratch.arbitrator_ : local;
+  if (reusable) scratch.busy_ = true;
+  int ret = arbitrator.process(ctx);
+  if (OB_SUCC(ret)) ret = arbitrator.output_result(ctx);
+  if (reusable) {
+    // output_result copies token descriptors into ctx's private result list;
+    // none of the arbitration chains escape to its consumer.
+    arbitrator.chains_.reuse();
+    if (arbitrator.alloc_.total() > 64 * 1024) {
+      arbitrator.alloc_.reset();
+    } else {
+      arbitrator.alloc_.reuse();
+    }
+    scratch.busy_ = false;
+  }
+  return ret;
+}
 
 int ObIKArbitrator::add_chain(ObIKTokenChain *chain)
 {

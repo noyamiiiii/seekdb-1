@@ -1,0 +1,43 @@
+RUN SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title,content) AGAINST('全文索引 分词器')
+RUN SELECT COUNT(id),SUM(id) FROM fts_large_bench.docs WHERE MATCH(title,content) AGAINST('全文索引 分词器')
+RUN SELECT COUNT(*),ROUND(SUM(MATCH(title,content) AGAINST('全文索引 分词器')),6),ROUND(MAX(MATCH(title,content) AGAINST('全文索引 分词器')),8) FROM fts_large_bench.docs WHERE MATCH(title,content) AGAINST('全文索引 分词器')
+RUN SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title,content) AGAINST('全文索引 分词器') > 0
+RUN SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title,content) AGAINST('全文索引 分词器') > 1
+RUN SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title,content) AGAINST('全文索引 分词器') AND id%7=0
+RUN SELECT COUNT(*) FROM fts_large_bench.docs WHERE NOT (MATCH(title,content) AGAINST('全文索引 分词器'))
+RUN SELECT COUNT(*) FROM fts_large_bench.docs WHERE (MATCH(title,content) AGAINST('全文索引 分词器')) OR id<10
+RUN SELECT id,ROUND(MATCH(title,content) AGAINST('全文索引 分词器'),10) FROM fts_large_bench.docs WHERE MATCH(title,content) AGAINST('全文索引 分词器') ORDER BY 2 DESC,id LIMIT 20
+RUN SELECT id FROM fts_large_bench.docs WHERE MATCH(title,content) AGAINST('全文索引 分词器') ORDER BY id LIMIT 20
+RUN SELECT COUNT(*) FROM (SELECT id FROM fts_large_bench.docs WHERE MATCH(title,content) AGAINST('全文索引 分词器') LIMIT 20) t
+RUN SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title,content) AGAINST('全文索引 分词器') HAVING COUNT(*)>0
+RUN SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title,content) AGAINST('全文索引 分词器') ORDER BY COUNT(*) LIMIT 1
+RUN PREPARE query_guard FROM 'SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title,content) AGAINST(''全文索引 分词器'') > ?'
+RUN SET @cutoff=0
+RUN EXECUTE query_guard USING @cutoff
+RUN SET @cutoff=1
+RUN EXECUTE query_guard USING @cutoff
+RUN DEALLOCATE PREPARE query_guard
+RUN EXPLAIN SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title,content) AGAINST('全文索引 分词器')
+RUN EXPLAIN SELECT ROUND(SUM(MATCH(title,content) AGAINST('全文索引 分词器')),8) FROM fts_large_bench.docs WHERE MATCH(title,content) AGAINST('全文索引 分词器')
+RUN SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title_en,content_en) AGAINST('database performance audit')
+RUN SELECT COUNT(id),SUM(id) FROM fts_large_bench.docs WHERE MATCH(title_en,content_en) AGAINST('database performance audit')
+RUN SELECT COUNT(*),ROUND(SUM(MATCH(title_en,content_en) AGAINST('database performance audit')),6),ROUND(MAX(MATCH(title_en,content_en) AGAINST('database performance audit')),8) FROM fts_large_bench.docs WHERE MATCH(title_en,content_en) AGAINST('database performance audit')
+RUN SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title_en,content_en) AGAINST('database performance audit') > 0
+RUN SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title_en,content_en) AGAINST('database performance audit') > 1
+RUN SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title_en,content_en) AGAINST('database performance audit') AND id%7=0
+RUN SELECT COUNT(*) FROM fts_large_bench.docs WHERE NOT (MATCH(title_en,content_en) AGAINST('database performance audit'))
+RUN SELECT COUNT(*) FROM fts_large_bench.docs WHERE (MATCH(title_en,content_en) AGAINST('database performance audit')) OR id<10
+RUN SELECT id,ROUND(MATCH(title_en,content_en) AGAINST('database performance audit'),10) FROM fts_large_bench.docs WHERE MATCH(title_en,content_en) AGAINST('database performance audit') ORDER BY 2 DESC,id LIMIT 20
+RUN SELECT id FROM fts_large_bench.docs WHERE MATCH(title_en,content_en) AGAINST('database performance audit') ORDER BY id LIMIT 20
+RUN SELECT COUNT(*) FROM (SELECT id FROM fts_large_bench.docs WHERE MATCH(title_en,content_en) AGAINST('database performance audit') LIMIT 20) t
+RUN SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title_en,content_en) AGAINST('database performance audit') HAVING COUNT(*)>0
+RUN SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title_en,content_en) AGAINST('database performance audit') ORDER BY COUNT(*) LIMIT 1
+RUN PREPARE query_guard FROM 'SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title_en,content_en) AGAINST(''database performance audit'') > ?'
+RUN SET @cutoff=0
+RUN EXECUTE query_guard USING @cutoff
+RUN SET @cutoff=1
+RUN EXECUTE query_guard USING @cutoff
+RUN DEALLOCATE PREPARE query_guard
+RUN EXPLAIN SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title_en,content_en) AGAINST('database performance audit')
+RUN EXPLAIN SELECT ROUND(SUM(MATCH(title_en,content_en) AGAINST('database performance audit')),8) FROM fts_large_bench.docs WHERE MATCH(title_en,content_en) AGAINST('database performance audit')
+PASS 38 aggregate, score, threshold, LIMIT, NULL and prepared-plan SQL results

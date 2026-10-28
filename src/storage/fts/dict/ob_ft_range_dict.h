@@ -42,7 +42,7 @@ public:
         range_dicts_(&range_alloc_), range_container_(range_container)
   {
   }
-  ~ObFTRangeDict() override{};
+  ~ObFTRangeDict() override { destroy(); }
 
 public:
   struct ObFTRange final

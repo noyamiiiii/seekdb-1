@@ -36,6 +36,7 @@ namespace storage
 int ObFTCacheDict::init()
 {
   int ret = OB_SUCCESS;
+  reader_.init_character_lookup(coll_type_);
   return ret;
 }
 

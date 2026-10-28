@@ -6955,8 +6955,28 @@ int ObOptimizerUtil::check_can_encode_sortkey(const common::ObIArray<OrderItem> 
   } else {
     can_sort_opt &= config::_enable_newsort();
 
+    // FTS auxiliary index keys contain a short word plus a document ID. Their
+    // schema width is a large upper bound, so the generic estimated-width
+    // policy misses the benefit of encoding each collation key just once.
+    bool fts_keys = order_keys.count() > 0;
+    bool has_word = false;
+    for (int64_t i = 0; fts_keys && i < order_keys.count(); ++i) {
+      const ObRawExpr *key = order_keys.at(i).expr_;
+      fts_keys = nullptr != key && key->is_column_ref_expr();
+      if (fts_keys) {
+        const auto *column = static_cast<const ObColumnRefRawExpr *>(key);
+        has_word |= column->is_word_segment_column();
+        fts_keys = key->get_data_type() == ObVarcharType &&
+            (key->get_collation_type() == CS_TYPE_BINARY ||
+             key->get_collation_type() == CS_TYPE_UTF8MB4_BIN ||
+             key->get_collation_type() == CS_TYPE_UTF8MB4_GENERAL_CI);
+      }
+    }
+    fts_keys &= has_word;
+    can_sort_opt |= fts_keys;
+
     for (int64_t i = 0; OB_SUCC(ret) && can_sort_opt && i < order_keys.count(); i++) {
-      if (!ObOrderPerservingEncoder::can_encode_sortkey(
+      if (!fts_keys && !ObOrderPerservingEncoder::can_encode_sortkey(
                             order_keys.at(i).expr_->get_data_type(),
                             order_keys.at(i).expr_->get_collation_type())) {
         can_sort_opt = false;
@@ -6970,6 +6990,9 @@ int ObOptimizerUtil::check_can_encode_sortkey(const common::ObIArray<OrderItem> 
       // do nothing
     } else if (!can_sort_opt) {
       // do nothing
+    } else if (fts_keys) {
+      // The encoder already implements variable-length VARCHAR keys, including
+      // nulls, padding, ascending/descending order and invalid-Unicode fallback.
     } else if (OB_FAIL(ObOptEstCost::estimate_width_for_exprs(plan.get_basic_table_metas(),
                                                               plan.get_selectivity_ctx(),
                                                               sort_keys,

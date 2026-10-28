@@ -1,0 +1,2 @@
+cn_word PASS
+partitioned_simple_query FAIL
