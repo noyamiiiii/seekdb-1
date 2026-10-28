@@ -46,6 +46,7 @@ public:
   int compound(ObIKToken &result);
 
   int current_char(const char *&ch, uint8_t &char_len);
+  int current_char(const char *&ch, uint8_t &char_len, ObFTCharUtil::CharType &type);
   int current_char_type(ObFTCharUtil::CharType &type);
 
   int step_next();

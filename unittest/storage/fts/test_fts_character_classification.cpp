@@ -39,6 +39,13 @@ TEST(FtsCharacterClassification, EveryUnicodeScalar)
     if (point < 0xd800 || point > 0xdfff) {
       ASSERT_EQ(OB_SUCCESS, ObFTCharUtil::classify_first_char(CS_TYPE_UTF8MB4_BIN,bytes,size,type)) << point;
       ASSERT_EQ(expected_type(point,false),type) << point;
+      int64_t char_len = 0;
+      ObFTCharUtil::CharType next_type;
+      ASSERT_EQ(OB_SUCCESS,
+                ObFTCharUtil::classify_next_char(CS_TYPE_UTF8MB4_BIN, bytes, size, char_len, next_type))
+          << point;
+      EXPECT_EQ(size, char_len) << point;
+      EXPECT_EQ(type, next_type) << point;
     }
 
   }
@@ -49,6 +56,14 @@ TEST(FtsCharacterClassification, RejectsInvalidArguments)
   ObFTCharUtil::CharType type;
   EXPECT_EQ(OB_INVALID_ARGUMENT,ObFTCharUtil::classify_first_char(CS_TYPE_UTF8MB4_BIN,nullptr,1,type));
   EXPECT_EQ(OB_NOT_SUPPORTED,ObFTCharUtil::classify_first_char(CS_TYPE_LATIN1_BIN,"a",1,type));
+  for (const std::string &invalid : {std::string("\xff"), std::string("\xc0\x80"),
+       std::string("\xed\xa0\x80"), std::string("\xe0\x80\x80"), std::string("\xe4\xb8")}) {
+    int64_t char_len = 0;
+    ObFTCharUtil::CharType next_type;
+    EXPECT_EQ(OB_INVALID_ARGUMENT,
+              ObFTCharUtil::classify_next_char(
+                  CS_TYPE_UTF8MB4_BIN, invalid.data(), invalid.size(), char_len, next_type));
+  }
 }
 
 TEST(FtsHotPath, AsciiBufferBoundaryAndReuse)

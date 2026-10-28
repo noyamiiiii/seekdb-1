@@ -1,0 +1,31 @@
+[==========] Running 10 tests from 2 test cases.
+[----------] Global test environment set-up.
+[----------] 2 tests from FtsCharacterClassification
+[ RUN      ] FtsCharacterClassification.EveryUnicodeScalar
+[       OK ] FtsCharacterClassification.EveryUnicodeScalar (50 ms)
+[ RUN      ] FtsCharacterClassification.RejectsInvalidArguments
+[       OK ] FtsCharacterClassification.RejectsInvalidArguments (0 ms)
+[----------] 2 tests from FtsCharacterClassification (50 ms total)
+
+[----------] 8 tests from FtsHotPath
+[ RUN      ] FtsHotPath.AsciiBufferBoundaryAndReuse
+[       OK ] FtsHotPath.AsciiBufferBoundaryAndReuse (1 ms)
+[ RUN      ] FtsHotPath.DefaultPropertiesEqualCanonicalProperties
+[       OK ] FtsHotPath.DefaultPropertiesEqualCanonicalProperties (0 ms)
+[ RUN      ] FtsHotPath.GroupedFrequencyPreservesFirstAndRepeatedOccurrence
+[       OK ] FtsHotPath.GroupedFrequencyPreservesFirstAndRepeatedOccurrence (0 ms)
+[ RUN      ] FtsHotPath.GroupedCollationEquivalentWordsKeepLastSpelling
+[       OK ] FtsHotPath.GroupedCollationEquivalentWordsKeepLastSpelling (0 ms)
+[ RUN      ] FtsHotPath.StringComparisonMatchesCharsetHandlers
+[       OK ] FtsHotPath.StringComparisonMatchesCharsetHandlers (2 ms)
+[ RUN      ] FtsHotPath.DictionaryCharacterLookupMatchesHashLookup
+[       OK ] FtsHotPath.DictionaryCharacterLookupMatchesHashLookup (52 ms)
+[ RUN      ] FtsHotPath.EncodedVarcharSortKeysPreserveCollationOrder
+[       OK ] FtsHotPath.EncodedVarcharSortKeysPreserveCollationOrder (0 ms)
+[ RUN      ] FtsHotPath.AsciiStopwordsMatchOriginalCollation
+[       OK ] FtsHotPath.AsciiStopwordsMatchOriginalCollation (16 ms)
+[----------] 8 tests from FtsHotPath (71 ms total)
+
+[----------] Global test environment tear-down
+[==========] 10 tests from 2 test cases ran. (121 ms total)
+[  PASSED  ] 10 tests.

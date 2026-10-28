@@ -52,6 +52,12 @@ public:
                                  const uint8_t char_len,
                                  CharType &type);
 
+  static int classify_next_char(ObCollationType coll_type,
+                                const char *input,
+                                const int64_t remaining,
+                                int64_t &char_len,
+                                CharType &type);
+
   static int check_cn_number(ObCollationType coll_type,
                              const char *input,
                              const uint8_t char_len,
@@ -76,6 +82,7 @@ public:
 private:
   template <ObCharsetType CS_TYPE>
   static int do_classify(const char *input, const uint8_t char_len, CharType &type);
+  static void classify_unicode(ob_wc_t unicode, CharType &type);
 
 private:
   /*************************  Alpha: english letter abc *********************/
@@ -451,7 +458,24 @@ inline int ObFTCharUtil::do_classify(const char *input, const uint8_t char_len, 
   // All classification predicates inspect the same code point. Decode it once
   // while retaining their precedence (including UTF16 surrogate categories).
   if (OB_FAIL(decode_unicode<CS_TYPE>(input, char_len, unicode))) {
-  } else if (ObUnicodeBlockUtils::is_alpha(unicode)) {
+  } else {
+    classify_unicode(unicode, type);
+    if constexpr (CS_TYPE == CHARSET_UTF16 || CS_TYPE == CHARSET_UTF16LE) {
+      if (CharType::USELESS == type) {
+        if (ObUnicodeBlockUtils::check_high_surrogate(unicode)) {
+          type = CharType::SURROGATE_HIGH;
+        } else if (ObUnicodeBlockUtils::check_low_surrogate(unicode)) {
+          type = CharType::SURROGATE_LOW;
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+inline void ObFTCharUtil::classify_unicode(const ob_wc_t unicode, CharType &type)
+{
+  if (ObUnicodeBlockUtils::is_alpha(unicode)) {
     type = CharType::ENGLISH_LETTER;
   } else if (ObUnicodeBlockUtils::is_arabic(unicode)) {
     type = CharType::ARABIC_LETTER;
@@ -459,14 +483,7 @@ inline int ObFTCharUtil::do_classify(const char *input, const uint8_t char_len, 
     type = CharType::CHINESE;
   } else if (ObUnicodeBlockUtils::is_other_cjk(unicode)) {
     type = CharType::OTHER_CJK;
-  } else if constexpr (CS_TYPE == CHARSET_UTF16 || CS_TYPE == CHARSET_UTF16LE) {
-    if (ObUnicodeBlockUtils::check_high_surrogate(unicode)) {
-      type = CharType::SURROGATE_HIGH;
-    } else if (ObUnicodeBlockUtils::check_low_surrogate(unicode)) {
-      type = CharType::SURROGATE_LOW;
-    }
   }
-  return ret;
 }
 
 inline int ObFTCharUtil::classify_first_char(ObCollationType coll_type,
@@ -494,6 +511,39 @@ inline int ObFTCharUtil::classify_first_char(ObCollationType coll_type,
     ret = OB_NOT_SUPPORTED;
     STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(cs_type));
     break;
+  }
+  return ret;
+}
+
+inline int ObFTCharUtil::classify_next_char(ObCollationType coll_type,
+                                            const char *input,
+                                            const int64_t remaining,
+                                            int64_t &char_len,
+                                            CharType &type)
+{
+  int ret = OB_SUCCESS;
+  char_len = 0;
+  type = CharType::USELESS;
+  if (OB_ISNULL(input) || remaining <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (ObCharset::charset_type_by_coll(coll_type) == CHARSET_UTF8MB4) {
+    ob_wc_t unicode = 0;
+    const unsigned char *start = reinterpret_cast<const unsigned char *>(input);
+    const int code_size = common::ob_charset_decode_unicode<CHARSET_UTF8MB4>(
+        start, start + remaining, unicode);
+    if (code_size <= 0) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      char_len = code_size;
+      classify_unicode(unicode, type);
+    }
+  } else {
+    if (OB_FAIL(ObCharset::first_valid_char(coll_type, input, remaining, char_len))) {
+    } else if (char_len <= 0 || char_len > UINT8_MAX) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      ret = classify_first_char(coll_type, input, static_cast<uint8_t>(char_len), type);
+    }
   }
   return ret;
 }

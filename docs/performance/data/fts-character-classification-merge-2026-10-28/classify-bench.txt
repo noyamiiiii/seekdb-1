@@ -1,0 +1,3 @@
+old_us=216495 new_us=110890 ratio=0.512206
+old_us=232703 new_us=110692 ratio=0.475679
+old_us=222293 new_us=106708 ratio=0.480033
