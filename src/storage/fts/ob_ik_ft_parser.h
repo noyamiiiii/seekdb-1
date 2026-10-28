@@ -30,6 +30,7 @@ namespace oceanbase
 namespace storage
 {
 class ObFTDictHub;
+class ObFTRangeDict;
 
 class ObIKFTParser final : public ObITokenIterator
 {
@@ -90,9 +91,9 @@ private:
 
   // Read-only dictionary views owned by the process-level dictionary hub.
 
-  ObIFTDict *dict_main_;
-  ObIFTDict *dict_quan_;
-  ObIFTDict *dict_stop_;
+  ObFTRangeDict *dict_main_;
+  ObFTRangeDict *dict_quan_;
+  ObFTRangeDict *dict_stop_;
 
   DISABLE_COPY_ASSIGN(ObIKFTParser);
 };

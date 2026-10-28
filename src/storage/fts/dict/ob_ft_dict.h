@@ -32,10 +32,11 @@ namespace storage
  * - Word means a single character in a language;
  */
 class ObIFTDict;
+class ObFTCacheDict;
 class ObDATrieHit final
 {
 public:
-  ObDATrieHit(const ObIFTDict *dict, const int64_t start_pos)
+  ObDATrieHit(const ObFTCacheDict *dict, const int64_t start_pos)
       : dict_(dict), char_cnt_(0), start_pos_(start_pos), end_pos_(start_pos_), base_idx_(0),
         current_check_(0), is_match_(false), is_prefix_(false)
   {
@@ -80,7 +81,7 @@ public:
   }
 
 public:
-  const ObIFTDict *dict_;
+  const ObFTCacheDict *dict_;
   // Character count already matched.
   int64_t char_cnt_;
 

@@ -45,6 +45,15 @@ namespace oceanbase
 namespace storage
 {
 
+void ObFTRangeDict::destroy()
+{
+  for (int64_t i = 0; i < range_dicts_.size(); ++i) {
+    range_dicts_[i].dict_->~ObFTCacheDict();
+  }
+  range_dicts_.reset();
+  range_alloc_.reset();
+}
+
 
 int ObFTRangeDict::build_cache_from_ik_dict(const ObFTDictDesc &desc, ObFTCacheRangeContainer &range_container)
 {
@@ -336,7 +345,7 @@ int ObFTRangeDict::build_ranges(const ObFTDictDesc &desc,
 int ObFTRangeDict::match(const ObString &single_word, ObDATrieHit &hit) const
 {
   int ret = OB_SUCCESS;
-  ObIFTDict *dict = nullptr;
+  ObFTCacheDict *dict = nullptr;
   if (OB_FAIL(find_first_char_range(single_word, dict)) && OB_ENTRY_NOT_EXIST != ret) {
   } else if (OB_ENTRY_NOT_EXIST == ret) {
     hit.set_unmatch();
@@ -353,7 +362,7 @@ int ObFTRangeDict::match(const ObString &words, bool &is_match) const
 {
   // find first char range and find dict
   int ret = OB_SUCCESS;
-  ObIFTDict *dict = nullptr;
+  ObFTCacheDict *dict = nullptr;
 
   int64_t char_len;
 
@@ -379,7 +388,7 @@ int ObFTRangeDict::match_with_hit(const ObString &single_word,
   return last_hit.dict_->match_with_hit(single_word, last_hit, hit);
 }
 
-int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict *&dict) const
+int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObFTCacheDict *&dict) const
 {
   // Ranges are disjoint and inclusive. Find the final start <= the key, then
   // check its end so gaps and out-of-dictionary characters remain unmatched.

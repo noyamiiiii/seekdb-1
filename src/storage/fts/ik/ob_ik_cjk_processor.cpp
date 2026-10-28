@@ -22,6 +22,7 @@
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "storage/fts/dict/ob_ft_dict.h"
+#include "storage/fts/dict/ob_ft_range_dict.h"
 #include "storage/fts/ik/ob_ik_char_util.h"
 #include "storage/fts/ik/ob_ik_token.h"
 
@@ -63,7 +64,7 @@ int ObIKCJKProcessor::do_process(TokenizeContext &ctx,
     if (OB_SUCC(ret)) {
       // Start from this char
       // find range of dict
-      ObDATrieHit hit(&dict_main_, ctx.get_cursor());
+      ObDATrieHit hit(nullptr, ctx.get_cursor());
       if (OB_FAIL(dict_main_.match({char_len, ch}, hit))) {
       } else if (hit.is_match()) {
         // output token

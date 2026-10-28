@@ -236,9 +236,9 @@ int ObIKFTParser::init_dict(const ObFTParserParam &param)
       CHARSET_UTF8MB4, CS_TYPE_UTF8MB4_BIN);
   if (OB_ISNULL(hub_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(hub_->get_builtin_dict(main_desc, dict_main_))) {
-  } else if (OB_FAIL(hub_->get_builtin_dict(quan_desc, dict_quan_))) {
-  } else if (OB_FAIL(hub_->get_builtin_dict(stop_desc, dict_stop_))) {
+  } else if (OB_FAIL(hub_->get_builtin_range_dict(main_desc, dict_main_))) {
+  } else if (OB_FAIL(hub_->get_builtin_range_dict(quan_desc, dict_quan_))) {
+  } else if (OB_FAIL(hub_->get_builtin_range_dict(stop_desc, dict_stop_))) {
   }
   return ret;
 }

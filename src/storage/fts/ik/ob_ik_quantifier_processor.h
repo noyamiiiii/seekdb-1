@@ -27,10 +27,11 @@ namespace oceanbase
 namespace storage
 {
 class ObFTDictHub;
+class ObFTRangeDict;
 class ObIKQuantifierProcessor : public ObIIKProcessor
 {
 public:
-  ObIKQuantifierProcessor(const ObIFTDict &quan_dict, ObIAllocator &alloc)
+  ObIKQuantifierProcessor(const ObFTRangeDict &quan_dict, ObIAllocator &alloc)
       : quan_dict_(quan_dict), count_hits_(alloc), start_(-1), end_(-1), quan_char_cnt_(0)
   {
   }
@@ -58,7 +59,7 @@ private:
   int output_num_token(TokenizeContext &ctx);
 
 private:
-  const ObIFTDict &quan_dict_;
+  const ObFTRangeDict &quan_dict_;
   ObList<ObDATrieHit, ObIAllocator> count_hits_;
   int64_t start_;
   int64_t end_;

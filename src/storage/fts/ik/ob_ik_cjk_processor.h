@@ -26,10 +26,11 @@ namespace oceanbase
 namespace storage
 {
 class ObFTDictHub;
+class ObFTRangeDict;
 class ObIKCJKProcessor : public ObIIKProcessor
 {
 public:
-  ObIKCJKProcessor(const ObIFTDict &dict_main, ObIAllocator &alloc)
+  ObIKCJKProcessor(const ObFTRangeDict &dict_main, ObIAllocator &alloc)
       : hits_(alloc), dict_main_(dict_main), cjk_start_(-1), cjk_end_(-1)
   {
   }
@@ -43,7 +44,7 @@ public:
 
 private:
   ObList<ObDATrieHit, ObIAllocator> hits_;
-  const ObIFTDict &dict_main_;
+  const ObFTRangeDict &dict_main_;
   int64_t cjk_start_;
   int64_t cjk_end_;
 

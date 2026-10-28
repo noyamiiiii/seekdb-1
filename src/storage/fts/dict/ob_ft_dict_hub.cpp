@@ -85,6 +85,18 @@ int ObFTDictHub::get_builtin_dict(const ObFTDictDesc &desc, ObIFTDict *&dict)
   return ret;
 }
 
+int ObFTDictHub::get_builtin_range_dict(const ObFTDictDesc &desc, ObFTRangeDict *&dict)
+{
+  int ret = OB_SUCCESS;
+  ObIFTDict *base_dict = nullptr;
+  dict = nullptr;
+  if (OB_FAIL(get_builtin_dict(desc, base_dict))) {
+  } else if (OB_ISNULL(dict = static_cast<ObFTRangeDict *>(base_dict))) {
+    ret = OB_ERR_UNEXPECTED;
+  }
+  return ret;
+}
+
 int ObFTDictHub::init()
 {
   static constexpr int K_MAX_DICT_BUCKET = 128; // for now, only built-in dicts.

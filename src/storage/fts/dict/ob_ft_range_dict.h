@@ -32,6 +32,7 @@ namespace oceanbase
 {
 namespace storage
 {
+class ObFTCacheDict;
 class ObFTRangeDict final : public ObIFTDict
 {
 public:
@@ -49,7 +50,7 @@ public:
   {
     ObFTSingleWord start_;
     ObFTSingleWord end_;
-    ObIFTDict *dict_; // a cache dict
+    ObFTCacheDict *dict_; // a cache dict
   };
 
 public:
@@ -88,16 +89,9 @@ private:
                                                    ObFTCacheRangeContainer &range_container);
 
 private:
-  void destroy()
-  {
-    for (int64_t i = 0; i < range_dicts_.size(); i++) {
-      range_dicts_[i].dict_->~ObIFTDict(); // destroy dict
-    }
-    range_dicts_.reset();
-    range_alloc_.reset();
-  }
+  void destroy();
 
-  int find_first_char_range(const ObString &single_word, ObIFTDict *&dict) const;
+  int find_first_char_range(const ObString &single_word, ObFTCacheDict *&dict) const;
 
 private:
   static constexpr int DEFAULT_KEY_PER_RANGE = 50000; // by estimated

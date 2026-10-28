@@ -22,6 +22,7 @@
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "storage/fts/dict/ob_ft_dict_hub.h"
+#include "storage/fts/dict/ob_ft_range_dict.h"
 #include "storage/fts/ik/ob_ik_char_util.h"
 #include "storage/fts/ik/ob_ik_token.h"
 
@@ -126,7 +127,7 @@ int ObIKQuantifierProcessor::process_CN_count(TokenizeContext &ctx,
       } else {
         // find dict
 
-        ObDATrieHit hit(&quan_dict_, ctx.get_cursor());
+        ObDATrieHit hit(nullptr, ctx.get_cursor());
         if (OB_FAIL(quan_dict_.match({char_len, ch}, hit))) {
         } else if (hit.is_match()) {
           if (OB_FAIL(ctx.add_token(ctx.fulltext(),

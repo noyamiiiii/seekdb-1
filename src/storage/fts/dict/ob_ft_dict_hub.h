@@ -96,6 +96,7 @@ private:
 
 class ObFTCacheRangeContainer;
 class ObIFTDict;
+class ObFTRangeDict;
 class ObFTDictHub
 {
 public:
@@ -114,6 +115,7 @@ public:
   // their range views once per hub, instead of once per document. The hub
   // outlives every parser; no token or parser state is shared.
   int get_builtin_dict(const ObFTDictDesc &desc, ObIFTDict *&dict);
+  int get_builtin_range_dict(const ObFTDictDesc &desc, ObFTRangeDict *&dict);
 
 private:
   int get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info);
