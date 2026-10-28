@@ -1,0 +1,87 @@
+DROP DATABASE IF EXISTS fts_cardinality_guard;
+CREATE DATABASE fts_cardinality_guard;
+USE fts_cardinality_guard;
+CREATE TABLE docs(id INT PRIMARY KEY, body TEXT, FULLTEXT KEY ft(body) WITH PARSER beng);
+SELECT COUNT(*) AS empty_hits FROM (SELECT id FROM docs WHERE MATCH(body) AGAINST('database search') LIMIT 2) v;
+empty_hits
+0
+INSERT INTO docs VALUES (1,'database database search'),(2,'search engine'),(3,'storage database'),(4,'other words'),(5,NULL),(6,''),(7,'the the the');
+SELECT COUNT(*) AS one_term FROM (SELECT id FROM docs WHERE MATCH(body) AGAINST('database') LIMIT 2) v;
+one_term
+2
+SELECT COUNT(*) AS two_terms FROM (SELECT id FROM docs WHERE MATCH(body) AGAINST('database search') LIMIT 2) v;
+two_terms
+2
+SELECT COUNT(*) AS three_terms FROM (SELECT id FROM docs WHERE MATCH(body) AGAINST('database search storage') LIMIT 20) v;
+three_terms
+3
+SELECT COUNT(*) AS four_terms FROM (SELECT id FROM docs WHERE MATCH(body) AGAINST('database search storage other') LIMIT 20) v;
+four_terms
+4
+SELECT COUNT(*) AS zero_limit FROM (SELECT id FROM docs WHERE MATCH(body) AGAINST('database search') LIMIT 0) v;
+zero_limit
+0
+SELECT COUNT(*) AS offset_hits FROM (SELECT id FROM docs WHERE MATCH(body) AGAINST('database search') LIMIT 2 OFFSET 1) v;
+offset_hits
+2
+SELECT COUNT(*) AS past_end FROM (SELECT id FROM docs WHERE MATCH(body) AGAINST('database search') LIMIT 2 OFFSET 20) v;
+past_end
+0
+SELECT COUNT(*) AS large_limit FROM (SELECT id FROM docs WHERE MATCH(body) AGAINST('database search') LIMIT 100000) v;
+large_limit
+3
+SELECT COUNT(*) AS missing FROM (SELECT id FROM docs WHERE MATCH(body) AGAINST('missingterm') LIMIT 2) v;
+missing
+0
+SELECT COUNT(*) AS no_limit FROM (SELECT id FROM docs WHERE MATCH(body) AGAINST('database search')) v;
+no_limit
+3
+SELECT COUNT(*) AS after_filter FROM (SELECT id FROM docs WHERE MATCH(body) AGAINST('database search') AND id>1 LIMIT 2) v;
+after_filter
+2
+SELECT COUNT(*) AS score_filter FROM (SELECT id FROM docs WHERE MATCH(body) AGAINST('database search')>100 LIMIT 2) v;
+score_filter
+0
+SELECT COUNT(*) AS explicit_order FROM (SELECT id FROM docs WHERE MATCH(body) AGAINST('database search') ORDER BY id LIMIT 2) v;
+explicit_order
+2
+SELECT SUM(id) AS selected_ids FROM (SELECT id FROM docs WHERE MATCH(body) AGAINST('database search') LIMIT 2) v;
+selected_ids
+3
+SELECT COUNT(*) AS hits,MIN(id) AS first_id FROM (SELECT id FROM docs WHERE MATCH(body) AGAINST('database search') LIMIT 2) v;
+hits	first_id
+2	1
+SELECT COUNT(value) AS null_values FROM (SELECT NULL AS value FROM docs WHERE MATCH(body) AGAINST('database search') LIMIT 2) v;
+null_values
+0
+SELECT COUNT(DISTINCT id) AS distinct_ids FROM (SELECT id FROM docs WHERE MATCH(body) AGAINST('database search') LIMIT 2) v;
+distinct_ids
+2
+SELECT COUNT(*) AS score_output FROM (SELECT MATCH(body) AGAINST('database search') AS score FROM docs WHERE MATCH(body) AGAINST('database search') LIMIT 2) v;
+score_output
+2
+SELECT COUNT(*) AS join_hits FROM (SELECT id FROM docs WHERE MATCH(body) AGAINST('database search') LIMIT 2) v JOIN docs d ON d.id=v.id;
+join_hits
+2
+SELECT COUNT(*) AS distinct_bodies FROM (SELECT DISTINCT body FROM docs WHERE MATCH(body) AGAINST('database search') LIMIT 2) v;
+distinct_bodies
+2
+PREPARE limited FROM 'SELECT COUNT(*) AS prepared_hits FROM (SELECT id FROM docs WHERE MATCH(body) AGAINST(?) LIMIT ? OFFSET ?) v';
+SET @term='database search',@count=2,@start=0;
+EXECUTE limited USING @term,@count,@start;
+prepared_hits
+2
+SET @count=0;
+EXECUTE limited USING @term,@count,@start;
+prepared_hits
+0
+SET @count=20,@start=1;
+EXECUTE limited USING @term,@count,@start;
+prepared_hits
+2
+SET @term='missingterm';
+EXECUTE limited USING @term,@count,@start;
+prepared_hits
+0
+DEALLOCATE PREPARE limited;
+DROP DATABASE fts_cardinality_guard;

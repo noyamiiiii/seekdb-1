@@ -16,6 +16,8 @@
 
 #include "ob_ddl_task_executor.h"
 #include "lib/ob_running_mode.h"
+#include "lib/alloc/ob_malloc_allocator.h"
+#include <thread>
 #include "lib/thread/ob_thread_name.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/rc/ob_server_runtime.h"
@@ -350,7 +352,15 @@ int ObDDLLocalBuilder::push_task(ObAsyncTask &task)
 
 int64_t ObDDLLocalBuilder::get_thread_cnt_() const
 {
-  return lib::is_mini_mode() ? 1 : 16;
+  int64_t thread_count = 16;
+  if (lib::is_mini_mode()) {
+    // FTS forward/inverted auxiliary builds are independent. Two workers let
+    // them overlap on small multicore servers without opening the normal
+    // sixteen-worker pool. Preserve serialization below a 2 GiB budget.
+    const int64_t memory_limit = ObMallocAllocator::get_instance()->get_total_limit();
+    thread_count = memory_limit >= (2L << 30) && std::thread::hardware_concurrency() >= 2 ? 2 : 1;
+  }
+  return thread_count;
 }
 
 }  // end namespace share

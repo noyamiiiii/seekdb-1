@@ -61,7 +61,8 @@ private:
 
 private:
   ObArenaAllocator alloc_;
-  hash::ObHashMap<int64_t, ObIKTokenChain *> chains_;
+  // Arbitration and all of its chains are private to this parser invocation.
+  hash::ObHashMap<int64_t, ObIKTokenChain *, hash::NoPthreadDefendMode> chains_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObIKArbitrator);

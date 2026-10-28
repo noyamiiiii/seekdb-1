@@ -35,12 +35,22 @@ int ObTextDaaTIter::init(const ObTextDaaTParam &param)
   } else {
     mode_flag_ = param.mode_flag_;
     function_lookup_mode_ = param.function_lookup_mode_;
+    const ObDatumMeta &id_meta = iter_param_->id_proj_expr_->datum_meta_;
+    use_score_free_union_ = sql::ObMatchAgainstMode::NATURAL_LANGUAGE_MODE == mode_flag_
+        && !function_lookup_mode_ && nullptr == iter_param_->relevance_expr_
+        && !iter_param_->need_filter() && !iter_param_->need_pushdown_topk()
+        && !iter_param_->limit_param_->is_valid()
+        && dim_iters_->count() > 0 && dim_iters_->count() <= SMALL_UNION_SIZE
+        && common::ObVarcharType == id_meta.type_ && common::CS_TYPE_BINARY == id_meta.cs_type_;
   }
   return ret;
 }
 
 void ObTextDaaTIter::reset()
 {
+  use_score_free_union_ = false;
+  union_started_ = false;
+  MEMSET(union_heads_, 0, sizeof(union_heads_));
   bm25_param_estimator_.reset();
   // this class can know the type of dim_iters_, but ObSRDaaTIterImpl maybe not
   if (OB_NOT_NULL(dim_iters_)) {
@@ -53,6 +63,8 @@ void ObTextDaaTIter::reset()
 
 void ObTextDaaTIter::reuse(const bool switch_tablet)
 {
+  union_started_ = false;
+  MEMSET(union_heads_, 0, sizeof(union_heads_));
   if ((OB_NOT_NULL(dim_iters_) && 0 == dim_iters_->count())) {
     // do nothing
   } else if (nullptr != iter_param_ && nullptr != iter_param_->relevance_expr_) {
@@ -64,6 +76,92 @@ void ObTextDaaTIter::reuse(const bool switch_tablet)
     }
   }
   ObSRDaaTIterImpl::reuse(switch_tablet);
+}
+
+int ObTextDaaTIter::get_next_rows(const int64_t capacity, int64_t &count)
+{
+  return use_score_free_union_ ? get_next_union_rows(capacity, count)
+                              : ObSRDaaTIterImpl::get_next_rows(capacity, count);
+}
+
+int ObTextDaaTIter::advance_union_head(const int64_t index)
+{
+  int ret = OB_SUCCESS;
+  union_heads_[index] = nullptr;
+  ObISRDaaTDimIter *iter = dim_iters_->at(index);
+  if (OB_ISNULL(iter)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(iter->get_next_row())) {
+    if (OB_ITER_END == ret) {
+      ret = OB_SUCCESS;
+    }
+  } else if (OB_FAIL(iter->get_curr_id(union_heads_[index]))) {
+  } else if (OB_ISNULL(union_heads_[index]) || union_heads_[index]->is_null()) {
+    ret = OB_ERR_UNEXPECTED;
+  }
+  return ret;
+}
+
+int ObTextDaaTIter::get_next_union_rows(const int64_t capacity, int64_t &count)
+{
+  int ret = OB_SUCCESS;
+  count = 0;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (capacity <= 0) {
+    ret = capacity == 0 ? OB_SUCCESS : OB_INVALID_ARGUMENT;
+  } else {
+    const int64_t dim_count = dim_iters_->count();
+    if (!union_started_) {
+      for (int64_t i = 0; OB_SUCC(ret) && i < dim_count; ++i) {
+        ret = advance_union_head(i);
+      }
+      union_started_ = OB_SUCC(ret);
+    }
+    const int64_t real_capacity = MIN(capacity, iter_param_->max_batch_size_);
+    while (OB_SUCC(ret) && count < real_capacity) {
+      int64_t minimum = -1;
+      uint64_t matching = 0;
+      for (int64_t i = 0; i < dim_count; ++i) {
+        if (nullptr == union_heads_[i]) {
+        } else if (minimum < 0) {
+          minimum = i;
+          matching = 1ULL << i;
+        } else {
+          const ObString left = union_heads_[i]->get_string();
+          const ObString right = union_heads_[minimum]->get_string();
+          int cmp = MEMCMP(left.ptr(), right.ptr(), MIN(left.length(), right.length()));
+          if (0 == cmp) {
+            cmp = left.length() - right.length();
+          }
+          if (cmp < 0) {
+            minimum = i;
+            matching = 1ULL << i;
+          } else if (0 == cmp) {
+            matching |= 1ULL << i;
+          }
+        }
+      }
+      if (minimum < 0) {
+        ret = OB_ITER_END;
+      } else if (OB_FAIL(cache_result(count, *union_heads_[minimum], 1.0))) {
+      } else {
+        // cache_result copies the document ID before advancing any iterator.
+        // Equal IDs in multiple postings contribute exactly one union row.
+        for (int64_t i = 0; OB_SUCC(ret) && i < dim_count; ++i) {
+          if (matching & (1ULL << i)) {
+            ret = advance_union_head(i);
+          }
+        }
+      }
+    }
+    if ((OB_SUCC(ret) || OB_ITER_END == ret) && count > 0) {
+      // As in the generic path, return a nonempty final batch successfully;
+      // the following call reports OB_ITER_END with zero rows.
+      ret = project_results(count);
+    }
+  }
+  return ret;
 }
 
 int ObTextDaaTIter::pre_process()

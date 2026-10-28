@@ -5,6 +5,7 @@
 #include "share/text_analysis/ob_token_stream.h"
 #include <gtest/gtest.h>
 #include <string>
+#include <vector>
 
 using namespace oceanbase::common;
 using namespace oceanbase::storage;
@@ -131,6 +132,47 @@ TEST(FtsHotPath, GroupedCollationEquivalentWordsKeepLastSpelling)
   const ObFTWord &representative = words.begin()->first;
   EXPECT_EQ(std::string(last, 4), std::string(representative.get_word().ptr_, representative.get_word().len_));
   EXPECT_EQ(2, words.begin()->second);
+}
+
+TEST(FtsHotPath, StringComparisonMatchesCharsetHandlers)
+{
+  // Compare against the original collation handler directly, including
+  // embedded NUL, trailing spaces, invalid bytes and collation-equal spellings.
+  std::vector<std::string> values = {"", " ", "  ", "a", "a ", "A", "ab", "b",
+      "全文", "数据库", "é", "e", "🙂", "𝔘", "a\0b", "\xFF", "\xE4\xB8"};
+  values.emplace_back("a\0b", 3);
+  uint32_t state = 20261028;
+  for (int i = 0; i < 100; ++i) {
+    std::string value;
+    for (int j = 0; j < i % 33; ++j) {
+      state = state * 1664525U + 1013904223U;
+      value += static_cast<char>(state >> 24);
+    }
+    values.push_back(value);
+  }
+  int tested_collations = 0;
+  for (int value = CS_TYPE_INVALID + 1; value < CS_TYPE_MAX; ++value) {
+    if (!ObCharset::is_valid_collation(value)) {
+      continue; // seekdb retains only a subset of OceanBase collations.
+    }
+    ObCollationType type = static_cast<ObCollationType>(value);
+    const ObCharsetInfo *cs = ObCharset::get_charset(type);
+    ASSERT_NE(nullptr, cs) << type;
+    ++tested_collations;
+    for (bool endspace : {false, true}) {
+      for (const auto &left : values) {
+        for (const auto &right : values) {
+          int expected = cs->coll->strnncollsp(cs,
+              reinterpret_cast<const unsigned char *>(left.data()), left.size(),
+              reinterpret_cast<const unsigned char *>(right.data()), right.size(), endspace);
+          int actual = ObCharset::strcmpsp(type, left.data(), left.size(),
+                                           right.data(), right.size(), endspace);
+          EXPECT_EQ(expected, actual) << type << " lengths " << left.size() << ',' << right.size();
+        }
+      }
+    }
+  }
+  EXPECT_GE(tested_collations, 3);
 }
 
 int main(int argc,char **argv)

@@ -1,0 +1,40 @@
+{
+  "passed": true,
+  "release_build": true,
+  "native_tests": 7,
+  "unicode_scalars_tested": 1112064,
+  "original_mysqltests_passed": 12,
+  "new_mysqltests_passed": 2,
+  "complete_sql_outputs": 2096,
+  "snapshot_sha256": "1b2cc9af5f79c2a2aac0af4a87f09eea4d311a0040fd6f4f1b408f4309c20209",
+  "query_guard_outputs": 38,
+  "concurrent_documents": 160,
+  "concurrent_sessions": 8,
+  "cn_word": "PASS with root replacing admin only in a temporary connection harness",
+  "partitioned_simple_query": "Same two EXPLAIN :0/:1 numbering differences on old and new; not claimed as pass",
+  "basic_dml": "Harness expects an unavailable auxiliary-schema metadata row; not claimed as pass",
+  "benchmark_hashes": {
+    "fts_large_bench.sh": "596ea5d1c0038e666b78aa94bef22d2dfb87ffc9e84dbc7e2a1da1f746424462",
+    "fts_large_bench_gen.py": "b0c816dd8211ac0471f60b72a37a3fb5c62580357a5b6d7ac95f5a8c2e3f143d",
+    "fts_large_bench_setup.sql": "311826751df7f51ac45156fb4284aeca9bd9197370aceb88f4fb92832b458108",
+    "fts_large_bench_score.py": "bea52eb1c68d05693bb3ac5b910ab0e2fa0e70e01582f40466898ee1e2e3ef55",
+    "fts_large_bench_baseline.json": "f4e97eddb2e49c982b967fc8047f7cf37177eebe53d648f6746d85aacda91f0c"
+  },
+  "source_sha256": {
+    "src/data_plane/api/data_plane/fts/ob_fts_struct.h": "81dcf51ffa32cac0bc79065d16e13b39478c80b44cda7c2fa5d627be8691b9e5",
+    "src/storage/fts/ik/ob_ik_arbitrator.h": "291251d6db37eac829ff870bfd8196b5bcf34a674ca9dca6cce291988ed2ae49",
+    "src/oblib/lib/charset/ob_charset.cpp": "18de6cb7917d8d139ecbb9e683d2daca0e9d38d018915f897027bc1a4965b383",
+    "src/share/ob_ddl_task_executor.cpp": "0fc394d7337ca4166b3141b023c20f9eea234cddcf29c5cd5830274acd0b5fe9",
+    "src/storage/retrieval/ob_text_daat_iter.h": "6fecfb6f3cd22ac58130c538d886a460a8246b9098eee9cdaa398802b5fa0f0a",
+    "src/storage/retrieval/ob_text_daat_iter.cpp": "9a2834f95c1bca68a2cb42d00b513986731319f866c257a9394c1089037c91d2",
+    "src/sql/optimizer/ob_join_order.cpp": "6f9b14b2d65943fe70564cad070489add216c87cc4e47049a8351a556a53e1dc",
+    "src/observer/composition/retrieval/ob_das_legacy_tr_merge_iter.cpp": "3d03f4558aab36e906b6c870de3ba5f142c4a2f82bfac3185415fcfec9dc21fa",
+    "src/sql/das/iter/ob_das_text_retrieval_merge_iter.cpp": "f7e452cb4c20a044b6d00a0547213919b7523b8d152b1f4d18858a724913bf5d",
+    "src/sql/optimizer/ob_log_plan.cpp": "c617c792dbb6cb614a13a95dfdc23008248acd52a7ad13750973f4a2f70209aa",
+    "src/sql/optimizer/fts_cardinality_utils.h": "69cbf2c6273a368721cd0927cdc5a1623b6e1988f196bde19972789084cd2ea3",
+    "src/sql/rewrite/ob_transform_pre_process.cpp": "090492bed31e7884b465a3797a138ae8feb763dae6302b17d71f0a8e07cc7aae"
+  },
+  "official_score": null,
+  "peak_rss_kib_observed": 547136,
+  "mini_mode_build_workers_observed": 2
+}

@@ -55,10 +55,14 @@ public:
   ObTextDaaTIter() : ObSRDaaTIterImpl(),
       bm25_param_estimator_(),
       mode_flag_(sql::ObMatchAgainstMode::NATURAL_LANGUAGE_MODE),
-      function_lookup_mode_(false) {}
+      function_lookup_mode_(false),
+      use_score_free_union_(false),
+      union_started_(false),
+      union_heads_{} {}
   virtual ~ObTextDaaTIter() { reset(); }
 
   int init(const ObTextDaaTParam &param);
+  virtual int get_next_rows(const int64_t capacity, int64_t &count) override;
   virtual void reuse(const bool switch_tablet = false) override;
   virtual void reset() override;
 protected:
@@ -68,6 +72,12 @@ protected:
   sql::ObMatchAgainstMode mode_flag_;
   bool function_lookup_mode_;
 private:
+  int advance_union_head(const int64_t index);
+  int get_next_union_rows(const int64_t capacity, int64_t &count);
+  static const int64_t SMALL_UNION_SIZE = 3;
+  bool use_score_free_union_;
+  bool union_started_;
+  const ObDatum *union_heads_[SMALL_UNION_SIZE];
   DISALLOW_COPY_AND_ASSIGN(ObTextDaaTIter);
 };
 

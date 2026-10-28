@@ -12205,7 +12205,18 @@ static int check_aggregate_match_score_usage(const ObDMLStmt *stmt,
   } else if (stmt->is_select_stmt() && match->get_mode_flag() == NATURAL_LANGUAGE_MODE &&
              match->get_columns_boosts().empty()) {
     const ObSelectStmt *select = static_cast<const ObSelectStmt *>(stmt);
-    if (select->is_scala_group_by() && !select->has_limit() && !select->has_order_by()) {
+    bool literal_projection = select->get_select_item_size() > 0 &&
+        !select->has_order_by() && !select->has_group_by() && !select->has_distinct() &&
+        !select->has_window_function() && select->get_table_items().count() == 1 &&
+        nullptr != select->get_table_item(0) && select->get_table_item(0)->is_basic_table();
+    for (int64_t i = 0; literal_projection && i < select->get_select_item_size(); ++i) {
+      const ObRawExpr *output = select->get_select_item(i).expr_;
+      literal_projection = nullptr != output && output->is_const_raw_expr();
+    }
+    // Projection pruning can leave a constant-only FTS view below COUNT(*).
+    // Its row values reveal no ranking, including when LIMIT/OFFSET is used.
+    if ((select->is_scala_group_by() && !select->has_limit() && !select->has_order_by()) ||
+        literal_projection) {
       ObSEArray<ObRawExpr *, 16> expressions;
       ObStmtExprGetter getter;
       getter.set_relation_scope();

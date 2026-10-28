@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_REWRITE
 #include "sql/rewrite/ob_transform_pre_process.h"
+#include "sql/optimizer/fts_cardinality_utils.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/engine/expr/ob_expr_arg_case.h"
 #include "sql/resolver/dml/ob_select_resolver.h"
@@ -178,8 +179,23 @@ int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
       }
     }
     if (OB_SUCC(ret)) {
-      if (stmt->get_match_exprs().count() > 0 &&
-          OB_FAIL(preserve_order_for_fulltext_search(stmt, is_happened))) {
+      ObDMLStmt *parent = parent_stmts.empty() ? nullptr : parent_stmts.at(parent_stmts.count() - 1).stmt_;
+      if (is_fts_cardinality_only_view(stmt, parent)) {
+        // COUNT(*) consumes none of this view's projected values. Use the
+        // established projection-pruning utility to keep view-column metadata
+        // consistent, then omit the unobservable implicit relevance order.
+        ObSelectStmt *view = static_cast<ObSelectStmt *>(stmt);
+        ObSqlBitSet<> removed;
+        for (int64_t i = 0; OB_SUCC(ret) && i < view->get_select_item_size(); ++i) {
+          ret = removed.add_member(i);
+        }
+        if (OB_SUCC(ret) && OB_FAIL(ObTransformUtils::remove_select_items(ctx_,
+                parent->get_table_item(0)->table_id_, *view, *parent, removed))) {
+        } else if (OB_SUCC(ret)) {
+          trans_happened = true;
+        }
+      } else if (stmt->get_match_exprs().count() > 0 &&
+                 OB_FAIL(preserve_order_for_fulltext_search(stmt, is_happened))) {
       } else {
         trans_happened |= is_happened;
       }

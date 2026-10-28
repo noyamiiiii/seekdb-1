@@ -572,13 +572,27 @@ int ObCharset::strcmpsp(ObCollationType collation_type,
 {
   int result = 0;
   if (is_argument_valid(collation_type, str1, str1_len, str2, str2_len)) {
-    const ObCharsetInfo *cs = get_charset(collation_type);
-    result = cs->coll->strnncollsp(cs,
-                                reinterpret_cast<const unsigned char *>(str1),
-                                str1_len,
-                                reinterpret_cast<const unsigned char *>(str2),
-                                str2_len,
-                                cmp_endspace);
+    if (CS_TYPE_BINARY == collation_type) {
+      // Binary collation ignores cmp_endspace and compares every byte. Avoid
+      // charset lookup/dispatch in fixed-width document-ID merge comparisons.
+      result = MEMCMP(str1, str2, MIN(str1_len, str2_len));
+      if (0 == result) {
+        result = static_cast<int>(str1_len - str2_len);
+      }
+    } else if (str1_len == str2_len &&
+               (str1 == str2 || 0 == str1_len || 0 == MEMCMP(str1, str2, str1_len))) {
+      // Equal representations compare equal under every collation, including
+      // padded-space comparison. Repeated FTS sort keys need no UTF8 decoding.
+      result = 0;
+    } else {
+      const ObCharsetInfo *cs = get_charset(collation_type);
+      result = cs->coll->strnncollsp(cs,
+                                  reinterpret_cast<const unsigned char *>(str1),
+                                  str1_len,
+                                  reinterpret_cast<const unsigned char *>(str2),
+                                  str2_len,
+                                  cmp_endspace);
+    }
   }
   return result;
 }

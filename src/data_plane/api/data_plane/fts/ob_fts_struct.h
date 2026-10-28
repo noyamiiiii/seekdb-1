@@ -51,7 +51,10 @@ private:
   ObObjMeta meta_;
 };
 
-typedef common::hash::ObHashMap<ObFTWord, int64_t> ObFTWordMap;
+// A word map belongs to one segment() call and is never shared between workers.
+// Shared dictionaries and the process-wide stopword set retain their locks.
+typedef common::hash::ObHashMap<ObFTWord, int64_t,
+    common::hash::NoPthreadDefendMode> ObFTWordMap;
 
 class ObAddWordFlag final
 {
