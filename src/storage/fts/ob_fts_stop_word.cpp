@@ -179,7 +179,10 @@ ObAddWord::ObAddWord(
     stopword_cnt_(0),
     min_token_size_(property.min_token_size_),
     max_token_size_(property.max_token_size_),
-    flag_(flag)
+    flag_(flag),
+    case_charset_(flag.casedown() ? ObCharset::get_charset(meta.get_collation_type()) : nullptr),
+    case_buffer_(nullptr),
+    case_buffer_remaining_(0)
 {
 }
 
@@ -219,15 +222,33 @@ int ObAddWord::casedown_word(const ObFTWord &src, ObFTWord &dst)
   if (OB_UNLIKELY(src.empty())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (flag_.casedown()) {
-    ObString dst_str;
-    if (OB_FAIL(ObCharset::tolower(
-                    word_meta_.get_collation_type(),
-                    src.get_word().get_string(),
-                    dst_str,
-                    allocator_))) {
+    const ObString source = src.get_word().get_string();
+    if (OB_ISNULL(case_charset_)) {
+      ret = OB_INVALID_ARGUMENT;
     } else {
-      ObFTWord tmp(dst_str.length(), dst_str.ptr(), word_meta_);
-      dst = tmp;
+      const int64_t required = source.length() * static_cast<int64_t>(case_charset_->casedn_multiply);
+      if (case_buffer_remaining_ < required) {
+        const int64_t allocation_size = MAX(required, 4096L);
+        case_buffer_ = static_cast<char *>(allocator_.alloc(allocation_size));
+        if (OB_ISNULL(case_buffer_)) {
+          case_buffer_remaining_ = 0;
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+        } else {
+          case_buffer_remaining_ = allocation_size;
+        }
+      }
+      if (OB_SUCC(ret)) {
+        size_t length = 0;
+        if (case_charset_->casedn_multiply == 1) {
+          MEMCPY(case_buffer_, source.ptr(), source.length());
+          length = case_charset_->cset->casedn(case_charset_, case_buffer_, source.length(), case_buffer_, required);
+        } else {
+          length = case_charset_->cset->casedn(case_charset_, const_cast<char *>(source.ptr()), source.length(), case_buffer_, required);
+        }
+        dst = ObFTWord(length, case_buffer_, word_meta_);
+        case_buffer_ += required;
+        case_buffer_remaining_ -= required;
+      }
     }
   } else {
     dst = src;

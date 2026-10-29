@@ -133,6 +133,9 @@ private:
   int64_t min_token_size_;
   int64_t max_token_size_;
   ObAddWordFlag flag_;
+  const ObCharsetInfo *case_charset_;
+  char *case_buffer_;
+  int64_t case_buffer_remaining_;
 };
 
 } // end namespace storage

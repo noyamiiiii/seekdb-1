@@ -42,6 +42,8 @@ public:
       token_stream_(nullptr),
       token_block_(nullptr),
       token_block_remaining_(0),
+      ascii_document_(false),
+      ascii_position_(0),
       is_inited_(false)
   {}
   ~ObBEngFTParser() { reset(); }
@@ -56,6 +58,7 @@ public:
 
   VIRTUAL_TO_STRING_KV(K_(analysis_ctx), KP_(token_stream), K_(is_inited));
 private:
+  int next_ascii_token(common::ObDatum &token, int64_t &frequency);
   int segment(
       const common::ObDatum &doc,
       share::ObITokenStream *&token_stream);
@@ -68,6 +71,8 @@ private:
   share::ObITokenStream *token_stream_;
   char *token_block_;
   int64_t token_block_remaining_;
+  bool ascii_document_;
+  int64_t ascii_position_;
   bool is_inited_;
 
   DISALLOW_COPY_AND_ASSIGN(ObBEngFTParser);

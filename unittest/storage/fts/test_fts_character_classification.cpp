@@ -539,6 +539,48 @@ TEST(FtsHotPath, EmbeddedEnglishPipelineMatchesGenericAnalyzer)
   }
 }
 
+TEST(FtsHotPath, CaseConversionBlocksPreserveOriginalOutputAndOwnership)
+{
+  std::vector<std::string> inputs = {"UPPER lower", std::string(5000, 'Q'), "ending", "\xc3\x89\xc3\x9f", "\xe4\xb8\xad\xe6\x96\x87"};
+  for (int value = 1; value < 256; ++value) {
+    inputs.push_back("A" + std::string(1, char(value)) + "Z");
+  }
+  for (ObCollationType collation : {CS_TYPE_UTF8MB4_BIN, CS_TYPE_UTF8MB4_GENERAL_CI,
+                                  CS_TYPE_LATIN1_BIN, CS_TYPE_UTF16_BIN, CS_TYPE_BINARY}) {
+    if (nullptr == ObCharset::get_charset(collation)) continue;
+    ObArenaAllocator allocator;
+    ObFTWordMap words;
+    ASSERT_EQ(OB_SUCCESS, words.create(997, ObMemAttr("FtsCasePool")));
+    ObObjMeta meta;
+    meta.set_varchar(); meta.set_collation_type(collation);
+    ObFTParserProperty property;
+    ObAddWordFlag flags;
+    flags.set_casedown(); flags.set_groupby_word();
+    ObAddWord processor(property, meta, flags, allocator, words);
+    std::vector<ObString> saved;
+    std::vector<std::string> expected;
+    for (const auto &input : inputs) {
+      words.reuse();
+      ObString reference;
+      ASSERT_EQ(OB_SUCCESS, ObCharset::tolower(collation, ObString(input.size(), input.data()), reference, allocator));
+      const int result = processor.process_word(input.data(), input.size(), input.size(), 1);
+      if (reference.empty()) {
+        EXPECT_EQ(OB_INVALID_ARGUMENT, result);
+      } else {
+        ASSERT_EQ(OB_SUCCESS, result);
+        ASSERT_EQ(1, words.size());
+        const ObDatum &stored = words.begin()->first.get_word();
+        EXPECT_EQ(std::string(reference.ptr(), reference.length()), std::string(stored.ptr_, stored.len_));
+        saved.emplace_back(stored.len_, stored.ptr_);
+        expected.emplace_back(reference.ptr(), reference.length());
+      }
+    }
+    for (size_t index = 0; index < saved.size(); ++index) {
+      EXPECT_EQ(expected[index], std::string(saved[index].ptr(), saved[index].length()));
+    }
+  }
+}
+
 TEST(FtsHotPath, BuiltinParserChecksPreserveCanonicalNames)
 {
   for (const char *name : {"", "ik", "IK", "Ik", "beng", "BENG", "space", "ngram", "ngram2", "ngram20", "ik.1", "unknown"}) {

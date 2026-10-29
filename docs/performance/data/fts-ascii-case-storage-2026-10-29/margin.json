@@ -1,0 +1,14 @@
+{
+  "mean_improvement": 0.5322624451682283,
+  "median_improvement": 0.5051276950776764,
+  "paired_bootstrap_95_percent_interval": [
+    0.4806314735826646,
+    0.5763604395449101
+  ],
+  "local_gate_passed": true,
+  "gate": "Full six-pair mean and median reductions both exceed 50%; official result remains unconfirmed",
+  "official_score_confirmed": false,
+  "reference_commit": "6263dfd3c83c7569937368bdd0d45ddc9cb382f8",
+  "all_samples_retained": true,
+  "outlier": "Baseline BENG sample mean 0.2513 ms in pair 1 raises the aggregate mean; median also reported"
+}

@@ -44,7 +44,8 @@ int ObBEngFTParser::get_next_token(
     ret = OB_NOT_INIT;
   } else if (OB_ISNULL(token_stream_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(normalizer_.ObBasicEnglishNormalizer::get_next(token, token_freq))) {
+  } else if (OB_FAIL(ascii_document_ ? next_ascii_token(token, token_freq)
+      : normalizer_.ObBasicEnglishNormalizer::get_next(token, token_freq))) {
     if (OB_ITER_END != ret) {
     }
   } else if (OB_ISNULL(token.ptr_) || OB_UNLIKELY(0 >= token.len_ || 0 >= token_freq)) {
@@ -62,7 +63,14 @@ int ObBEngFTParser::get_next_token(
     }
     if (OB_SUCC(ret)) {
       buf = token_block_;
-      MEMCPY(buf, token.ptr_, token.len_);
+      if (ascii_document_) {
+        for (uint32_t index = 0; index < token.len_; ++index) {
+          const unsigned char value = static_cast<unsigned char>(token.ptr_[index]);
+          buf[index] = value >= 'A' && value <= 'Z' ? value + ('a' - 'A') : value;
+        }
+      } else {
+        MEMCPY(buf, token.ptr_, token.len_);
+      }
       token_block_ += token.len_;
       token_block_remaining_ -= token.len_;
       word = buf;
@@ -73,6 +81,28 @@ int ObBEngFTParser::get_next_token(
     LOG_DEBUG("succeed to add word", K(ObString(word_len, word)), K(word_freq));
   }
   return ret;
+}
+
+int ObBEngFTParser::next_ascii_token(ObDatum &token, int64_t &frequency)
+{
+  const auto *charset = analysis_ctx_.cs_;
+  const auto delimiter = [charset](const unsigned char value) {
+    return ob_isspace(charset, value) || ob_iscntrl(charset, value) || ob_ispunct(charset, value);
+  };
+  while (ascii_position_ < doc_.len_) {
+    while (ascii_position_ < doc_.len_ && delimiter(doc_.ptr_[ascii_position_])) ++ascii_position_;
+    int64_t first = ascii_position_;
+    while (ascii_position_ < doc_.len_ && !delimiter(doc_.ptr_[ascii_position_])) ++ascii_position_;
+    int64_t end = ascii_position_;
+    while (first < end && !ob_isalnum(charset, doc_.ptr_[first])) ++first;
+    while (end > first && !ob_isalnum(charset, doc_.ptr_[end - 1])) --end;
+    if (first < end) {
+      token.set_string(doc_.ptr_ + first, end - first);
+      frequency = 1;
+      return OB_SUCCESS;
+    }
+  }
+  return OB_ITER_END;
 }
 
 int ObBEngFTParser::init(ObFTParserParam *param)
@@ -94,6 +124,11 @@ int ObBEngFTParser::init(ObFTParserParam *param)
     } else if (OB_ISNULL(token_stream_)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
+      ascii_document_ = ObCharset::charset_type_by_coll(static_cast<ObCollationType>(param->cs_->number)) == CHARSET_UTF8MB4;
+      for (int64_t index = 0; ascii_document_ && index < param->ft_length_; ++index) {
+        ascii_document_ = static_cast<unsigned char>(param->fulltext_[index]) < 128;
+      }
+      ascii_position_ = 0;
       is_inited_ = true;
     }
   }
@@ -128,6 +163,8 @@ void ObBEngFTParser::reset()
   token_stream_ = nullptr;
   token_block_ = nullptr;
   token_block_remaining_ = 0;
+  ascii_document_ = false;
+  ascii_position_ = 0;
   is_inited_ = false;
 }
 

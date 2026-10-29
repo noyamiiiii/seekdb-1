@@ -1,0 +1,14 @@
+{
+  "basic_dml_sequel": "PASS",
+  "create_fts_index_afterward": "PASS",
+  "create_table_with_fts_index": "PASS",
+  "domain_id_merge_with_compare_null": "PASS",
+  "index_view": "PASS",
+  "load_data": "PASS",
+  "offline_ddl_with_fts_index": "PASS",
+  "online_ddl_on_table_with_fts_index": "PASS",
+  "parser_properties": "PASS",
+  "simple_query": "PASS",
+  "tokenize_function": "PASS",
+  "drop_index": "PASS"
+}

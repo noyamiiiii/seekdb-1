@@ -1,0 +1,20 @@
+{
+  "commit": "1161f8f0b845574b10f1b62d8d4caf028c5082e5",
+  "source": "User-provided official feedback; commit verified from task 600080 records",
+  "submittedAt": "2026-10-29 13:14 Asia/Shanghai",
+  "metrics": {
+    "batch": 500.0, "build_beng_en_sec": 1.421, "build_ik_all_sec": 3.45,
+    "build_ik_content_sec": 3.028, "build_total_sec": 7.904,
+    "fts_mean_improvement": 0.47370756675224307, "fts_raw_score": 94.74151335044861,
+    "git_dirty": 1.0, "query_beng_avg_ms": 0.7055, "query_beng_hits": 11000.0,
+    "query_beng_stdev_ms": 0.0012, "query_cn_avg_ms": 0.4994, "query_cn_hits": 8001.0,
+    "query_cn_stdev_ms": 0.0011, "query_limit_avg_ms": 0.1082, "query_limit_hits": 20.0,
+    "query_limit_stdev_ms": 0.0005, "query_mixed_avg_ms": 0.5368, "query_mixed_hits": 7332.0,
+    "query_mixed_stdev_ms": 0.0005, "query_rounds": 200.0, "raw_load_rows_per_sec": 86206.9,
+    "raw_load_sec": 0.232, "rounds": 3000.0, "rows": 20000.0, "samples": 3.0,
+    "select1_avg_ms": 0.0265, "select1_stdev_ms": 0.0, "skip_load": 0.0,
+    "tokenize_beng_avg_ms": 0.0373, "tokenize_beng_median_ms": 0.0373,
+    "tokenize_beng_stdev_ms": 0.0005, "tokenize_ik_avg_ms": 0.0642,
+    "tokenize_ik_median_ms": 0.0643, "tokenize_ik_stdev_ms": 0.0001, "warmup": 30.0
+  }
+}

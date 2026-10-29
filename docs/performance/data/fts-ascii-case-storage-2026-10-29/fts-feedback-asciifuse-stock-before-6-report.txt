@@ -1,0 +1,44 @@
+========================================
+FTS Large Benchmark Report
+========================================
+timestamp:              2026-10-29 14:22:01
+label:                  feedback-asciifuse-stock-before-6
+git_head:               unknown
+git_dirty:              1
+rows:                   20000
+batch:                  500
+rounds:                 3000
+query_rounds:           200
+samples:                3
+warmup:                 30
+skip_load:              0
+----------------------------------------
+select1_avg_ms:         0.0739
+select1_stdev_ms:       0.0025
+raw_load_sec:           0.215
+raw_load_rows_per_sec:  93023.3
+build_ik_all_sec:       6.768
+build_ik_content_sec:   6.165
+build_beng_en_sec:      2.732
+build_total_sec:        15.673
+----------------------------------------
+tokenize_ik_avg_ms:     0.1505
+tokenize_ik_median_ms:  0.1528
+tokenize_ik_stdev_ms:   0.0092
+tokenize_beng_avg_ms:   0.1017
+tokenize_beng_median_ms:0.1028
+tokenize_beng_stdev_ms: 0.0040
+----------------------------------------
+query_cn_hits:          8001
+query_cn_avg_ms:        1.4263
+query_cn_stdev_ms:      0.0349
+query_beng_hits:        11000
+query_beng_avg_ms:      2.0828
+query_beng_stdev_ms:    0.0393
+query_mixed_hits:       7332
+query_mixed_avg_ms:     1.5531
+query_mixed_stdev_ms:   0.0131
+query_limit_hits:       20
+query_limit_avg_ms:     1.8139
+query_limit_stdev_ms:   0.0064
+========================================
