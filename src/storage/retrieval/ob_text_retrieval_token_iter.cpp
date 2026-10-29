@@ -545,10 +545,21 @@ int ObTextRetrievalDaaTTokenIter::save_docids()
   } else {
     cur_idx_ = 0;
     const ObDatumVector &doc_id_datum = inv_scan_domain_id_col_->locate_expr_datumvector(*eval_ctx_);
-    for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
-      if (OB_LIKELY(!token_iter_->get_skip()->at(i))) {
+    const sql::ObBitVector *skip = token_iter_->get_skip();
+    if (OB_ISNULL(skip)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (count_ <= 0 || skip->is_all_false(count_)) {
+      // Nothing was skipped in this batch: copy every docid without touching the bitmap per row.
+      for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
         if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
-        };
+        }
+      }
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
+        if (OB_LIKELY(!skip->at(i))) {
+          if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
+          }
+        }
       }
     }
   }

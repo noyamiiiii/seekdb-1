@@ -1,0 +1,35 @@
+Skip bitmap batch check in save_docids - measurements
+=====================================================
+
+Change: ObTextRetrievalDaaTTokenIter::save_docids() no longer calls
+token_iter_->get_skip()->at(i) for every row. It fetches the bitmap pointer once
+and calls is_all_false(count_) first. When the whole batch is unskipped, docids
+are copied straight through; a batch with any skipped row falls back to the
+original per-row filter.
+
+Paired microbench (alternating ports, 1000 queries per sample, 12 pairs, 2881 =
+baseline commit, 2882 = candidate):
+
+  query      median delta   mean delta   candidate faster in
+  cn         +0.26%         -0.18%       5 / 12
+  beng       -2.01%         -1.67%       8 / 12
+  mixed      -0.75%         -0.76%       7 / 12
+  limit      +0.39%         +1.75%       6 / 12
+
+Negative delta means the candidate is faster. The effect is small and sits close
+to the local noise floor on the Chinese and LIMIT workloads; the English
+workload, which produces the largest unscored docid stream (11000 hits), shows
+the clearest movement.
+
+Correctness:
+  - 304 result lines of the SQL correctness script are byte identical between
+    baseline and candidate.
+  - BENG correctness script output identical.
+  - 12 of 17 native fts_index tests pass directly. The remaining 5
+    (aggregate_score_elision, cardinality_limit,
+    domain_id_merge_with_compare_null, simple_query, tokenize_function) emit
+    reject files that differ from the checked-in results only in CRLF handling
+    and a trailing blank line; the reject files are byte identical between
+    baseline and candidate, so the difference predates this change.
+  - tokenize_function and cn_word pass with LF-normalized copies of the test and
+    result files.
