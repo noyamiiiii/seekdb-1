@@ -58,6 +58,7 @@ public:
       function_lookup_mode_(false),
       use_score_free_union_(false),
       union_started_(false),
+      pending_union_advances_(0),
       union_heads_{}, union_blocks_{}, union_block_counts_{}, union_keys_{} {}
   virtual ~ObTextDaaTIter() { reset(); }
 
@@ -74,10 +75,13 @@ protected:
 private:
   int advance_union_head(const int64_t index);
   int get_next_union_rows(const int64_t capacity, int64_t &count);
+  template <int64_t dimension_count>
+  int get_next_union_rows_impl(const int64_t capacity, int64_t &count);
   int project_union_results(const int64_t count);
   static const int64_t SMALL_UNION_SIZE = 3;
   bool use_score_free_union_;
   bool union_started_;
+  uint64_t pending_union_advances_;
   const ObDatum *union_heads_[SMALL_UNION_SIZE];
   const ObDocIdExt *union_blocks_[SMALL_UNION_SIZE];
   int64_t union_block_counts_[SMALL_UNION_SIZE];

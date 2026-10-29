@@ -170,7 +170,8 @@ class ObFTDATReader
 {
 public:
   ObFTDATReader(ObFTDAT *dat)
-      : dat_(dat), lookup_allocator_(common::ObMemAttr("FtsCharCodes")), bmp_codes_(nullptr) {}
+      : dat_(dat), lookup_allocator_(common::ObMemAttr("FtsCharCodes")),
+        bmp_codes_(nullptr), root_entries_(nullptr) {}
 
   // Optional immutable acceleration; allocation failure retains hash lookup.
   void init_character_lookup(const ObCollationType coll_type);
@@ -180,10 +181,61 @@ public:
                      const ObDATrieHit &last_hit,
                      ObDATrieHit &hit) const;
 
+  // This path is exposed to concrete built-in dictionary callers so the
+  // compiler can inline the immutable BMP transition without virtual calls.
+  OB_INLINE int match_builtin(const ObString &word, const ObDATrieHit &last_hit, ObDATrieHit &hit) const
+  {
+    const int32_t point = nullptr == bmp_codes_ ? -1 : utf8_bmp_index(word);
+    if (point < 0) return match_with_hit(word, last_hit, hit);
+    hit.set_unmatch();
+    const ObFTWordCode code = bmp_codes_[point];
+    if (0 == code) return OB_SUCCESS;
+    if (&last_hit != &hit) hit = last_hit;
+    const auto *base = reinterpret_cast<const int32_t *>(dat_->buff + dat_->base_offset_);
+    int32_t index = 0;
+    if (0 == hit.base_idx_ && nullptr != root_entries_) {
+      hit.base_idx_ = 1;
+      index = root_entries_[point];
+    } else {
+      if (0 == hit.base_idx_) hit.base_idx_ = 1;
+      const auto *check = reinterpret_cast<const int32_t *>(dat_->buff + dat_->check_offset_);
+      const int32_t next = abs(base[hit.base_idx_]) + code;
+      if (check[next] == hit.base_idx_) index = next;
+    }
+    if (0 == index) {
+      hit.set_unmatch();
+    } else {
+      hit.base_idx_ = index;
+      hit.end_pos_ += word.length();
+      ++hit.char_cnt_;
+      if (base[index] < 0) hit.set_match();
+      hit.set_prefix();
+    }
+    return OB_SUCCESS;
+  }
+
+  static OB_INLINE int32_t utf8_bmp_index(const ObString &word)
+  {
+    const auto *s = reinterpret_cast<const unsigned char *>(word.ptr());
+    int32_t point = -1;
+    if (word.length() == 1 && s[0] < 0x80) {
+      point = s[0];
+    } else if (word.length() == 2 && s[0] >= 0xc2 && s[0] <= 0xdf &&
+               (s[1] & 0xc0) == 0x80) {
+      point = ((s[0] & 0x1f) << 6) | (s[1] & 0x3f);
+    } else if (word.length() == 3 && s[0] >= 0xe0 && s[0] <= 0xef &&
+               (s[1] & 0xc0) == 0x80 && (s[2] & 0xc0) == 0x80 &&
+               (s[0] != 0xe0 || s[1] >= 0xa0) && (s[0] != 0xed || s[1] < 0xa0)) {
+      point = ((s[0] & 0x0f) << 12) | ((s[1] & 0x3f) << 6) | (s[2] & 0x3f);
+    }
+    return point;
+  }
+
 private:
   ObFTDAT *dat_;
   common::ObArenaAllocator lookup_allocator_;
   ObFTWordCode *bmp_codes_;
+  int32_t *root_entries_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObFTDATReader);

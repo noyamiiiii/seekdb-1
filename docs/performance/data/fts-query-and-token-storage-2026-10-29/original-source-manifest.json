@@ -1,0 +1,222 @@
+{
+  "base": "6263dfd3c83c7569937368bdd0d45ddc9cb382f8",
+  "comparisonHead": "59e63ecf10cc563154e28bf18fc127d8df45297c",
+  "files": [
+    {
+      "path": "src/data_plane/api/data_plane/fts/ob_fts_struct.h",
+      "sha": "b2eb96110b5d9f29f66639d131e85ff38ac0f899"
+    },
+    {
+      "path": "src/oblib/lib/charset/ob_charset.cpp",
+      "sha": "934e0952ba1084607def3a27b1801eef961239ac"
+    },
+    {
+      "path": "src/observer/composition/retrieval/ob_das_legacy_tr_merge_iter.cpp",
+      "sha": "56516ce8fbdf64ef0af4fcf2d1e00ed598fcbd01"
+    },
+    {
+      "path": "src/rootserver/ddl_task/ob_ddl_common_rs_impl.cpp",
+      "sha": "4d49d9dec8d79124f30ec34704a947a7298e50a0"
+    },
+    {
+      "path": "src/share/ob_ddl_task_executor.cpp",
+      "sha": "604ea5c71e22a877afcbeaac58a9fecfcda1e4c4"
+    },
+    {
+      "path": "src/share/text_analysis/ob_token_stream.cpp",
+      "sha": "5ceb869e447975ed2abcfbe22b52d3377b7ca77d"
+    },
+    {
+      "path": "src/share/text_analysis/ob_token_stream.h",
+      "sha": "8db7f94a3eef8390a2fc96574cc95bda6b6807ca"
+    },
+    {
+      "path": "src/sql/code_generator/ob_tsc_cg_service.cpp",
+      "sha": "1d2dc4db661695d2681bc57dd5828119c5b7ae32"
+    },
+    {
+      "path": "src/sql/das/iter/ob_das_text_retrieval_merge_iter.cpp",
+      "sha": "34682ebbc1a41de44e05e07f74fc0a435a9ebaf9"
+    },
+    {
+      "path": "src/sql/engine/expr/ob_expr_tokenize.cpp",
+      "sha": "ad9500996d085571b6f09e2acb6f20bdb5b561c8"
+    },
+    {
+      "path": "src/sql/optimizer/fts_cardinality_utils.h",
+      "absentInBaseline": true
+    },
+    {
+      "path": "src/sql/optimizer/ob_join_order.cpp",
+      "sha": "4b87652a457957b2dbb112038fc770b955ba0099"
+    },
+    {
+      "path": "src/sql/optimizer/ob_log_plan.cpp",
+      "sha": "ae1d7458cc28d38d7a701c83418c5a2e86709d61"
+    },
+    {
+      "path": "src/sql/optimizer/ob_optimizer_util.cpp",
+      "sha": "5e43332954d2a6fd4902d9b0ba060209143937ef"
+    },
+    {
+      "path": "src/sql/resolver/ddl/ob_fts_index_builder_util.cpp",
+      "sha": "e37ef47e348d0bcdc0f2bea7f2e509eceac12f53"
+    },
+    {
+      "path": "src/sql/rewrite/ob_transform_pre_process.cpp",
+      "sha": "5d46130c6033f69aaf749fc402a3b69a80aa95ff"
+    },
+    {
+      "path": "src/storage/fts/dict/ob_ft_cache_dict.cpp",
+      "sha": "84b8f960699f105ca168d1535908006d55f79ee2"
+    },
+    {
+      "path": "src/storage/fts/dict/ob_ft_dat_dict.cpp",
+      "sha": "11e8e0cf83dffffc2cefa7b07e74ccdb14e31a1c"
+    },
+    {
+      "path": "src/storage/fts/dict/ob_ft_dat_dict.h",
+      "sha": "defee6b7c82f6a55e15350cb6e37fe18c902f794"
+    },
+    {
+      "path": "src/storage/fts/dict/ob_ft_dict.h",
+      "sha": "15a0e9e391890f698ff43a2d21e8f24406e961d2"
+    },
+    {
+      "path": "src/storage/fts/dict/ob_ft_dict_hub.cpp",
+      "sha": "9677e92f4e03cbd3ccb1d222a42d7df2442d0c7e"
+    },
+    {
+      "path": "src/storage/fts/dict/ob_ft_dict_hub.h",
+      "sha": "e60b1f2778297453ef6a1990c67b7f3c996a12f9"
+    },
+    {
+      "path": "src/storage/fts/dict/ob_ft_range_dict.cpp",
+      "sha": "b61365ab6fe739be5e7a805ee8596b2b20173d17"
+    },
+    {
+      "path": "src/storage/fts/dict/ob_ft_range_dict.h",
+      "sha": "bbbb405d63eacc570268c8e68b6514917582e1f9"
+    },
+    {
+      "path": "src/storage/fts/ik/ob_ik_arbitrator.cpp",
+      "sha": "058c72f783dcaf9269ed2299cd724806bb946dc9"
+    },
+    {
+      "path": "src/storage/fts/ik/ob_ik_arbitrator.h",
+      "sha": "40837f39f0a91b63fd3567d77755477944bb62be"
+    },
+    {
+      "path": "src/storage/fts/ik/ob_ik_char_util.h",
+      "sha": "a266e08c242db92e00729f7324ca868f6643fe3e"
+    },
+    {
+      "path": "src/storage/fts/ik/ob_ik_cjk_processor.cpp",
+      "sha": "d4ba74ab51d25d67ac23fc082549ef4fdc77adc4"
+    },
+    {
+      "path": "src/storage/fts/ik/ob_ik_cjk_processor.h",
+      "sha": "c1df9da3a4b8f65b40dbdedd9ff474a7b0fb64db"
+    },
+    {
+      "path": "src/storage/fts/ik/ob_ik_processor.cpp",
+      "sha": "996b4665d4382a86aa737781728931d87a73bd78"
+    },
+    {
+      "path": "src/storage/fts/ik/ob_ik_processor.h",
+      "sha": "19a073ca51b30e92ed8d885549631341e56356d1"
+    },
+    {
+      "path": "src/storage/fts/ik/ob_ik_quantifier_processor.cpp",
+      "sha": "95fccc2f3beb82cb06bb368570b7d9030865939f"
+    },
+    {
+      "path": "src/storage/fts/ik/ob_ik_quantifier_processor.h",
+      "sha": "570ddc2ecff883c4ae4ba04ad6d3ed1d9a7cad14"
+    },
+    {
+      "path": "src/storage/fts/ob_fts_parser_property.cpp",
+      "sha": "4dd18456d526b23f81715b11b034746ecbfa6359"
+    },
+    {
+      "path": "src/storage/fts/ob_fts_stop_word.cpp",
+      "sha": "4cde6a767c458c3da432b6b326eb5f27b3ea0b73"
+    },
+    {
+      "path": "src/storage/fts/ob_ik_ft_parser.cpp",
+      "sha": "5c574f186a01b53c6b0079e5d1e070880fb3e320"
+    },
+    {
+      "path": "src/storage/fts/ob_ik_ft_parser.h",
+      "sha": "e4efddfd665b3db96c0566d2eadf3c8f7a574b52"
+    },
+    {
+      "path": "src/storage/retrieval/ob_sparse_taat_iter.cpp",
+      "sha": "6a4a03d0fca6814fa3e5c1a5fb0e6a559de26c15"
+    },
+    {
+      "path": "src/storage/retrieval/ob_text_daat_iter.cpp",
+      "sha": "7836d0f1f12f2d1dede72134e36a2585d49a5967"
+    },
+    {
+      "path": "src/storage/retrieval/ob_text_daat_iter.h",
+      "sha": "ef90a0f1f55f1e5dc86d55cf816c1ecd6c5f92ad"
+    },
+    {
+      "path": "src/storage/retrieval/ob_text_retrieval_token_iter.cpp",
+      "sha": "db785b0ce997d1a3fb9655b591e80818e9b0a66a"
+    },
+    {
+      "path": "src/storage/retrieval/ob_text_retrieval_token_iter.h",
+      "sha": "710cbba65e60d56b6ec9ab49b28d477367ddcfc0"
+    },
+    {
+      "path": "src/storage/retrieval/ob_text_taat_iter.cpp",
+      "sha": "25edf5a66329f8c01c8524f680683f482993d402"
+    },
+    {
+      "path": "src/query/api/query/das/ob_das_id_protocol.h",
+      "sha": "af4762148381683cef1af5fad161d485d2ac6e60"
+    },
+    {
+      "path": "src/sql/das/ob_das_ir_define.cpp",
+      "sha": "5b051be3fd336998876d09de168d59980bbcfb2c"
+    },
+    {
+      "path": "src/storage/blocksstable/encoding/ob_string_diff_decoder.cpp",
+      "sha": "6641aa684462c0617954ba66ceb348f3f03ad544"
+    },
+    {
+      "path": "src/data_plane/api/data_plane/fts/dict/ob_gen_dic_loader.h",
+      "sha": "f500a297ac3116f98564170c4149194a86d1d562"
+    },
+    {
+      "path": "src/storage/fts/dict/ob_gen_dic_loader.cpp",
+      "sha": "207bf5b2f7336a53d3b79da023f0d5d279fae3e0"
+    },
+    {
+      "path": "src/storage/fts/ob_beng_ft_parser.h",
+      "sha": "90e6fbb8276d17076d354ff316cd304924b0078a"
+    },
+    {
+      "path": "src/storage/fts/ob_beng_ft_parser.cpp",
+      "sha": "54bc9fe6126ce7f8876cd1865e0b634f92f1f733"
+    },
+    {
+      "path": "src/storage/fts/dict/ob_ft_cache_dict.h",
+      "sha": "3f10e1c35e56619d92aefaf14eb4e30f58dfcc42"
+    },
+    {
+      "path": "src/data_plane/api/data_plane/fts/ob_fts_parser_helper.h",
+      "sha": "c8c62c32e08d716dafe56e64ec0ca612caf0d3fd"
+    },
+    {
+      "path": "src/storage/fts/ob_fts_parser_helper.cpp",
+      "sha": "2c92ee45da2831f29957f5a832a0fb4b438c7867"
+    },
+    {
+      "path": "src/sql/das/ob_das_domain_utils.cpp",
+      "sha": "9d3240f5b72e78be104e01e34df9c6dc37e95e28"
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+[==========] Running 17 tests from 2 test cases.
+[----------] Global test environment set-up.
+[----------] 2 tests from FtsCharacterClassification
+[ RUN      ] FtsCharacterClassification.EveryUnicodeScalar
+[       OK ] FtsCharacterClassification.EveryUnicodeScalar (43 ms)
+[ RUN      ] FtsCharacterClassification.RejectsInvalidArguments
+[       OK ] FtsCharacterClassification.RejectsInvalidArguments (0 ms)
+[----------] 2 tests from FtsCharacterClassification (44 ms total)
+
+[----------] 15 tests from FtsHotPath
+[ RUN      ] FtsHotPath.AsciiBufferBoundaryAndReuse
+[       OK ] FtsHotPath.AsciiBufferBoundaryAndReuse (0 ms)
+[ RUN      ] FtsHotPath.DefaultPropertiesEqualCanonicalProperties
+[       OK ] FtsHotPath.DefaultPropertiesEqualCanonicalProperties (0 ms)
+[ RUN      ] FtsHotPath.GroupedFrequencyPreservesFirstAndRepeatedOccurrence
+[       OK ] FtsHotPath.GroupedFrequencyPreservesFirstAndRepeatedOccurrence (0 ms)
+[ RUN      ] FtsHotPath.GroupedCollationEquivalentWordsKeepLastSpelling
+[       OK ] FtsHotPath.GroupedCollationEquivalentWordsKeepLastSpelling (0 ms)
+[ RUN      ] FtsHotPath.StringComparisonMatchesCharsetHandlers
+[       OK ] FtsHotPath.StringComparisonMatchesCharsetHandlers (2 ms)
+[ RUN      ] FtsHotPath.DictionaryCharacterLookupMatchesHashLookup
+[       OK ] FtsHotPath.DictionaryCharacterLookupMatchesHashLookup (38 ms)
+[ RUN      ] FtsHotPath.RangeCharacterLookupMatchesOriginalRanges
+[       OK ] FtsHotPath.RangeCharacterLookupMatchesOriginalRanges (69 ms)
+[ RUN      ] FtsHotPath.EncodedVarcharSortKeysPreserveCollationOrder
+[       OK ] FtsHotPath.EncodedVarcharSortKeysPreserveCollationOrder (1 ms)
+[ RUN      ] FtsHotPath.AsciiStopwordsMatchOriginalCollation
+[       OK ] FtsHotPath.AsciiStopwordsMatchOriginalCollation (14 ms)
+[ RUN      ] FtsHotPath.FixedBinaryIdOwnsItsBytes
+[       OK ] FtsHotPath.FixedBinaryIdOwnsItsBytes (0 ms)
+[ RUN      ] FtsHotPath.EveryBinary16DiffLayoutMatchesScalarDecoder
+[       OK ] FtsHotPath.EveryBinary16DiffLayoutMatchesScalarDecoder (100 ms)
+[ RUN      ] FtsHotPath.EnglishTokensKeepOwnedStorageAcrossBlocksAndReset
+[       OK ] FtsHotPath.EnglishTokensKeepOwnedStorageAcrossBlocksAndReset (0 ms)
+[ RUN      ] FtsHotPath.EmbeddedEnglishPipelineMatchesGenericAnalyzer
+[       OK ] FtsHotPath.EmbeddedEnglishPipelineMatchesGenericAnalyzer (0 ms)
+[ RUN      ] FtsHotPath.BuiltinParserChecksPreserveCanonicalNames
+[       OK ] FtsHotPath.BuiltinParserChecksPreserveCanonicalNames (0 ms)
+[ RUN      ] FtsHotPath.ConcurrentBuiltinLoaderHandlesShareOneLiveLoader
+[       OK ] FtsHotPath.ConcurrentBuiltinLoaderHandlesShareOneLiveLoader (4 ms)
+[----------] 15 tests from FtsHotPath (233 ms total)
+
+[----------] Global test environment tear-down
+[==========] 17 tests from 2 test cases ran. (278 ms total)
+[  PASSED  ] 17 tests.

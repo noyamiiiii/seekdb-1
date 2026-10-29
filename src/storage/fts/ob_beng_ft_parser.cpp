@@ -44,19 +44,32 @@ int ObBEngFTParser::get_next_token(
     ret = OB_NOT_INIT;
   } else if (OB_ISNULL(token_stream_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(token_stream_->get_next(token, token_freq))) {
+  } else if (OB_FAIL(normalizer_.ObBasicEnglishNormalizer::get_next(token, token_freq))) {
     if (OB_ITER_END != ret) {
     }
   } else if (OB_ISNULL(token.ptr_) || OB_UNLIKELY(0 >= token.len_ || 0 >= token_freq)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(token.len_)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    MEMCPY(buf, token.ptr_, token.len_);
-    word = buf;
-    word_len = token.len_;
-    char_len = token.len_;
-    word_freq = token_freq;
+    if (token_block_remaining_ < token.len_) {
+      const int64_t block_size = MAX(static_cast<int64_t>(token.len_), MIN(static_cast<int64_t>(doc_.len_), 4096L));
+      token_block_ = static_cast<char *>(allocator_.alloc(block_size));
+      if (OB_ISNULL(token_block_)) {
+        token_block_remaining_ = 0;
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else {
+        token_block_remaining_ = block_size;
+      }
+    }
+    if (OB_SUCC(ret)) {
+      buf = token_block_;
+      MEMCPY(buf, token.ptr_, token.len_);
+      token_block_ += token.len_;
+      token_block_remaining_ -= token.len_;
+      word = buf;
+      word_len = token.len_;
+      char_len = token.len_;
+      word_freq = token_freq;
+    }
     LOG_DEBUG("succeed to add word", K(ObString(word_len, word)), K(word_freq));
   }
   return ret;
@@ -76,7 +89,7 @@ int ObBEngFTParser::init(ObFTParserParam *param)
     analysis_ctx_.cs_ = param->cs_;
     analysis_ctx_.filter_stopword_ = false;
     analysis_ctx_.need_grouping_ = false;
-    if (OB_FAIL(english_analyzer_.init(analysis_ctx_, *param->allocator_))) {
+    if (OB_FAIL(normalizer_.init(param->cs_, tokenizer_))) {
     } else if (OB_FAIL(segment(doc_, token_stream_))) {
     } else if (OB_ISNULL(token_stream_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -99,7 +112,9 @@ int ObBEngFTParser::segment(
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_UNLIKELY(UINT32_MAX < doc.len_)) {
     ret = OB_NOT_SUPPORTED;
-  } else if (OB_FAIL(english_analyzer_.analyze(doc, token_stream))) {
+  } else if (OB_FAIL(tokenizer_.open(doc, analysis_ctx_.cs_))) {
+  } else {
+    token_stream = &normalizer_;
   }
   return ret;
 }
@@ -107,9 +122,12 @@ int ObBEngFTParser::segment(
 void ObBEngFTParser::reset()
 {
   analysis_ctx_.reset();
-  english_analyzer_.reset();
+  normalizer_.reset();
+  tokenizer_.reset();
   doc_.reset();
   token_stream_ = nullptr;
+  token_block_ = nullptr;
+  token_block_remaining_ = 0;
   is_inited_ = false;
 }
 

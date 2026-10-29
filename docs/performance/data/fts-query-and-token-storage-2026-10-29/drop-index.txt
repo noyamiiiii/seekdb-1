@@ -1,0 +1,2 @@
+RUN drop_index
+drop_index PASS

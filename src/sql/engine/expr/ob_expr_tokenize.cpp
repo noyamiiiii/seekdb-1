@@ -280,14 +280,15 @@ int ObExprTokenize::construct_ft_parser_inner_name(const ObString &input_str, To
   int ret = OB_SUCCESS;
   storage::ObFTParser parser;
 
-  char *parser_name_buf = nullptr;
-  if (OB_ISNULL(parser_name_buf
-                = static_cast<char *>(param.allocator_.alloc(storage::OB_FT_PARSER_NAME_LENGTH)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(parser.init(input_str))) {
-  } else if (OB_FAIL(parser.serialize_to_str(parser_name_buf, storage::OB_FT_PARSER_NAME_LENGTH))) {
+  if (OB_FAIL(parser.init(input_str))) {
   } else {
-    param.parser_name_ = ObString::make_string(parser_name_buf);
+    static_assert(storage::ObFTParser::BUILTIN_VERSION == 1);
+    if (parser.is_space()) param.parser_name_ = ObString::make_string("space.1");
+    else if (parser.is_ngram()) param.parser_name_ = ObString::make_string("ngram.1");
+    else if (parser.is_beng()) param.parser_name_ = ObString::make_string("beng.1");
+    else if (parser.is_ik()) param.parser_name_ = ObString::make_string("ik.1");
+    else if (parser.is_ngram2()) param.parser_name_ = ObString::make_string("ngram2.1");
+    else ret = OB_ERR_UNEXPECTED;
   }
   return ret;
 }

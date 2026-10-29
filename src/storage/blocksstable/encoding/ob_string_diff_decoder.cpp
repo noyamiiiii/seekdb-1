@@ -160,15 +160,35 @@ int ObStringDiffDecoder::batch_decode(
     // Fill string data
     const uint16_t string_size = header_->string_size_;
     const static uint16_t min_buf_size = 128;
-    const int64_t buf_size = std::max(string_size, min_buf_size);
     char *buf = nullptr;
+    bool fixed_binary16 = ctx.is_fix_length() && string_size == 16
+        && !header_->is_hex_packing();
+    char common_binary16[16] = {};
+    uint8_t diff_positions[16];
+    int64_t diff_count = 0;
+    if (OB_SUCC(ret) && fixed_binary16) {
+      int64_t position = 0;
+      for (int64_t i = 0; i < header_->diff_desc_cnt_; ++i) {
+        const auto &desc = header_->diff_descs_[i];
+        if (desc.count_ > 16 - position) {
+          fixed_binary16 = false;
+          break;
+        }
+        for (int64_t j = 0; j < desc.count_; ++j, ++position) {
+          if (desc.diff_) diff_positions[diff_count++] = position;
+        }
+      }
+      fixed_binary16 = fixed_binary16 && position == 16 && diff_count == header_->length_;
+      if (fixed_binary16) {
+        header_->copy_string(ObStringDiffHeader::LeftToRight(), std::logical_not<uint8_t>(),
+            header_->common_data(), common_binary16);
+      }
+    }
+    const int64_t buf_size = fixed_binary16 ? 16 : std::max(string_size, min_buf_size);
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(buf = static_cast<char *>(ctx.allocator_->alloc(buf_size * row_cap)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      // Only the non-diff descriptors carry shared bytes. When every descriptor
-      // marks a differing range the shared pass copies nothing, so short values
-      // without a common prefix skip it instead of walking the row batch.
+    } else if (!fixed_binary16) {
       bool has_common = false;
       for (int64_t i = 0; !has_common && i < header_->diff_desc_cnt_; ++i) {
         has_common = 0 == header_->diff_descs_[i].diff_ && header_->diff_descs_[i].count_ > 0;
@@ -191,7 +211,14 @@ int ObStringDiffDecoder::batch_decode(
           row_id = row_ids[i];
           cell_data = col_data + data_offset + row_id * header_->length_;
           str_ptr = buf + i * buf_size;
-          if (header_->is_hex_packing()) {
+          if (fixed_binary16) {
+            if (diff_count == 16) {
+              MEMCPY(str_ptr, cell_data, 16);
+            } else {
+              MEMCPY(str_ptr, common_binary16, 16);
+              for (int64_t j = 0; j < diff_count; ++j) str_ptr[diff_positions[j]] = cell_data[j];
+            }
+          } else if (header_->is_hex_packing()) {
             ObHexStringUnpacker unpacker(header_->hex_char_array(),
                 reinterpret_cast<const unsigned char *>(cell_data));
             header_->copy_hex_string(unpacker,

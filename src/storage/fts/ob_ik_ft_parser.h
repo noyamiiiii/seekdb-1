@@ -31,6 +31,10 @@ namespace storage
 {
 class ObFTDictHub;
 class ObFTRangeDict;
+class ObIKLetterProcessor;
+class ObIKQuantifierProcessor;
+class ObIKCJKProcessor;
+class ObIKSurrogateProcessor;
 
 class ObIKFTParser final : public ObITokenIterator
 {
@@ -41,7 +45,10 @@ public:
         coll_type_(ObCollationType::CS_TYPE_INVALID),
         ctx_(nullptr),
         hub_(hub),
-        segmenters_(allocator_),
+        letter_segmenter_(nullptr),
+        quantifier_segmenter_(nullptr),
+        cjk_segmenter_(nullptr),
+        surrogate_segmenter_(nullptr),
         dict_main_(nullptr),
         dict_quan_(nullptr),
         dict_stop_(nullptr)
@@ -87,7 +94,10 @@ private:
   ObCollationType coll_type_;
   TokenizeContext *ctx_;
   ObFTDictHub *hub_;
-  ObList<ObIIKProcessor *, ObIAllocator> segmenters_;
+  ObIKLetterProcessor *letter_segmenter_;
+  ObIKQuantifierProcessor *quantifier_segmenter_;
+  ObIKCJKProcessor *cjk_segmenter_;
+  ObIKSurrogateProcessor *surrogate_segmenter_;
 
   // Read-only dictionary views owned by the process-level dictionary hub.
 

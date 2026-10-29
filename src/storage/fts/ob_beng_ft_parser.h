@@ -36,9 +36,12 @@ public:
   explicit ObBEngFTParser(common::ObIAllocator &allocator)
     : allocator_(allocator),
       analysis_ctx_(),
-      english_analyzer_(),
+      tokenizer_(),
+      normalizer_(),
       doc_(),
       token_stream_(nullptr),
+      token_block_(nullptr),
+      token_block_remaining_(0),
       is_inited_(false)
   {}
   ~ObBEngFTParser() { reset(); }
@@ -51,7 +54,7 @@ public:
       int64_t &char_len,
       int64_t &word_freq) override;
 
-  VIRTUAL_TO_STRING_KV(K_(analysis_ctx), K_(english_analyzer), KP_(token_stream), K_(is_inited));
+  VIRTUAL_TO_STRING_KV(K_(analysis_ctx), KP_(token_stream), K_(is_inited));
 private:
   int segment(
       const common::ObDatum &doc,
@@ -59,9 +62,12 @@ private:
 private:
   common::ObIAllocator &allocator_;
   share::ObTextAnalysisCtx analysis_ctx_;
-  share::ObEnglishTextAnalyzer english_analyzer_;
+  share::ObTextWhitespaceTokenizer tokenizer_;
+  share::ObBasicEnglishNormalizer normalizer_;
   common::ObDatum doc_;
   share::ObITokenStream *token_stream_;
+  char *token_block_;
+  int64_t token_block_remaining_;
   bool is_inited_;
 
   DISALLOW_COPY_AND_ASSIGN(ObBEngFTParser);

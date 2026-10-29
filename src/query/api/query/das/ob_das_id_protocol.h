@@ -39,7 +39,16 @@ public:
   void reset();
 
   int hash(uint64_t &hash_val) const;
-  const common::ObDatum &get_datum() const;
+  const common::ObDatum &get_datum() const { return datum_; }
+  // The caller has checked this is a non-null 16-byte binary ID. Keep a
+  // private copy, because expression buffers can be reused by other terms.
+  OB_INLINE void assign_binary16(const common::ObDatum &datum)
+  {
+    OB_ASSERT(!datum.is_null() && datum.len_ == 16 && nullptr != datum.ptr_);
+    MEMCPY(buf_, datum.ptr_, 16);
+    datum_.pack_ = datum.pack_;
+    datum_.ptr_ = buf_;
+  }
   int from_datum(const common::ObDatum &datum);
   int from_obj(const common::ObObj &obj);
 

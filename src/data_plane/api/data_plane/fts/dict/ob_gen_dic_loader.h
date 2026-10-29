@@ -21,6 +21,8 @@
 #include "data_plane/fts/dict/ob_dic_loader.h"
 #include "data_plane/fts/ob_fts_parser_name.h"
 
+#include <atomic>
+
 namespace oceanbase
 {
 namespace storage
@@ -76,7 +78,7 @@ public:
 
 private:
   ObGenDicLoader()
-      : is_inited_(false), lock_(), dic_loader_map_() { }
+      : is_inited_(false), lock_(), dic_loader_map_(), builtin_ik_utf8_loader_(nullptr) { }
   ~ObGenDicLoader() { dic_loader_map_.destroy(); }
   int gen_dic_loader(const ObGenDicLoaderKey &dic_loader_key,
                      ObDicLoader *&dic_loader);
@@ -85,6 +87,7 @@ private:
   bool is_inited_;
   common::TCRWLock lock_;
   hash::ObHashMap<ObGenDicLoaderKey, ObDicLoader*> dic_loader_map_;
+  std::atomic<ObDicLoader *> builtin_ik_utf8_loader_;
   DISALLOW_COPY_AND_ASSIGN(ObGenDicLoader);
 };
 } //end storage

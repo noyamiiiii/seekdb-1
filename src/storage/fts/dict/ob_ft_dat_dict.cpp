@@ -289,6 +289,16 @@ void ObFTDATReader<DATA_TYPE>::init_character_lookup(const ObCollationType coll_
     if (nullptr != codes) {
       dat_->get_map()->fill_utf8_bmp_codes(codes);
       bmp_codes_ = codes;
+      root_entries_ = static_cast<int32_t *>(lookup_allocator_.alloc(65536 * sizeof(int32_t)));
+      if (nullptr != root_entries_) {
+        const auto *base = reinterpret_cast<const int32_t *>(dat_->buff + dat_->base_offset_);
+        const auto *check = reinterpret_cast<const int32_t *>(dat_->buff + dat_->check_offset_);
+        for (int32_t point = 0; point < 65536; ++point) {
+          const ObFTWordCode code = codes[point];
+          const int32_t next = abs(base[1]) + code;
+          root_entries_[point] = code != 0 && check[next] == 1 ? next : 0;
+        }
+      }
     }
   }
 }

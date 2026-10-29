@@ -1,0 +1,44 @@
+========================================
+FTS Large Benchmark Report
+========================================
+timestamp:              2026-10-29 12:53:30
+label:                  v4617-jsonpool-pair-after-3
+git_head:               unknown
+git_dirty:              1
+rows:                   20000
+batch:                  500
+rounds:                 3000
+query_rounds:           200
+samples:                3
+warmup:                 30
+skip_load:              0
+----------------------------------------
+select1_avg_ms:         0.0652
+select1_stdev_ms:       0.0019
+raw_load_sec:           0.198
+raw_load_rows_per_sec:  101010.1
+build_ik_all_sec:       3.352
+build_ik_content_sec:   2.428
+build_beng_en_sec:      1.423
+build_total_sec:        7.215
+----------------------------------------
+tokenize_ik_avg_ms:     0.0984
+tokenize_ik_median_ms:  0.0985
+tokenize_ik_stdev_ms:   0.0018
+tokenize_beng_avg_ms:   0.0813
+tokenize_beng_median_ms:0.0810
+tokenize_beng_stdev_ms: 0.0026
+----------------------------------------
+query_cn_hits:          8001
+query_cn_avg_ms:        0.3061
+query_cn_stdev_ms:      0.0057
+query_beng_hits:        11000
+query_beng_avg_ms:      0.4457
+query_beng_stdev_ms:    0.0047
+query_mixed_hits:       7332
+query_mixed_avg_ms:     0.3457
+query_mixed_stdev_ms:   0.0082
+query_limit_hits:       20
+query_limit_avg_ms:     0.1767
+query_limit_stdev_ms:   0.0034
+========================================

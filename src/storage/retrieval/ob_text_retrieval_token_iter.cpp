@@ -548,17 +548,24 @@ int ObTextRetrievalDaaTTokenIter::save_docids()
     const sql::ObBitVector *skip = token_iter_->get_skip();
     if (OB_ISNULL(skip)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (count_ <= 0 || skip->is_all_false(count_)) {
-      // Nothing was skipped in this batch: copy every docid without touching the bitmap per row.
-      for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
-        if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
-        }
-      }
     } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
-        if (OB_LIKELY(!skip->at(i))) {
-          if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
-          }
+      ObDocIdExt *ids = &doc_id_.at(0);
+      const auto save_id = [&](const int64_t index) {
+        const ObDatum &id = *doc_id_datum.at(index);
+        if (!id.is_null() && id.len_ == 16) {
+          ids[index].assign_binary16(id);
+          return OB_SUCCESS;
+        } else {
+          return ids[index].from_datum(id);
+        }
+      };
+      if (count_ <= 0 || skip->is_all_false(count_)) {
+        for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
+          ret = save_id(i);
+        }
+      } else {
+        for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
+          if (!skip->at(i)) ret = save_id(i);
         }
       }
     }

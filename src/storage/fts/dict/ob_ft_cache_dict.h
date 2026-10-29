@@ -43,6 +43,10 @@ public:
   int match_with_hit(const ObString &single_word,
                      const ObDATrieHit &last_hit,
                      ObDATrieHit &hit) const override;
+  OB_INLINE int match_builtin(const ObString &single_word, const ObDATrieHit &last_hit, ObDATrieHit &hit) const
+  {
+    return reader_.match_builtin(single_word, last_hit, hit);
+  }
 
 public:
   static int make_and_fetch_cache_entry(const ObFTDictDesc &desc,

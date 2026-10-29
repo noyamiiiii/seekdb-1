@@ -51,6 +51,7 @@ void ObFTRangeDict::destroy()
     range_dicts_[i].dict_->~ObFTCacheDict();
   }
   range_dicts_.reset();
+  bmp_ranges_ = nullptr;
   range_alloc_.reset();
 }
 
@@ -353,7 +354,7 @@ int ObFTRangeDict::match(const ObString &single_word, ObDATrieHit &hit) const
   } else {
     // do nothing
     hit.dict_ = dict; // set dict
-    if (OB_FAIL(dict->match(single_word, hit))) {
+    if (OB_FAIL(dict->match_builtin(single_word, hit, hit))) {
     }
   }
   return ret;
@@ -385,11 +386,17 @@ int ObFTRangeDict::match_with_hit(const ObString &single_word,
                                   const ObDATrieHit &last_hit,
                                   ObDATrieHit &hit) const
 {
-  return last_hit.dict_->match_with_hit(single_word, last_hit, hit);
+  return last_hit.dict_->match_builtin(single_word, last_hit, hit);
 }
 
 int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObFTCacheDict *&dict) const
 {
+  const int32_t point = nullptr == bmp_ranges_ ? -1 : ObFTDATReader<void>::utf8_bmp_index(single_word);
+  if (point >= 0) {
+    const uint16_t index = bmp_ranges_[point];
+    dict = index == 0 ? nullptr : range_dicts_[index - 1].dict_;
+    return nullptr == dict ? OB_ENTRY_NOT_EXIST : OB_SUCCESS;
+  }
   // Ranges are disjoint and inclusive. Find the final start <= the key, then
   // check its end so gaps and out-of-dictionary characters remain unmatched.
   int64_t low = 0;
@@ -408,6 +415,38 @@ int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObFTCacheD
     dict = range_dicts_[low - 1].dict_;
   }
   return dict == nullptr ? OB_ENTRY_NOT_EXIST : OB_SUCCESS;
+}
+
+void ObFTRangeDict::init_first_char_lookup()
+{
+  if (nullptr != bmp_ranges_ || desc_.coll_type_ != CS_TYPE_UTF8MB4_BIN ||
+      range_dicts_.size() == 0 || range_dicts_.size() > UINT16_MAX) return;
+  auto *ranges = static_cast<uint16_t *>(range_alloc_.alloc(65536 * sizeof(uint16_t)));
+  if (nullptr == ranges) return; // The original binary search remains available.
+  int64_t low = 0;
+  for (int32_t point = 0; point < 65536; ++point) {
+    ranges[point] = 0;
+    if (point >= 0xd800 && point <= 0xdfff) continue;
+    char bytes[3]; int64_t length = 0;
+    if (point < 0x80) {
+      bytes[0] = point; length = 1;
+    } else if (point < 0x800) {
+      bytes[0] = 0xc0 | (point >> 6); bytes[1] = 0x80 | (point & 0x3f); length = 2;
+    } else {
+      bytes[0] = 0xe0 | (point >> 12); bytes[1] = 0x80 | ((point >> 6) & 0x3f);
+      bytes[2] = 0x80 | (point & 0x3f); length = 3;
+    }
+    const ObString key(length, bytes);
+    // Canonical UTF-8 scalars are ordered by their bytes. Walk the sorted,
+    // disjoint inclusive ranges once; preserve gaps as misses.
+    while (low < range_dicts_.size() &&
+           ObCharset::strcmp(CS_TYPE_UTF8MB4_BIN, range_dicts_[low].end_.get_word(), key) < 0) ++low;
+    if (low < range_dicts_.size() &&
+        ObCharset::strcmp(CS_TYPE_UTF8MB4_BIN, range_dicts_[low].start_.get_word(), key) <= 0) {
+      ranges[point] = static_cast<uint16_t>(low + 1);
+    }
+  }
+  bmp_ranges_ = ranges;
 }
 
 int ObFTRangeDict::build_dict_from_cache(const ObFTCacheRangeContainer &range_container)
@@ -438,6 +477,7 @@ int ObFTRangeDict::build_dict_from_cache(const ObFTCacheRangeContainer &range_co
       return ObCharset::strcmp(CS_TYPE_UTF8MB4_BIN, a.start_.get_word(), b.start_.get_word()) < 0;
     });
   }
+  if (OB_SUCC(ret)) init_first_char_lookup();
   return ret;
 }
 

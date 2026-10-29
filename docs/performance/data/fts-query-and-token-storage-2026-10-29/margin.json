@@ -1,0 +1,17 @@
+{
+  "baseline_commit": "6263dfd3c83c7569937368bdd0d45ddc9cb382f8",
+  "comparison": "same-host original pre-FTS-optimization sources versus candidate",
+  "mean_improvement": 0.486180303347705,
+  "median_improvement": 0.4787231689136611,
+  "paired_bootstrap_95_percent_interval": [
+    0.40360696930000145,
+    0.5266541788482607
+  ],
+  "local_gate_passed": false,
+  "official_score_confirmed": false,
+  "all_samples_retained": true,
+  "limitations": [
+    "Local cross-version ratios cannot certify the official fixed-baseline score.",
+    "The interval describes these six local pairs, not a guarantee for another machine."
+  ]
+}

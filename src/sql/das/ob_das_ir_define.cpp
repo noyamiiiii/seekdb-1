@@ -216,11 +216,6 @@ int ObDocIdExt::hash(uint64_t &hash_val) const
   return ret;
 }
 
-const ObDatum &ObDocIdExt::get_datum() const
-{
-  return datum_;
-}
-
 int ObDocIdExt::from_obj(const ObObj &obj)
 {
   int ret = common::OB_SUCCESS;

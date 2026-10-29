@@ -1,0 +1,235 @@
+--- /home/ubuntu/seekdb-competition/tools/deploy/mysql_test/test_suite/fts_index/r/mysql/drop_index.result	2026-10-26 11:06:59.000000000 +0800
++++ /home/ubuntu/seekdb-test-results/drop_index.reject	2026-10-29 12:14:39.380263322 +0800
+@@ -39,13 +39,13 @@
+ +-----------+----------------+
+ | column_id | column_name    |
+ +-----------+----------------+
++|        18 | content        |
+ |        16 | id             |
+ |        17 | title          |
+-|        18 | content        |
+ |        19 | *doc*id*       |
+-|        20 | *word*segment* |
+-|        21 | *word*count*   |
+ |        22 | *doc*length*   |
++|        21 | *word*count*   |
++|        20 | *word*segment* |
+ +-----------+----------------+
+ ====================== drop index =======================
+ DROP INDEX ctx ON drop_index_articles;
+@@ -77,9 +77,9 @@
+ +-----------+-------------+
+ | column_id | column_name |
+ +-----------+-------------+
++|        18 | content     |
+ |        16 | id          |
+ |        17 | title       |
+-|        18 | content     |
+ +-----------+-------------+
+ ====================== add index ========================
+ ALTER TABLE drop_index_articles ADD FULLTEXT INDEX ctx(title, content);
+@@ -111,13 +111,13 @@
+ +-----------+----------------+
+ | column_id | column_name    |
+ +-----------+----------------+
++|        18 | content        |
+ |        16 | id             |
+ |        17 | title          |
+-|        18 | content        |
+ |        23 | *doc*id*       |
+-|        24 | *word*segment* |
+-|        25 | *word*count*   |
+ |        26 | *doc*length*   |
++|        25 | *word*count*   |
++|        24 | *word*segment* |
+ +-----------+----------------+
+ ====================== drop table =======================
+ DROP TABLE drop_index_articles;
+@@ -162,13 +162,13 @@
+ +-----------+----------------+
+ | column_id | column_name    |
+ +-----------+----------------+
++|        18 | content        |
+ |        16 | id             |
+ |        17 | title          |
+-|        18 | content        |
+ |        19 | *doc*id*       |
+-|        20 | *word*segment* |
+-|        21 | *word*count*   |
+ |        22 | *doc*length*   |
++|        21 | *word*count*   |
++|        20 | *word*segment* |
+ +-----------+----------------+
+ ====================== drop index =======================
+ ALTER TABLE drop_index_articles DROP INDEX ctx;
+@@ -200,9 +200,9 @@
+ +-----------+-------------+
+ | column_id | column_name |
+ +-----------+-------------+
++|        18 | content     |
+ |        16 | id          |
+ |        17 | title       |
+-|        18 | content     |
+ +-----------+-------------+
+ ====================== add index ========================
+ ALTER TABLE drop_index_articles ADD FULLTEXT INDEX ctx(title, content);
+@@ -234,13 +234,13 @@
+ +-----------+----------------+
+ | column_id | column_name    |
+ +-----------+----------------+
++|        18 | content        |
+ |        16 | id             |
+ |        17 | title          |
+-|        18 | content        |
+ |        23 | *doc*id*       |
+-|        24 | *word*segment* |
+-|        25 | *word*count*   |
+ |        26 | *doc*length*   |
++|        25 | *word*count*   |
++|        24 | *word*segment* |
+ +-----------+----------------+
+ ====================== drop table =======================
+ DROP TABLE drop_index_articles;
+@@ -285,13 +285,13 @@
+ +-----------+----------------+
+ | column_id | column_name    |
+ +-----------+----------------+
++|        18 | content        |
+ |        16 | id             |
+ |        17 | title          |
+-|        18 | content        |
+ |        19 | *doc*id*       |
+-|        20 | *word*segment* |
+-|        21 | *word*count*   |
+ |        22 | *doc*length*   |
++|        21 | *word*count*   |
++|        20 | *word*segment* |
+ +-----------+----------------+
+ ====================== drop index =======================
+ DROP INDEX ctx ON drop_index_articles;
+@@ -323,9 +323,9 @@
+ +-----------+-------------+
+ | column_id | column_name |
+ +-----------+-------------+
++|        18 | content     |
+ |        16 | id          |
+ |        17 | title       |
+-|        18 | content     |
+ +-----------+-------------+
+ ====================== add index ========================
+ ALTER TABLE drop_index_articles ADD FULLTEXT INDEX ctx(title, content);
+@@ -357,13 +357,13 @@
+ +-----------+----------------+
+ | column_id | column_name    |
+ +-----------+----------------+
++|        18 | content        |
+ |        16 | id             |
+ |        17 | title          |
+-|        18 | content        |
+ |        23 | *doc*id*       |
+-|        24 | *word*segment* |
+-|        25 | *word*count*   |
+ |        26 | *doc*length*   |
++|        25 | *word*count*   |
++|        24 | *word*segment* |
+ +-----------+----------------+
+ ====================== drop table =======================
+ DROP TABLE drop_index_articles;
+@@ -410,19 +410,19 @@
+ +-----------+----------------+
+ | column_id | column_name    |
+ +-----------+----------------+
++|        18 | content        |
+ |        16 | id             |
+ |        17 | title          |
+-|        18 | content        |
+ |        19 | *doc*id*       |
+-|        20 | *word*segment* |
+-|        21 | *word*count*   |
+ |        22 | *doc*length*   |
+-|        23 | *word*segment* |
+-|        24 | *word*count*   |
+ |        25 | *doc*length*   |
+-|        26 | *word*segment* |
+-|        27 | *word*count*   |
+ |        28 | *doc*length*   |
++|        21 | *word*count*   |
++|        24 | *word*count*   |
++|        27 | *word*count*   |
++|        20 | *word*segment* |
++|        23 | *word*segment* |
++|        26 | *word*segment* |
+ +-----------+----------------+
+ ====================== drop index =======================
+ DROP INDEX ctx ON drop_index_articles;
+@@ -454,16 +454,16 @@
+ +-----------+----------------+
+ | column_id | column_name    |
+ +-----------+----------------+
++|        18 | content        |
+ |        16 | id             |
+ |        17 | title          |
+-|        18 | content        |
+ |        19 | *doc*id*       |
+-|        23 | *word*segment* |
+-|        24 | *word*count*   |
+ |        25 | *doc*length*   |
+-|        26 | *word*segment* |
+-|        27 | *word*count*   |
+ |        28 | *doc*length*   |
++|        24 | *word*count*   |
++|        27 | *word*count*   |
++|        23 | *word*segment* |
++|        26 | *word*segment* |
+ +-----------+----------------+
+ SELECT distinct(ddl_stmt_str) FROM oceanbase.__all_ddl_operation WHERE table_id IN (SELECT table_id FROM oceanbase.__all_table_history WHERE table_name = 'drop_index_articles' OR data_table_id IN (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles')) and ddl_stmt_str = 'DROP INDEX ctx ON drop_index_articles';
+ +---------------------------------------+
+@@ -501,13 +501,13 @@
+ +-----------+----------------+
+ | column_id | column_name    |
+ +-----------+----------------+
++|        18 | content        |
+ |        16 | id             |
+ |        17 | title          |
+-|        18 | content        |
+ |        19 | *doc*id*       |
+-|        26 | *word*segment* |
+-|        27 | *word*count*   |
+ |        28 | *doc*length*   |
++|        27 | *word*count*   |
++|        26 | *word*segment* |
+ +-----------+----------------+
+ ====================== drop index =======================
+ DROP INDEX ctx_c ON drop_index_articles;
+@@ -539,9 +539,9 @@
+ +-----------+-------------+
+ | column_id | column_name |
+ +-----------+-------------+
++|        18 | content     |
+ |        16 | id          |
+ |        17 | title       |
+-|        18 | content     |
+ +-----------+-------------+
+ ====================== add index ========================
+ ALTER TABLE drop_index_articles ADD FULLTEXT INDEX ctx(title, content);
+@@ -573,13 +573,13 @@
+ +-----------+----------------+
+ | column_id | column_name    |
+ +-----------+----------------+
++|        18 | content        |
+ |        16 | id             |
+ |        17 | title          |
+-|        18 | content        |
+ |        29 | *doc*id*       |
+-|        30 | *word*segment* |
+-|        31 | *word*count*   |
+ |        32 | *doc*length*   |
++|        31 | *word*count*   |
++|        30 | *word*segment* |
+ +-----------+----------------+
+ ====================== drop table =======================
+ DROP TABLE drop_index_articles;
+
+[2026-10-29 12:14:39] mysqltest: Result content mismatch
+
+not ok

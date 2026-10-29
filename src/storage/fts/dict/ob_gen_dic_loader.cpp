@@ -118,11 +118,17 @@ int ObGenDicLoader::get_dic_loader(const ObString &parser_name,
   int ret = OB_SUCCESS;
   ObGenDicLoaderKey dic_loader_key;
   ObDicLoader *dic_loader = nullptr;
+  const bool builtin_ik_utf8 = charset == CHARSET_UTF8MB4
+      && nullptr != parser_name.ptr() && parser_name.length() == 2
+      && parser_name.ptr()[0] == 'i' && parser_name.ptr()[1] == 'k';
   if (!is_inited_) {
     ret = OB_NOT_INIT;
   } else if (parser_name.empty()
              || charset == CHARSET_INVALID) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (builtin_ik_utf8 && nullptr !=
+      (dic_loader = builtin_ik_utf8_loader_.load(std::memory_order_acquire))) {
+    ret = loader_handle.set_loader(dic_loader);
   } else if (OB_FAIL(dic_loader_key.init(parser_name, charset))) {
   } else {
     TCWLockGuard guard(lock_);
@@ -139,6 +145,9 @@ int ObGenDicLoader::get_dic_loader(const ObString &parser_name,
         ret = OB_ERR_UNEXPECTED;
       }
     } else if (OB_FAIL(loader_handle.set_loader(dic_loader))) {
+    }
+    if (OB_SUCC(ret) && builtin_ik_utf8) {
+      builtin_ik_utf8_loader_.store(dic_loader, std::memory_order_release);
     }
   }
   return ret;

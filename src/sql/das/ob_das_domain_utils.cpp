@@ -36,6 +36,56 @@ namespace sql
 {
 using storage::ObFTWordMap;
 
+namespace {
+class IndexWordMapScratch
+{
+public:
+  ObFTWordMap words_;
+  int64_t bucket_count_ = 0;
+  bool in_use_ = false;
+};
+
+class IndexWordMapLease
+{
+public:
+  IndexWordMapLease() : scratch_(nullptr), words_(&private_words_) {}
+  ~IndexWordMapLease()
+  {
+    if (nullptr != scratch_) {
+      scratch_->words_.reuse();
+      scratch_->in_use_ = false;
+    }
+  }
+  int init(const int64_t bucket_count)
+  {
+    int ret = OB_SUCCESS;
+    static thread_local IndexWordMapScratch scratch;
+    if (scratch.in_use_) {
+      ret = private_words_.create(bucket_count, common::ObMemAttr("FTWordMap"));
+    } else {
+      scratch_ = &scratch;
+      scratch.in_use_ = true;
+      words_ = &scratch.words_;
+      if (scratch.bucket_count_ != bucket_count || !words_->created()) {
+        words_->destroy();
+        scratch.bucket_count_ = 0;
+        if (OB_FAIL(words_->create(bucket_count, common::ObMemAttr("FTWordMap")))) {
+        } else {
+          scratch.bucket_count_ = bucket_count;
+          (void)words_->get_local_allocer().reserve(97);
+        }
+      }
+    }
+    return ret;
+  }
+  ObFTWordMap &words() { return *words_; }
+private:
+  ObFTWordMap private_words_;
+  IndexWordMapScratch *scratch_;
+  ObFTWordMap *words_;
+};
+}
+
 
 ObObjDatumMapType ObFTIndexRowCache::FTS_INDEX_TYPES[] = {OBJ_DATUM_STRING, OBJ_DATUM_STRING, OBJ_DATUM_8BYTE_DATA, OBJ_DATUM_8BYTE_DATA};
 ObObjDatumMapType ObFTIndexRowCache::FTS_DOC_WORD_TYPES[] = {OBJ_DATUM_STRING, OBJ_DATUM_STRING, OBJ_DATUM_8BYTE_DATA, OBJ_DATUM_8BYTE_DATA};
@@ -287,14 +337,16 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
   static constexpr int64_t FT_MAX_WORD_BUCKET = 997;
   const int64_t ft_word_bkt_cnt = MIN(MAX(fulltext.length() / 10, 2), FT_MAX_WORD_BUCKET);
   int64_t doc_length = 0;
-  ObFTWordMap ft_word_map;
+  IndexWordMapLease map_lease;
+  const int map_ret = map_lease.init(ft_word_bkt_cnt);
+  ObFTWordMap &ft_word_map = map_lease.words();
   void *rows_buf = nullptr;
   blocksstable::ObDatumRow *rows = nullptr;
   if (OB_ISNULL(helper) || OB_UNLIKELY(!ft_obj_meta.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (0 == fulltext.length()) {
     ret = OB_ITER_END;
-  } else if (OB_FAIL(ft_word_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
+  } else if (OB_FAIL(map_ret)) {
   } else if (OB_FAIL(segment_and_calc_word_count(allocator,
                                                  helper,
                                                  ft_obj_meta,

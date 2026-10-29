@@ -50,6 +50,7 @@ void ObTextDaaTIter::reset()
 {
   use_score_free_union_ = false;
   union_started_ = false;
+  pending_union_advances_ = 0;
   MEMSET(union_heads_, 0, sizeof(union_heads_));
   MEMSET(union_blocks_, 0, sizeof(union_blocks_));
   MEMSET(union_block_counts_, 0, sizeof(union_block_counts_));
@@ -66,6 +67,7 @@ void ObTextDaaTIter::reset()
 void ObTextDaaTIter::reuse(const bool switch_tablet)
 {
   union_started_ = false;
+  pending_union_advances_ = 0;
   MEMSET(union_heads_, 0, sizeof(union_heads_));
   MEMSET(union_blocks_, 0, sizeof(union_blocks_));
   MEMSET(union_block_counts_, 0, sizeof(union_block_counts_));
@@ -88,7 +90,7 @@ int ObTextDaaTIter::get_next_rows(const int64_t capacity, int64_t &count)
                               : ObSRDaaTIterImpl::get_next_rows(capacity, count);
 }
 
-int ObTextDaaTIter::advance_union_head(const int64_t index)
+OB_INLINE int ObTextDaaTIter::advance_union_head(const int64_t index)
 {
   int ret = OB_SUCCESS;
   union_heads_[index] = nullptr;
@@ -109,20 +111,20 @@ int ObTextDaaTIter::advance_union_head(const int64_t index)
     if (union_heads_[index]->is_null()) {
       ret = OB_ERR_UNEXPECTED;
     } else if (union_heads_[index]->len_ == 16) {
-      // Construct a portable big-endian key. Compilers lower these fixed
-      // loads/shifts to byte swaps; comparisons retain exact binary ordering.
-      const auto *bytes = reinterpret_cast<const unsigned char *>(union_heads_[index]->ptr_);
-      for (int part = 0; part < 2; ++part) {
-        uint64_t key = 0;
-        for (int offset = 0; offset < 8; ++offset) key = (key << 8) | bytes[part * 8 + offset];
-        union_keys_[index][part] = key;
-      }
+      // memcpy permits unaligned IDs without aliasing or alignment UB.
+      // Convert each complete word instead of constructing it byte by byte.
+      MEMCPY(union_keys_[index], union_heads_[index]->ptr_, 16);
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+      union_keys_[index][0] = __builtin_bswap64(union_keys_[index][0]);
+      union_keys_[index][1] = __builtin_bswap64(union_keys_[index][1]);
+#endif
     }
   }
   return ret;
 }
 
-int ObTextDaaTIter::get_next_union_rows(const int64_t capacity, int64_t &count)
+template <int64_t dimension_count>
+int ObTextDaaTIter::get_next_union_rows_impl(const int64_t capacity, int64_t &count)
 {
   int ret = OB_SUCCESS;
   count = 0;
@@ -131,14 +133,25 @@ int ObTextDaaTIter::get_next_union_rows(const int64_t capacity, int64_t &count)
   } else if (capacity <= 0) {
     ret = capacity == 0 ? OB_SUCCESS : OB_INVALID_ARGUMENT;
   } else {
-    const int64_t dim_count = dim_iters_->count();
+    constexpr int64_t dim_count = dimension_count;
     if (!union_started_) {
       for (int64_t i = 0; OB_SUCC(ret) && i < dim_count; ++i) {
         ret = advance_union_head(i);
       }
       union_started_ = OB_SUCC(ret);
     }
+    const uint64_t pending = pending_union_advances_;
+    pending_union_advances_ = 0;
+    for (int64_t i = 0; OB_SUCC(ret) && i < dim_count; ++i) {
+      if (pending & (1ULL << i)) ret = advance_union_head(i);
+    }
     const int64_t real_capacity = MIN(capacity, iter_param_->max_batch_size_);
+    ObEvalCtx &ctx = *iter_param_->eval_ctx_;
+    ObExpr *id_expr = iter_param_->id_proj_expr_;
+    ObExpr *score_expr = iter_param_->relevance_proj_expr_;
+    const bool direct_projection = ctx.is_vectorized() && id_expr->is_batch_result()
+        && (nullptr == score_expr || score_expr->is_batch_result());
+    ObDatum *projected_ids = direct_projection ? id_expr->locate_batch_datums(ctx) : nullptr;
     ObDocIdExt *buffered_ids = &buffered_domain_ids_.at(0);
     double *buffered_scores = &buffered_relevances_.at(0);
     while (OB_SUCC(ret) && count < real_capacity) {
@@ -172,27 +185,64 @@ int ObTextDaaTIter::get_next_union_rows(const int64_t capacity, int64_t &count)
       }
       if (minimum < 0) {
         ret = OB_ITER_END;
-      } else if (OB_FAIL(buffered_ids[count].from_datum(*union_heads_[minimum]))) {
       } else {
-        buffered_scores[count++] = 1.0;
+        const ObDatum &id = *union_heads_[minimum];
+        if (direct_projection) {
+          projected_ids[count].set_datum(id);
+        } else if (id.len_ == 16) {
+          buffered_ids[count].assign_binary16(id);
+        } else if (OB_FAIL(buffered_ids[count].from_datum(id))) {
+          break;
+        }
+        if (!direct_projection) buffered_scores[count] = 1.0;
+        ++count;
         ++input_row_cnt_;
         ++output_row_cnt_;
-        // cache_result copies the document ID before advancing any iterator.
-        // Equal IDs in multiple postings contribute exactly one union row.
         for (int64_t i = 0; OB_SUCC(ret) && i < dim_count; ++i) {
           if (matching & (1ULL << i)) {
-            ret = advance_union_head(i);
+            if (direct_projection && union_block_counts_[i] == 0) {
+              pending_union_advances_ |= 1ULL << i;
+            } else {
+              ret = advance_union_head(i);
+            }
           }
         }
+        if (pending_union_advances_ != 0) break;
       }
     }
     if ((OB_SUCC(ret) || OB_ITER_END == ret) && count > 0) {
       // As in the generic path, return a nonempty final batch successfully;
       // the following call reports OB_ITER_END with zero rows.
-      ret = project_union_results(count);
+      if (direct_projection) {
+        id_expr->get_evaluated_flags(ctx).set_all(count);
+        id_expr->set_evaluated_projected(ctx);
+        if (nullptr != score_expr) {
+          ObDatum *scores = score_expr->locate_datums_for_update(ctx, count);
+          for (int64_t i = 0; i < count; ++i) scores[i].set_double(1.0);
+          score_expr->get_evaluated_flags(ctx).set_all(count);
+          score_expr->set_evaluated_projected(ctx);
+        }
+        ret = OB_SUCCESS;
+      } else {
+        ret = project_union_results(count);
+      }
     }
   }
   return ret;
+}
+
+int ObTextDaaTIter::get_next_union_rows(const int64_t capacity, int64_t &count)
+{
+  count = 0;
+  if (IS_NOT_INIT) {
+    return OB_NOT_INIT;
+  }
+  switch (dim_iters_->count()) {
+    case 1: return get_next_union_rows_impl<1>(capacity, count);
+    case 2: return get_next_union_rows_impl<2>(capacity, count);
+    case 3: return get_next_union_rows_impl<3>(capacity, count);
+    default: return OB_ERR_UNEXPECTED;
+  }
 }
 
 int ObTextDaaTIter::project_union_results(const int64_t count)
