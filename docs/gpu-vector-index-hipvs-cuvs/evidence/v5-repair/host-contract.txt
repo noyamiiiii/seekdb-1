@@ -1,0 +1,7 @@
+PASS 32 host contract groups; exact V5 build/search parameters; snapshot reload without rebuild; scratch reuse/growth/recovery; 4 concurrent callers; no leaked resources. GPU NOT exercised.
+000000000000027f T seekdb_cuvs_build
+0000000000000f00 T seekdb_cuvs_cagra_knn
+0000000000000c93 T seekdb_cuvs_deserialize
+0000000000000121 T seekdb_cuvs_free
+00000000000005bd T seekdb_cuvs_search
+0000000000000ba3 T seekdb_cuvs_serialize

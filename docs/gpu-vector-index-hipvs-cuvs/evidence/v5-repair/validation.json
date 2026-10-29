@@ -1,0 +1,18 @@
+{
+  "source_sha256": "5a9c0fca600668ce3e443fd7a11b857d2f11c6fcf290c6e0512d011d392846de",
+  "parent": "634888d9b037153fa143d2c913ba4b25503e1d62",
+  "host_contract_groups": 32,
+  "host_contract_passed": true,
+  "sanitizers": [
+    "address",
+    "undefined",
+    "leak"
+  ],
+  "c11_compile": true,
+  "cpp17_compile": true,
+  "v5_exports": 6,
+  "gpu_tested": false,
+  "full_server_compiled": false,
+  "official_score": null,
+  "gpu_unavailable": "No matching Node has enough free CPU, memory, and GPUs for this launch"
+}
