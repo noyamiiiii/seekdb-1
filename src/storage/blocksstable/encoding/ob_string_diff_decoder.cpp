@@ -166,7 +166,14 @@ int ObStringDiffDecoder::batch_decode(
     } else if (OB_ISNULL(buf = static_cast<char *>(ctx.allocator_->alloc(buf_size * row_cap)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
-      for (int64_t i = 0; i < row_cap; ++i) {
+      // Only the non-diff descriptors carry shared bytes. When every descriptor
+      // marks a differing range the shared pass copies nothing, so short values
+      // without a common prefix skip it instead of walking the row batch.
+      bool has_common = false;
+      for (int64_t i = 0; !has_common && i < header_->diff_desc_cnt_; ++i) {
+        has_common = 0 == header_->diff_descs_[i].diff_ && header_->diff_descs_[i].count_ > 0;
+      }
+      for (int64_t i = 0; has_common && i < row_cap; ++i) {
         header_->copy_string(ObStringDiffHeader::LeftToRight(), std::logical_not<uint8_t>(),
             header_->common_data(), buf + i * buf_size);
       }

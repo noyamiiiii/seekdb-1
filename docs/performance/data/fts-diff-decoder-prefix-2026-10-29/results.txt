@@ -1,0 +1,39 @@
+Difference decoder: skip the empty shared-prefix pass
+=====================================================
+
+Change: ObStringDiffDecoder::batch_decode() ran a full pass over the row batch
+copying the shared (non-diff) bytes into each row buffer. When every descriptor
+in the header marks a differing range that pass copies nothing, which is the
+normal case for the short document-id values used by the FTS retrieval path.
+The pass is now skipped unless the header actually carries shared bytes.
+
+Paired microbench, 1000 queries per sample, 12 alternating pairs per
+orientation. Delta is candidate versus the previous commit; negative means the
+candidate is faster.
+
+  forward (2881 previous commit, 2882 candidate)
+    cn      median -2.44%   mean -3.11%   8/12 candidate faster
+    beng    median -4.49%   mean -4.45%   9/12
+    mixed   median -0.95%   mean -1.42%   7/12
+    limit   median -1.44%   mean -3.44%   6/12
+
+  swapped (2881 candidate, 2882 previous commit)
+    cn      median +0.74%   mean +0.03%
+    beng    median -0.83%   mean +0.12%
+    mixed   median -3.64%   mean -4.90%
+    limit   median +0.19%   mean +0.86%
+
+The swapped run is expressed in the same frame, so a negative value there means
+the previous commit was faster. The two orientations disagree by a few percent,
+which is the local noise floor. Removing the port bias from the pair of runs
+leaves roughly -1.6% (cn), -1.9% (beng), +1.4% (mixed), -0.8% (limit); the
+per-port bias itself is about 1-2%. The effect is small and the decision belongs
+to the reference harness, whose query stdev is around 0.5% rather than 2-4%.
+
+Correctness:
+  - SQL correctness script: 304 result lines identical to the previous commit.
+  - BENG correctness script: identical.
+  - 12 of 17 native fts_index tests pass directly; the same five tests as before
+    emit reject files that differ only in CRLF and a trailing blank line and are
+    identical between both binaries.
+  - tokenize_function and cn_word pass with LF-normalized test/result copies.

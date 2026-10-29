@@ -1,0 +1,19 @@
+REJECT aggregate_score_elision
+PASS basic_dml
+PASS basic_dml_sequel
+REJECT cardinality_limit
+PASS cn_word
+PASS create_fts_index_afterward
+PASS create_table_with_fts_index
+REJECT domain_id_merge_with_compare_null
+PASS drop_index
+PASS index_view
+PASS load_data
+PASS offline_ddl_with_fts_index
+PASS online_ddl_on_table_with_fts_index
+PASS parser_properties
+PASS partitioned_simple_query
+REJECT simple_query
+REJECT tokenize_function
+ok
+ok
