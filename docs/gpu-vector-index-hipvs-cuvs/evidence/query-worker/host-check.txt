@@ -1,0 +1,8 @@
+PASS: lazy startup, null rejection, create failure/retry, 32 MiB stack, thread reuse, synchronous visibility, exception recovery, recursion rejection, 8 concurrent callers / 8000 jobs, serialized callbacks, shutdown and repeated lifecycle
+{"round":0,"create_join_us":31.794787,"worker_us":26.823747,"host_dispatch_speedup":1.185322}
+{"round":1,"create_join_us":35.290484,"worker_us":26.100325,"host_dispatch_speedup":1.352109}
+{"round":2,"create_join_us":32.520990,"worker_us":27.916720,"host_dispatch_speedup":1.164929}
+{"round":3,"create_join_us":32.238680,"worker_us":26.021249,"host_dispatch_speedup":1.238937}
+{"round":4,"create_join_us":32.417521,"worker_us":26.830928,"host_dispatch_speedup":1.208215}
+{"round":5,"create_join_us":32.760084,"worker_us":26.621051,"host_dispatch_speedup":1.230608}
+{"round":6,"create_join_us":31.425677,"worker_us":27.439999,"host_dispatch_speedup":1.145251}

@@ -1,0 +1,66 @@
+{
+  "date": "2026-10-30",
+  "base_commit": "76a68f2fca8807fece1b9c6ba0e4058c1924f101",
+  "host_only": true,
+  "gpu_tested": false,
+  "full_server_linked": false,
+  "gpu_adaptor_object_compiled": true,
+  "cpu_adaptor_object_compiled": true,
+  "compiler": "clang++ 17, GNU C++20, V5 source with locally available dependencies",
+  "asan_ubsan_lsan_passed": true,
+  "tsan_passed": true,
+  "concurrent_callers": 8,
+  "concurrent_jobs": 8000,
+  "rounds": [
+    {
+      "round": 0,
+      "create_join_us": 31.794787,
+      "worker_us": 26.823747,
+      "host_dispatch_speedup": 1.185322
+    },
+    {
+      "round": 1,
+      "create_join_us": 35.290484,
+      "worker_us": 26.100325,
+      "host_dispatch_speedup": 1.352109
+    },
+    {
+      "round": 2,
+      "create_join_us": 32.52099,
+      "worker_us": 27.91672,
+      "host_dispatch_speedup": 1.164929
+    },
+    {
+      "round": 3,
+      "create_join_us": 32.23868,
+      "worker_us": 26.021249,
+      "host_dispatch_speedup": 1.238937
+    },
+    {
+      "round": 4,
+      "create_join_us": 32.417521,
+      "worker_us": 26.830928,
+      "host_dispatch_speedup": 1.208215
+    },
+    {
+      "round": 5,
+      "create_join_us": 32.760084,
+      "worker_us": 26.621051,
+      "host_dispatch_speedup": 1.230608
+    },
+    {
+      "round": 6,
+      "create_join_us": 31.425677,
+      "worker_us": 27.439999,
+      "host_dispatch_speedup": 1.145251
+    }
+  ],
+  "median_create_join_us": 32.417521,
+  "median_worker_us": 26.823747,
+  "host_dispatch_speedup": 1.2085381285470669,
+  "host_dispatch_time_reduction": 0.172554033357455,
+  "files_sha256": {
+    "src/oblib/lib/vector/ob_cuvs_query_worker.h": "c717ae21586d29b14d641a28c04a40cef34ad85ba0faf505ffbca9e272dc5bcd",
+    "src/oblib/lib/vector/ob_vsag_adaptor.cpp": "78040b66118c73276f908082db014cda31fa53d3fd3e9d97e4021c9d319fc592"
+  }
+}
