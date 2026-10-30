@@ -26,12 +26,40 @@
 #ifndef SK_CAGRA_NITER
 #define SK_CAGRA_NITER 40
 #endif
+/* 0 auto, 1 IVF-PQ, 2 NN-descent. NN-descent is the tuned production path. */
+#ifndef SK_CAGRA_BUILD_ALGO
+#define SK_CAGRA_BUILD_ALGO 2
+#endif
+/* IVF-PQ knobs, read only when SK_CAGRA_BUILD_ALGO is 1. Zero keeps the
+   library heuristic for every value except the PQ bit width. */
+#ifndef SK_CAGRA_IVFPQ_LISTS
+#define SK_CAGRA_IVFPQ_LISTS 0
+#endif
+#ifndef SK_CAGRA_IVFPQ_PROBES
+#define SK_CAGRA_IVFPQ_PROBES 0
+#endif
+#ifndef SK_CAGRA_IVFPQ_PQ_BITS
+#define SK_CAGRA_IVFPQ_PQ_BITS 8
+#endif
+#ifndef SK_CAGRA_IVFPQ_PQ_DIM
+#define SK_CAGRA_IVFPQ_PQ_DIM 0
+#endif
+#ifndef SK_CAGRA_IVFPQ_KMEANS_ITERS
+#define SK_CAGRA_IVFPQ_KMEANS_ITERS 0
+#endif
+#ifndef SK_CAGRA_IVFPQ_TRAINSET
+#define SK_CAGRA_IVFPQ_TRAINSET 0.0
+#endif
 
 typedef struct {
   cuvsResources_t res;
   cuvsCagraIndexParams_t ip;
   cuvsCagraIndex_t idx;
   cuvsCagraSearchParams_t sp;
+#if SK_CAGRA_BUILD_ALGO == 1
+  cuvsIvfPqIndexParams_t pq_build;
+  cuvsIvfPqSearchParams_t pq_search;
+#endif
   size_t default_itopk;
   long n, dim;
   float *queries, *distances;
@@ -71,6 +99,10 @@ void seekdb_cuvs_free(void *handle)
   if (h->distances) cuvsRMMFree(h->res, h->distances, h->distance_bytes);
   if (h->sp) cuvsCagraSearchParamsDestroy(h->sp);
   if (h->idx) cuvsCagraIndexDestroy(h->idx);
+#if SK_CAGRA_BUILD_ALGO == 1
+  if (h->pq_build) cuvsIvfPqIndexParamsDestroy(h->pq_build);
+  if (h->pq_search) cuvsIvfPqSearchParamsDestroy(h->pq_search);
+#endif
   if (h->ip) cuvsCagraIndexParamsDestroy(h->ip);
   if (h->res) cuvsResourcesDestroy(h->res);
   pthread_mutex_destroy(&h->mutex);
@@ -91,10 +123,28 @@ void *seekdb_cuvs_build(const float *base, long n, long dim)
       cuvsCagraIndexCreate(&h->idx) != CUVS_SUCCESS ||
       cuvsCagraSearchParamsCreate(&h->sp) != CUVS_SUCCESS) goto failed;
   /* Retain more final neighbors while reducing construction iterations. */
-  h->ip->build_algo = NN_DESCENT;
+  h->ip->build_algo = (enum cuvsCagraGraphBuildAlgo)SK_CAGRA_BUILD_ALGO;
   h->ip->graph_degree = SK_CAGRA_GRAPH_DEGREE;
   h->ip->intermediate_graph_degree = SK_CAGRA_INTERMEDIATE_DEGREE;
   h->ip->nn_descent_niter = SK_CAGRA_NITER;
+#if SK_CAGRA_BUILD_ALGO == 1
+  if (h->ip->graph_build_params == NULL) {
+    fprintf(stderr, "[seekdb_cuvs] IVF-PQ build params missing\n");
+    goto failed;
+  }
+  if (cuvsIvfPqIndexParamsCreate(&h->pq_build) != CUVS_SUCCESS ||
+      cuvsIvfPqSearchParamsCreate(&h->pq_search) != CUVS_SUCCESS) goto failed;
+  if (SK_CAGRA_IVFPQ_LISTS) h->pq_build->n_lists = SK_CAGRA_IVFPQ_LISTS;
+  if (SK_CAGRA_IVFPQ_KMEANS_ITERS) h->pq_build->kmeans_n_iters = SK_CAGRA_IVFPQ_KMEANS_ITERS;
+  if (SK_CAGRA_IVFPQ_TRAINSET > 0.0) {
+    h->pq_build->kmeans_trainset_fraction = SK_CAGRA_IVFPQ_TRAINSET;
+  }
+  h->pq_build->pq_bits = SK_CAGRA_IVFPQ_PQ_BITS;
+  if (SK_CAGRA_IVFPQ_PQ_DIM) h->pq_build->pq_dim = SK_CAGRA_IVFPQ_PQ_DIM;
+  if (SK_CAGRA_IVFPQ_PROBES) h->pq_search->n_probes = SK_CAGRA_IVFPQ_PROBES;
+  h->ip->graph_build_params->ivf_pq_build_params = h->pq_build;
+  h->ip->graph_build_params->ivf_pq_search_params = h->pq_search;
+#endif
   if (cuvsCagraBuild(h->res, h->ip, &dataset, h->idx) != CUVS_SUCCESS ||
       cuvsStreamSync(h->res) != CUVS_SUCCESS) goto failed;
   h->n = n;

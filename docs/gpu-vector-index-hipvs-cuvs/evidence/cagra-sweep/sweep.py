@@ -9,8 +9,10 @@ Run on the Radeon Cloud instance from the repository root:
 
     AMD_TEST_ROWS=250000 python3 docs/gpu-vector-index-hipvs-cuvs/evidence/cagra-sweep/sweep.py
 
-Configurations are written as graph_degree:intermediate_degree:niter. Pass them
-as arguments to override the default list.
+NN-descent configurations are written as graph_degree:intermediate_degree:niter.
+IVF-PQ configurations are written as
+ivfpq:graph_degree:intermediate_degree:n_lists:n_probes[:pq_bits]. Pass them as
+arguments to override the default list.
 """
 
 from __future__ import annotations
@@ -28,11 +30,9 @@ OUT = Path(__file__).resolve().parent
 
 DEFAULT_CONFIGS = [
     "160:192:40",
-    "160:192:35",
-    "160:192:30",
-    "176:192:40",
-    "144:192:40",
-    "128:192:40",
+    "ivfpq:160:192:512:20:8",
+    "ivfpq:160:192:1024:32:8",
+    "ivfpq:160:192:2048:64:8",
 ]
 
 
@@ -42,7 +42,37 @@ def run(cmd: list[str], env: dict[str, str], what: str) -> None:
         raise SystemExit(f"{what} failed:\n{proc.stdout[-2000:]}\n{proc.stderr[-4000:]}")
 
 
-def build_variant(tag: str, degree: int, intermediate: int, niter: int, env: dict[str, str]) -> None:
+def parse_config(spec: str) -> tuple[str, list[str]]:
+    parts = spec.split(":")
+    if parts[0] == "ivfpq":
+        if len(parts) not in (5, 6):
+            raise SystemExit(f"bad IVF-PQ config {spec!r}; want ivfpq:degree:intermediate:lists:probes[:pq_bits]")
+        degree, intermediate, lists, probes = (int(part) for part in parts[1:5])
+        pq_bits = int(parts[5]) if len(parts) == 6 else 8
+        tag = f"pq{lists}p{probes}b{pq_bits}d{degree}i{intermediate}"
+        flags = [
+            "-DSK_CAGRA_BUILD_ALGO=1",
+            f"-DSK_CAGRA_GRAPH_DEGREE={degree}",
+            f"-DSK_CAGRA_INTERMEDIATE_DEGREE={intermediate}",
+            f"-DSK_CAGRA_IVFPQ_LISTS={lists}",
+            f"-DSK_CAGRA_IVFPQ_PROBES={probes}",
+            f"-DSK_CAGRA_IVFPQ_PQ_BITS={pq_bits}",
+        ]
+        return tag, flags
+    if len(parts) != 3:
+        raise SystemExit(f"bad NN-descent config {spec!r}; want degree:intermediate:niter")
+    degree, intermediate, niter = (int(part) for part in parts)
+    tag = f"d{degree}i{intermediate}n{niter}"
+    flags = [
+        "-DSK_CAGRA_BUILD_ALGO=2",
+        f"-DSK_CAGRA_GRAPH_DEGREE={degree}",
+        f"-DSK_CAGRA_INTERMEDIATE_DEGREE={intermediate}",
+        f"-DSK_CAGRA_NITER={niter}",
+    ]
+    return tag, flags
+
+
+def build_variant(tag: str, flags: list[str], env: dict[str, str]) -> None:
     bridge_so = OUT / f"libbridge_{tag}.so"
     # benchmark.py loads libdispatch_<tag>.so from its own directory.
     dispatch_so = HARNESS / f"libdispatch_{tag}.so"
@@ -54,9 +84,7 @@ def build_variant(tag: str, degree: int, intermediate: int, niter: int, env: dic
             "-O2",
             "-pthread",
             "-D__HIP_PLATFORM_AMD__",
-            f"-DSK_CAGRA_GRAPH_DEGREE={degree}",
-            f"-DSK_CAGRA_INTERMEDIATE_DEGREE={intermediate}",
-            f"-DSK_CAGRA_NITER={niter}",
+            *flags,
             "-I/opt/hipvs/include",
             "-I/opt/rocm/include",
             f"-I{BRIDGE_DIR}",
@@ -103,9 +131,8 @@ def main() -> int:
 
     rows: list[dict] = []
     for spec in configs:
-        degree, intermediate, niter = (int(part) for part in spec.split(":"))
-        tag = f"d{degree}i{intermediate}n{niter}"
-        build_variant(tag, degree, intermediate, niter, env)
+        tag, flags = parse_config(spec)
+        build_variant(tag, flags, env)
         for dim in dims:
             proc = subprocess.run(
                 [sys.executable, str(HARNESS / "benchmark.py"), tag, str(dim)],

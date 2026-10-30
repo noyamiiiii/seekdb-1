@@ -19,13 +19,13 @@
 #include "seekdb_cuvs_bridge.h"
 struct FakeCagraIndex { long n=0,dim=0;std::vector<float> data; };
 static std::string fail_at;
-static int fail_countdown=1, resources=0, indexes=0, index_params=0, search_params=0, builds=0, searches=0, allocations=0;
+static int fail_countdown=1, resources=0, indexes=0, index_params=0, search_params=0, ivfpq_params=0, builds=0, searches=0, allocations=0;
 static size_t default_itopk=64;
 static std::map<void*,size_t> live;
 static std::atomic<int> active_searches{0},maximum_searches{0};
 static bool fail(const char* name){if(fail_at==name && --fail_countdown==0){fail_at.clear();return true;}return false;}
 static void inject(const char* name,int nth=1){fail_at=name;fail_countdown=nth;}
-static void clean(){assert(resources==0&&indexes==0&&index_params==0&&search_params==0&&live.empty());}
+static void clean(){assert(resources==0&&indexes==0&&index_params==0&&search_params==0&&ivfpq_params==0&&live.empty());}
 extern "C" {
 const char* cuvsGetLastErrorText(){return "injected test failure";}
 cuvsError_t cuvsResourcesCreate(cuvsResources_t* r){if(fail("resources"))return CUVS_ERROR;*r=malloc(1);++resources;return CUVS_SUCCESS;}
@@ -33,14 +33,18 @@ cuvsError_t cuvsResourcesDestroy(cuvsResources_t r){assert(r);free(r);--resource
 cuvsError_t cuvsStreamSync(cuvsResources_t){return fail("sync")?CUVS_ERROR:CUVS_SUCCESS;}
 cuvsError_t cuvsRMMAlloc(cuvsResources_t,void** p,size_t n){if(fail("alloc"))return CUVS_ERROR;*p=malloc(n);assert(*p);live[*p]=n;++allocations;return CUVS_SUCCESS;}
 cuvsError_t cuvsRMMFree(cuvsResources_t,void* p,size_t n){assert(live.count(p)&&live.at(p)==n);if(fail("free"))return CUVS_ERROR;live.erase(p);free(p);return CUVS_SUCCESS;}
-cuvsError_t cuvsCagraIndexParamsCreate(cuvsCagraIndexParams_t* p){if(fail("ip"))return CUVS_ERROR;*p=(cuvsCagraIndexParams_t)calloc(1,sizeof(**p));++index_params;return CUVS_SUCCESS;}
-cuvsError_t cuvsCagraIndexParamsDestroy(cuvsCagraIndexParams_t p){free(p);--index_params;return CUVS_SUCCESS;}
+cuvsError_t cuvsCagraIndexParamsCreate(cuvsCagraIndexParams_t* p){if(fail("ip"))return CUVS_ERROR;*p=(cuvsCagraIndexParams_t)calloc(1,sizeof(**p));(*p)->graph_build_params=(cuvsIvfPqParams_t)calloc(1,sizeof(**p->graph_build_params));++index_params;return CUVS_SUCCESS;}
+cuvsError_t cuvsCagraIndexParamsDestroy(cuvsCagraIndexParams_t p){free(p->graph_build_params);free(p);--index_params;return CUVS_SUCCESS;}
+cuvsError_t cuvsIvfPqIndexParamsCreate(cuvsIvfPqIndexParams_t* p){assert(p);*p=(cuvsIvfPqIndexParams_t)calloc(1,sizeof(**p));++ivfpq_params;return CUVS_SUCCESS;}
+cuvsError_t cuvsIvfPqIndexParamsDestroy(cuvsIvfPqIndexParams_t p){assert(p);free(p);--ivfpq_params;return CUVS_SUCCESS;}
+cuvsError_t cuvsIvfPqSearchParamsCreate(cuvsIvfPqSearchParams_t* p){assert(p);*p=(cuvsIvfPqSearchParams_t)calloc(1,sizeof(**p));++ivfpq_params;return CUVS_SUCCESS;}
+cuvsError_t cuvsIvfPqSearchParamsDestroy(cuvsIvfPqSearchParams_t p){assert(p);free(p);--ivfpq_params;return CUVS_SUCCESS;}
 cuvsError_t cuvsCagraIndexCreate(cuvsCagraIndex_t* p){if(fail("index"))return CUVS_ERROR;*p=new FakeCagraIndex;++indexes;return CUVS_SUCCESS;}
 cuvsError_t cuvsCagraIndexDestroy(cuvsCagraIndex_t p){delete p;--indexes;return CUVS_SUCCESS;}
 cuvsError_t cuvsCagraSearchParamsCreate(cuvsCagraSearchParams_t* p){if(fail("sp"))return CUVS_ERROR;*p=(cuvsCagraSearchParams_t)calloc(1,sizeof(**p));(*p)->itopk_size=default_itopk;++search_params;return CUVS_SUCCESS;}
 cuvsError_t cuvsCagraSearchParamsDestroy(cuvsCagraSearchParams_t p){free(p);--search_params;return CUVS_SUCCESS;}
 cuvsError_t cuvsCagraBuild(cuvsResources_t,cuvsCagraIndexParams_t p,DLManagedTensor* d,cuvsCagraIndex_t i){
- assert(p->build_algo==NN_DESCENT&&p->graph_degree==160&&p->intermediate_graph_degree==256&&p->nn_descent_niter==50);
+ assert(p->build_algo==NN_DESCENT&&p->graph_degree==160&&p->intermediate_graph_degree==192&&p->nn_descent_niter==40);
  assert(d->manager_ctx==nullptr&&d->deleter==nullptr&&d->dl_tensor.dtype.bits==32&&d->dl_tensor.device.device_type==kDLCPU);
  if(fail("build"))return CUVS_ERROR;i->n=d->dl_tensor.shape[0];i->dim=d->dl_tensor.shape[1];float* ptr=(float*)d->dl_tensor.data;i->data.assign(ptr,ptr+i->n*i->dim);++builds;return CUVS_SUCCESS;
 }
@@ -82,5 +86,5 @@ int main(){
  for(int nth:{1,2,3}){h=seekdb_cuvs_deserialize("snapshot.bin",600,8);assert(h);assert(!query(h,1,10));inject("alloc",nth);assert(query(h,4,100)!=0);assert(!query(h,1,10));assert(!query(h,4,100));seekdb_cuvs_free(h);clean();++checks;}
  h=seekdb_cuvs_deserialize("snapshot.bin",600,8);assert(h);assert(!query(h,1,10));inject("free");assert(query(h,4,100)!=0);assert(!query(h,1,10));assert(!query(h,4,100));seekdb_cuvs_free(h);clean();++checks;
  default_itopk=1024;h=seekdb_cuvs_deserialize("snapshot.bin",600,8);assert(h);assert(!query(h,4,100));assert(!query(h,1,10));seekdb_cuvs_free(h);clean();++checks;
- std::remove("snapshot.bin");std::printf("PASS %d host contract groups; validated 160-degree/50-iteration build and unchanged V5 search parameters; snapshot reload without rebuild; scratch reuse/growth/recovery; 4 concurrent callers; no leaked resources. GPU NOT exercised.\n",checks);
+ std::remove("snapshot.bin");std::printf("PASS %d host contract groups; validated 160/192/40 NN-descent build and unchanged V5 search parameters; snapshot reload without rebuild; scratch reuse/growth/recovery; 4 concurrent callers; no leaked resources. GPU NOT exercised.\n",checks);
 }
