@@ -14,6 +14,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+/* Construction knobs. The defaults are the tuned production values; the sweep
+   harness overrides them at compile time, so a build without -D keeps the
+   configuration that the official evaluation measured. */
+#ifndef SK_CAGRA_GRAPH_DEGREE
+#define SK_CAGRA_GRAPH_DEGREE 160
+#endif
+#ifndef SK_CAGRA_INTERMEDIATE_DEGREE
+#define SK_CAGRA_INTERMEDIATE_DEGREE 256
+#endif
+#ifndef SK_CAGRA_NITER
+#define SK_CAGRA_NITER 50
+#endif
+
 typedef struct {
   cuvsResources_t res;
   cuvsCagraIndexParams_t ip;
@@ -79,9 +92,9 @@ void *seekdb_cuvs_build(const float *base, long n, long dim)
       cuvsCagraSearchParamsCreate(&h->sp) != CUVS_SUCCESS) goto failed;
   /* Retain more final neighbors while reducing construction iterations. */
   h->ip->build_algo = NN_DESCENT;
-  h->ip->graph_degree = 160;
-  h->ip->intermediate_graph_degree = 256;
-  h->ip->nn_descent_niter = 50;
+  h->ip->graph_degree = SK_CAGRA_GRAPH_DEGREE;
+  h->ip->intermediate_graph_degree = SK_CAGRA_INTERMEDIATE_DEGREE;
+  h->ip->nn_descent_niter = SK_CAGRA_NITER;
   if (cuvsCagraBuild(h->res, h->ip, &dataset, h->idx) != CUVS_SUCCESS ||
       cuvsStreamSync(h->res) != CUVS_SUCCESS) goto failed;
   h->n = n;
