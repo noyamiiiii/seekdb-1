@@ -1,0 +1,124 @@
+{
+  "stage": "completed",
+  "results": [
+    {
+      "kind": "candidate20",
+      "dim": 128,
+      "rows": 250000,
+      "query_count": 64,
+      "real_gpu": true,
+      "sql_test": false,
+      "modes": {
+        "10": {
+          "recall": 0.96875,
+          "exact_ids_equal": true,
+          "fresh_repeat_equal": true,
+          "reuse_recall": 0.96875,
+          "recall_delta": 0.0,
+          "ids_and_distances_valid": true,
+          "fresh_seconds": [
+            0.004155807593633654,
+            0.004782000343766413,
+            0.004820102722078445,
+            0.0048169869878620375,
+            0.004807600062122219
+          ],
+          "reuse_seconds": [
+            0.002918743652116973,
+            0.003040582985704532,
+            0.003635663797467714,
+            0.003430711929468089,
+            0.003431598785027745
+          ],
+          "gpu_query_dispatch_speedup": 1.4013418092108971
+        },
+        "100": {
+          "recall": 0.93328125,
+          "exact_ids_equal": true,
+          "fresh_repeat_equal": false,
+          "reuse_recall": 0.93328125,
+          "recall_delta": 0.0,
+          "ids_and_distances_valid": true,
+          "fresh_seconds": [
+            0.004813675390323624,
+            0.004932437343086349,
+            0.00483984210586641,
+            0.004846741918299813,
+            0.0053868306713411584
+          ],
+          "reuse_seconds": [
+            0.0034318246289331,
+            0.0034755465767375426,
+            0.003432380937738344,
+            0.003483514816252864,
+            0.003434102191022248
+          ],
+          "gpu_query_dispatch_speedup": 1.4113563454723683
+        }
+      },
+      "build_first_sec": 11.102194693870842,
+      "reload_sec": 0.19223619112744927,
+      "snapshot_equal": true
+    },
+    {
+      "kind": "candidate20",
+      "dim": 256,
+      "rows": 250000,
+      "query_count": 64,
+      "real_gpu": true,
+      "sql_test": false,
+      "modes": {
+        "10": {
+          "recall": 0.9203125,
+          "exact_ids_equal": true,
+          "fresh_repeat_equal": true,
+          "reuse_recall": 0.9203125,
+          "recall_delta": 0.0,
+          "ids_and_distances_valid": true,
+          "fresh_seconds": [
+            0.005030192718550097,
+            0.005424428059995989,
+            0.005297261583109503,
+            0.005296591922160587,
+            0.005512478015589295
+          ],
+          "reuse_seconds": [
+            0.003881753034875146,
+            0.003896892636475968,
+            0.0038941776401770767,
+            0.003894653882525745,
+            0.003900019526554388
+          ],
+          "gpu_query_dispatch_speedup": 1.3601366752709088
+        },
+        "100": {
+          "recall": 0.85453125,
+          "exact_ids_equal": true,
+          "fresh_repeat_equal": false,
+          "reuse_recall": 0.85453125,
+          "recall_delta": 0.0,
+          "ids_and_distances_valid": true,
+          "fresh_seconds": [
+            0.00546805690646579,
+            0.005646691219226341,
+            0.005221058183451532,
+            0.005388459852838423,
+            0.005384007026805193
+          ],
+          "reuse_seconds": [
+            0.00427746480818314,
+            0.0038995774411887396,
+            0.003894676687195897,
+            0.003897520604368765,
+            0.003893996592523763
+          ],
+          "gpu_query_dispatch_speedup": 1.382535308934211
+        }
+      },
+      "build_first_sec": 11.280955670867115,
+      "reload_sec": 0.26797165907919407,
+      "snapshot_equal": true
+    }
+  ],
+  "running": 256
+}

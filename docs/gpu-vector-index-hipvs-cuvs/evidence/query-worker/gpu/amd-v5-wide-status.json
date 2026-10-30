@@ -1,0 +1,6 @@
+{
+  "stage": "failed",
+  "results": [],
+  "running": "candidate20wide-128",
+  "error": "[seekdb_cuvs] search rc=15: (null)\nTraceback (most recent call last):\n  File \"/workspace/amd-v5-gpu/benchmark.py\", line 28, in <module>\n    query(h,0,100,0);out['build_first_sec']=time.perf_counter()-start\n    ^^^^^^^^^^^^^^^^\n  File \"/workspace/amd-v5-gpu/benchmark.py\", line 20, in query\n    if rc:raise RuntimeError('search rc='+str(rc))\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nRuntimeError: search rc=15\n"
+}

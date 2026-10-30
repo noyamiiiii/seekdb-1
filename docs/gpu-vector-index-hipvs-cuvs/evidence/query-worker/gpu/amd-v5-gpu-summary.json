@@ -1,0 +1,40 @@
+[
+  {
+    "dimension": 128,
+    "rows": 250000,
+    "bridge_build_speedup": 1.0539210795930918,
+    "query_speedups_vs_frozen_bridge": {
+      "10": 1.4285279978944738,
+      "100": 1.4478793077809144
+    },
+    "query_geo": 1.4381711055146067,
+    "baseline_recall": {
+      "10": 0.9796875,
+      "100": 0.96109375
+    },
+    "candidate_recall": {
+      "10": 0.984375,
+      "100": 0.9653125
+    },
+    "snapshot_equal": true
+  },
+  {
+    "dimension": 256,
+    "rows": 250000,
+    "bridge_build_speedup": 1.0016268268734703,
+    "query_speedups_vs_frozen_bridge": {
+      "10": 1.366597093007105,
+      "100": 1.3502634271891565
+    },
+    "query_geo": 1.3584057105263185,
+    "baseline_recall": {
+      "10": 0.9515625,
+      "100": 0.89609375
+    },
+    "candidate_recall": {
+      "10": 0.95625,
+      "100": 0.90125
+    },
+    "snapshot_equal": true
+  }
+]
