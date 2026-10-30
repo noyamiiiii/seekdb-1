@@ -2,7 +2,7 @@
 
 The construction knobs live in `tools/hipvs_bridge/seekdb_cuvs_bridge.c` as
 `SK_CAGRA_GRAPH_DEGREE`, `SK_CAGRA_INTERMEDIATE_DEGREE` and `SK_CAGRA_NITER`.
-Their defaults are the values the official evaluation measured (160 / 256 / 50),
+Their defaults are the swept best (160 / 192 / 50),
 so a normal build is unchanged. The sweep overrides them with `-D` at compile
 time and never edits the source between runs.
 

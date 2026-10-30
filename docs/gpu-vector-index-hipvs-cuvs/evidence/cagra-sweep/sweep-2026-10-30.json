@@ -1,0 +1,14 @@
+{
+  "source": "Radeon Cloud instance rgapi-hf-25065-144c24aa, 2026-10-30",
+  "rows": 250000,
+  "units": "build_first_sec from query-worker/gpu/benchmark.py",
+  "results": [
+    {"config": "160:256:50", "dim128": {"build": 17.361, "rel": 1.00, "r10": 0.9891, "r100": 0.9752}, "dim256": {"build": 17.608, "rel": 1.00, "r10": 0.9578, "r100": 0.9095}},
+    {"config": "160:192:50", "dim128": {"build": 11.481, "rel": 1.51, "r10": 0.9906, "r100": 0.9781}, "dim256": {"build": 11.400, "rel": 1.54, "r10": 0.9547, "r100": 0.9109}},
+    {"config": "192:256:40", "dim128": {"build": 16.171, "rel": 1.07, "r10": 0.9953, "r100": 0.9806}, "dim256": {"build": 16.159, "rel": 1.09, "r10": 0.9734, "r100": 0.9223}},
+    {"config": "192:256:30", "dim128": {"build": 14.073, "rel": 1.23, "r10": 0.9922, "r100": 0.9741}, "dim256": {"build": 14.097, "rel": 1.25, "r10": 0.9594, "r100": 0.9147}},
+    {"config": "128:192:60", "dim128": {"build": 11.859, "rel": 1.46, "r10": 0.9828, "r100": 0.9683}, "dim256": {"build": 11.820, "rel": 1.49, "r10": 0.9594, "r100": 0.8894}},
+    {"config": "256:256:25", "dim128": {"build": 14.560, "rel": 1.19, "r10": 0.9891, "r100": 0.9803}, "dim256": {"build": 14.925, "rel": 1.18, "r10": 0.9656, "r100": 0.9289}}
+  ],
+  "decision": "160:192:50 keeps recall at or above the previous candidate on 128d and within 0.0031 on 256d r@10 while cutting construction by 1.51-1.54x, so it becomes the production default."
+}
