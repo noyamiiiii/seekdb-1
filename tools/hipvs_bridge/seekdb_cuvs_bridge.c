@@ -50,6 +50,11 @@
 #ifndef SK_CAGRA_IVFPQ_TRAINSET
 #define SK_CAGRA_IVFPQ_TRAINSET 0.0
 #endif
+/* >1 recomputes exact distances for the top (rate * k) graph candidates,
+   trading build time for recall. 1 keeps the library default (off). */
+#ifndef SK_CAGRA_IVFPQ_REFINE
+#define SK_CAGRA_IVFPQ_REFINE 1.0
+#endif
 
 typedef struct {
   cuvsResources_t res;
@@ -144,6 +149,9 @@ void *seekdb_cuvs_build(const float *base, long n, long dim)
   if (SK_CAGRA_IVFPQ_PROBES) h->pq_search->n_probes = SK_CAGRA_IVFPQ_PROBES;
   h->ip->graph_build_params->ivf_pq_build_params = h->pq_build;
   h->ip->graph_build_params->ivf_pq_search_params = h->pq_search;
+  if (SK_CAGRA_IVFPQ_REFINE > 1.0) {
+    h->ip->graph_build_params->refinement_rate = SK_CAGRA_IVFPQ_REFINE;
+  }
 #endif
   if (cuvsCagraBuild(h->res, h->ip, &dataset, h->idx) != CUVS_SUCCESS ||
       cuvsStreamSync(h->res) != CUVS_SUCCESS) goto failed;

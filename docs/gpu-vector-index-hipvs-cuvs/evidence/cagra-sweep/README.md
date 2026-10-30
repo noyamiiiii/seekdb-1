@@ -58,9 +58,11 @@ hipVS also exposes `build_algo = IVF_PQ`, which builds the neighbour graph with
 an IVF-PQ all-neighbours search instead of NN-descent. The bridge accepts this
 through `SK_CAGRA_BUILD_ALGO=1` plus `SK_CAGRA_IVFPQ_LISTS`,
 `SK_CAGRA_IVFPQ_PROBES`, `SK_CAGRA_IVFPQ_PQ_BITS`, `SK_CAGRA_IVFPQ_PQ_DIM`,
-`SK_CAGRA_IVFPQ_KMEANS_ITERS` and `SK_CAGRA_IVFPQ_TRAINSET`; zero keeps the
-library heuristic. The sweep writes those configurations as
-`ivfpq:degree:intermediate:n_lists:n_probes[:pq_bits]`, for example:
+`SK_CAGRA_IVFPQ_KMEANS_ITERS`, `SK_CAGRA_IVFPQ_TRAINSET` and
+`SK_CAGRA_IVFPQ_REFINE`; zero keeps the library heuristic, and a refinement
+rate above 1 recomputes exact distances for that multiple of the graph degree.
+The sweep writes those configurations as
+`ivfpq:degree:intermediate:n_lists:n_probes[:pq_bits[:refine]]`, for example:
 
 ```bash
 AMD_TEST_ROWS=250000 python3 docs/gpu-vector-index-hipvs-cuvs/evidence/cagra-sweep/sweep.py \
@@ -70,6 +72,12 @@ AMD_TEST_ROWS=250000 python3 docs/gpu-vector-index-hipvs-cuvs/evidence/cagra-swe
 The default production build remains NN-descent 160/192/40 until an IVF-PQ
 configuration both beats it on time and keeps Recall@10 comfortably above the
 official thresholds.
+
+The 2026-10-30 IVF-PQ round on 250K Gaussian rows measured 7.70 s / 0.9859 at
+128D for `512:20`, but 11.28 s at 256D, slower than NN-descent. Every IVF-PQ
+setting plateaued at Recall@10 around 0.986, which points at the PQ codebook
+rather than the number of probed lists. Refinement is the remaining knob for
+that gap.
 
 ## Second change in this branch
 

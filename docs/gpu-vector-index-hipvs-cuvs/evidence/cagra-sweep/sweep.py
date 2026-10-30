@@ -45,11 +45,15 @@ def run(cmd: list[str], env: dict[str, str], what: str) -> None:
 def parse_config(spec: str) -> tuple[str, list[str]]:
     parts = spec.split(":")
     if parts[0] == "ivfpq":
-        if len(parts) not in (5, 6):
-            raise SystemExit(f"bad IVF-PQ config {spec!r}; want ivfpq:degree:intermediate:lists:probes[:pq_bits]")
+        if len(parts) not in (5, 6, 7):
+            raise SystemExit(
+                f"bad IVF-PQ config {spec!r}; want "
+                "ivfpq:degree:intermediate:lists:probes[:pq_bits[:refine]]"
+            )
         degree, intermediate, lists, probes = (int(part) for part in parts[1:5])
-        pq_bits = int(parts[5]) if len(parts) == 6 else 8
-        tag = f"pq{lists}p{probes}b{pq_bits}d{degree}i{intermediate}"
+        pq_bits = int(parts[5]) if len(parts) >= 6 else 8
+        refine = parts[6] if len(parts) == 7 else "1"
+        tag = f"pq{lists}p{probes}b{pq_bits}r{refine.replace('.', '')}d{degree}i{intermediate}"
         flags = [
             "-DSK_CAGRA_BUILD_ALGO=1",
             f"-DSK_CAGRA_GRAPH_DEGREE={degree}",
@@ -57,6 +61,7 @@ def parse_config(spec: str) -> tuple[str, list[str]]:
             f"-DSK_CAGRA_IVFPQ_LISTS={lists}",
             f"-DSK_CAGRA_IVFPQ_PROBES={probes}",
             f"-DSK_CAGRA_IVFPQ_PQ_BITS={pq_bits}",
+            f"-DSK_CAGRA_IVFPQ_REFINE={refine}",
         ]
         return tag, flags
     if len(parts) != 3:
