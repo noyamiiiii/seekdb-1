@@ -27,12 +27,12 @@ HARNESS = ROOT / "docs" / "gpu-vector-index-hipvs-cuvs" / "evidence" / "query-wo
 OUT = Path(__file__).resolve().parent
 
 DEFAULT_CONFIGS = [
-    "160:256:50",
-    "160:192:50",
-    "192:256:40",
-    "192:256:30",
-    "128:192:60",
-    "256:256:25",
+    "160:192:40",
+    "160:192:35",
+    "160:192:30",
+    "176:192:40",
+    "144:192:40",
+    "128:192:40",
 ]
 
 
@@ -142,7 +142,9 @@ def main() -> int:
     by_dim: dict[int, float] = {}
     for row in rows:
         if "build_sec" in row:
-            by_dim.setdefault(row["dim"], min(by_dim.get(row["dim"], 1e9), row["build_sec"]))
+            fastest = by_dim.get(row["dim"])
+            if fastest is None or row["build_sec"] < fastest:
+                by_dim[row["dim"]] = row["build_sec"]
     print("\nrelative to the fastest configuration per dimension")
     for row in rows:
         if "build_sec" not in row:

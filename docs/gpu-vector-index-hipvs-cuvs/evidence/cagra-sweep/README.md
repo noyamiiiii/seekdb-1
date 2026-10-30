@@ -2,9 +2,9 @@
 
 The construction knobs live in `tools/hipvs_bridge/seekdb_cuvs_bridge.c` as
 `SK_CAGRA_GRAPH_DEGREE`, `SK_CAGRA_INTERMEDIATE_DEGREE` and `SK_CAGRA_NITER`.
-Their defaults are the swept best (160 / 192 / 50),
-so a normal build is unchanged. The sweep overrides them with `-D` at compile
-time and never edits the source between runs.
+Their defaults are the swept best (160 / 192 / 40), so a normal build is
+unchanged. The sweep overrides them with `-D` at compile time and never edits
+the source between runs.
 
 ## Running on the Radeon instance
 
@@ -36,6 +36,21 @@ official timing uses. Recall must stay at or above the candidate that already
 scored `build=1.379x`; the pairing matters more than the absolute seconds,
 because the evaluator always compares against the frozen baseline in the same
 run.
+
+## Results so far
+
+`sweep-2026-10-30.json` is the first round that selected `160:192:50` over
+`160:256:50`. `sweep-2026-10-30-round2.json` is the follow-up that moved the
+iteration count to 40: on the same 250K-row proxy data it builds in
+10.13 s (128D) and 10.61 s (256D), against 17.36 s and 17.61 s for the
+previous submission's `160:256:50`, a 1.71x / 1.66x reduction. Recall@10 stays
+at 0.9891 (128D) and 0.9688 (256D).
+
+Both files report `rel` as speed relative to the fastest configuration within
+the same dimension and round. Earlier versions of this script printed wrong
+relative values for rows after the first one because of a `dict.setdefault`
+mistake; that is fixed now, and the JSON numbers were computed from the
+recorded `build` seconds.
 
 ## Second change in this branch
 

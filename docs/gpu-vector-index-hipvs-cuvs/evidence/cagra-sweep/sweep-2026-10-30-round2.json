@@ -1,0 +1,14 @@
+{
+  "source": "Radeon Cloud instance rgapi-hf-25065-144c24aa, 2026-10-30, second round",
+  "rows": 250000,
+  "units": "build_first_sec from query-worker/gpu/benchmark.py",
+  "results": [
+    {"config": "160:192:50", "dim128": {"build": 11.613, "rel": 0.87, "r10": 0.9906, "r100": null}, "dim256": {"build": 11.517, "rel": 0.92, "r10": 0.9609, "r100": null}},
+    {"config": "160:224:50", "dim128": {"build": 14.102, "rel": 0.72, "r10": 0.9547, "r100": null}, "dim256": {"build": 14.107, "rel": 0.75, "r10": 0.8938, "r100": null}},
+    {"config": "160:192:40", "dim128": {"build": 10.133, "rel": 1.00, "r10": 0.9891, "r100": null}, "dim256": {"build": 10.608, "rel": 1.00, "r10": 0.9688, "r100": null}},
+    {"config": "192:192:40", "dim128": {"build": 10.680, "rel": 0.95, "r10": 0.9969, "r100": null}, "dim256": {"build": 10.861, "rel": 0.98, "r10": 0.9594, "r100": null}},
+    {"config": "160:160:50", "dim128": {"build": 10.365, "rel": 0.98, "r10": 0.9906, "r100": null}, "dim256": {"build": 10.788, "rel": 0.98, "r10": 0.9531, "r100": null}}
+  ],
+  "notes": "Recall@100 was not captured from the console for this round. 160:224:50 is rejected: 256D Recall@10 collapsed to 0.8938. Repeated 160:192:50 runs differ by up to 0.006 in 256D Recall@10, so changes under that size are noise on this proxy set.",
+  "decision": "160:192:40 is the fastest passing candidate: 1.71x (128D) and 1.66x (256D) faster than the 160:256:50 configuration that scored build=1.379x officially, with 128D Recall@10 unchanged at 0.9891 and 256D at 0.9688."
+}

@@ -24,7 +24,7 @@
 #define SK_CAGRA_INTERMEDIATE_DEGREE 192
 #endif
 #ifndef SK_CAGRA_NITER
-#define SK_CAGRA_NITER 50
+#define SK_CAGRA_NITER 40
 #endif
 
 typedef struct {
