@@ -1,0 +1,108 @@
+{
+  "stage": "completed",
+  "results": [
+    {
+      "kind": "candidate90",
+      "dim": 128,
+      "rows": 250000,
+      "query_count": 256,
+      "real_gpu": true,
+      "sql_test": false,
+      "modes": {
+        "10": {
+          "recall": 0.98671875,
+          "exact_ids_equal": true,
+          "fresh_repeat_equal": true,
+          "reuse_recall": 0.98671875,
+          "recall_delta": 0.0,
+          "ids_and_distances_valid": true,
+          "fresh_seconds": [
+            0.004272947682693484,
+            0.004679311448853696,
+            0.004702510499555501
+          ],
+          "reuse_seconds": [
+            0.0034766618482535705,
+            0.0035174803524569143,
+            0.0037180661056481767
+          ],
+          "gpu_query_dispatch_speedup": 1.3303020855781775
+        },
+        "100": {
+          "recall": 0.9627734375,
+          "exact_ids_equal": true,
+          "fresh_repeat_equal": true,
+          "reuse_recall": 0.9627734375,
+          "recall_delta": 0.0,
+          "ids_and_distances_valid": true,
+          "fresh_seconds": [
+            0.0047081072898436105,
+            0.0047589742971467786,
+            0.004687005019150092
+          ],
+          "reuse_seconds": [
+            0.003462668501015287,
+            0.0034923072962556034,
+            0.0034532733479863964
+          ],
+          "gpu_query_dispatch_speedup": 1.3596760095467266
+        }
+      },
+      "build_first_sec": 22.93715731613338,
+      "reload_sec": 0.19358837604522705,
+      "snapshot_equal": true
+    },
+    {
+      "kind": "candidate90",
+      "dim": 256,
+      "rows": 250000,
+      "query_count": 256,
+      "real_gpu": true,
+      "sql_test": false,
+      "modes": {
+        "10": {
+          "recall": 0.95234375,
+          "exact_ids_equal": true,
+          "fresh_repeat_equal": true,
+          "reuse_recall": 0.95234375,
+          "recall_delta": 0.0,
+          "ids_and_distances_valid": true,
+          "fresh_seconds": [
+            0.0053111114302737406,
+            0.005307299512423924,
+            0.005358625612643664
+          ],
+          "reuse_seconds": [
+            0.003907215605067904,
+            0.003906384716174216,
+            0.0039319098395935725
+          ],
+          "gpu_query_dispatch_speedup": 1.359308512021936
+        },
+        "100": {
+          "recall": 0.9007421875,
+          "exact_ids_equal": false,
+          "fresh_repeat_equal": false,
+          "reuse_recall": 0.9007421875,
+          "recall_delta": 0.0,
+          "ids_and_distances_valid": true,
+          "fresh_seconds": [
+            0.005183966199183487,
+            0.005342627518984955,
+            0.0053037374764244305
+          ],
+          "reuse_seconds": [
+            0.003908650558514637,
+            0.003908336266249535,
+            0.003908015762135619
+          ],
+          "gpu_query_dispatch_speedup": 1.3570320246558345
+        }
+      },
+      "build_first_sec": 21.826533569023013,
+      "reload_sec": 0.28348180605098605,
+      "snapshot_equal": true
+    }
+  ],
+  "running": "candidate90-256"
+}

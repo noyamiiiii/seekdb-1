@@ -1,0 +1,11 @@
+{
+  "id": 47231289,
+  "created": "2026-10-30T01:45:29.000+00:00",
+  "branch": "amd-cagra-v5-repair",
+  "commit": "76a68f2fca8807fece1b9c6ba0e4058c1924f101",
+  "taskStatus": 2,
+  "failMsg": 0,
+  "score": 5655,
+  "testCaseResult": "[{\"testCase\":\"使用 hipVS 加速 HNSW 索引构建\",\"resultStatus\":1,\"score\":\"5.655\",\"questionScore\":\"20\",\"message\":\"build=1.135x, query=1.009x, gates=pass\",\"subQuestionId\":800509}]",
+  "errorMessage": ""
+}

@@ -1,0 +1,42 @@
+{
+  "source_sha256": "eb2d9865bc43594fb428b2d499acef79efd7463b487e8ff7547c6cbbeeb34f06",
+  "host_contract_groups": 32,
+  "gpu_bridge_compiled": true,
+  "gpu_validation": [
+    {
+      "dimension": 128,
+      "rows": 250000,
+      "recall_queries": 256,
+      "baseline_build_sec": 25.494200637564063,
+      "candidate_build_sec": 16.017752370797098,
+      "build_speedup": 1.5916215987983453,
+      "recall_delta": {
+        "10": 0.002343749999999978,
+        "100": 0.011679687500000036
+      },
+      "query_speedup": {
+        "10": 1.3643868893856184,
+        "100": 1.3915587514815653
+      }
+    },
+    {
+      "dimension": 256,
+      "rows": 250000,
+      "recall_queries": 256,
+      "baseline_build_sec": 24.84175606817007,
+      "candidate_build_sec": 17.29933338984847,
+      "build_speedup": 1.4359949894224027,
+      "recall_delta": {
+        "10": 0.008203125000000089,
+        "100": 0.011132812499999978
+      },
+      "query_speedup": {
+        "10": 1.280530681612109,
+        "100": 1.280754596746143
+      }
+    }
+  ],
+  "formal_sql_tested": false,
+  "full_server_linked": false,
+  "official_score": null
+}

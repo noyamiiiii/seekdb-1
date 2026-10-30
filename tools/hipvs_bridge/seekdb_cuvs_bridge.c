@@ -77,11 +77,11 @@ void *seekdb_cuvs_build(const float *base, long n, long dim)
       cuvsCagraIndexParamsCreate(&h->ip) != CUVS_SUCCESS ||
       cuvsCagraIndexCreate(&h->idx) != CUVS_SUCCESS ||
       cuvsCagraSearchParamsCreate(&h->sp) != CUVS_SUCCESS) goto failed;
-  /* Keep the frozen V5 graph quality settings. */
+  /* Retain more final neighbors while reducing construction iterations. */
   h->ip->build_algo = NN_DESCENT;
-  h->ip->graph_degree = 128;
+  h->ip->graph_degree = 160;
   h->ip->intermediate_graph_degree = 256;
-  h->ip->nn_descent_niter = 100;
+  h->ip->nn_descent_niter = 50;
   if (cuvsCagraBuild(h->res, h->ip, &dataset, h->idx) != CUVS_SUCCESS ||
       cuvsStreamSync(h->res) != CUVS_SUCCESS) goto failed;
   h->n = n;
