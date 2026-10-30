@@ -79,6 +79,24 @@ setting plateaued at Recall@10 around 0.986, which points at the PQ codebook
 rather than the number of probed lists. Refinement is the remaining knob for
 that gap.
 
+## Exact-graph construction
+
+`SK_CAGRA_BUILD_ALGO=3` skips NN-descent entirely: hipVS brute force computes
+the exact `graph_degree` nearest neighbours of every row, then
+`cuvsCagraIndexFromArgs` adopts that graph together with the dataset. There is
+no pruning pass and the graph rows are already distance-sorted. The sweep spells
+this `bf:graph_degree`:
+
+```bash
+AMD_TEST_ROWS=250000 python3 docs/gpu-vector-index-hipvs-cuvs/evidence/cagra-sweep/sweep.py \
+  bf:160 bf:96 bf:64
+```
+
+If brute force is cheaper than 250K x 250K x 40 NN-descent iterations on this
+GPU, the build becomes compute bound on one fused pass and recall is the exact
+kNN graph rather than an approximation. The trade-off to measure is wall time,
+not quality.
+
 ## Second change in this branch
 
 `ObCuvsSnapshotFile` staged the cuVS graph in `tmpfile()` on the data disk and

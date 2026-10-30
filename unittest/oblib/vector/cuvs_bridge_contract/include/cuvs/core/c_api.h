@@ -7,6 +7,7 @@ extern "C" {
 #endif
 typedef void* cuvsResources_t;
 typedef enum {CUVS_SUCCESS=0, CUVS_ERROR=1} cuvsError_t;
+typedef enum {L2Expanded=0} cuvsDistanceType;
 cuvsError_t cuvsResourcesCreate(cuvsResources_t*);
 cuvsError_t cuvsResourcesDestroy(cuvsResources_t);
 cuvsError_t cuvsStreamSync(cuvsResources_t);

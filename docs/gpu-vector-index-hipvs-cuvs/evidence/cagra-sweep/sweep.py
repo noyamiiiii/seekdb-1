@@ -44,6 +44,13 @@ def run(cmd: list[str], env: dict[str, str], what: str) -> None:
 
 def parse_config(spec: str) -> tuple[str, list[str]]:
     parts = spec.split(":")
+    if parts[0] == "bf":
+        if len(parts) != 2:
+            raise SystemExit(f"bad brute-force config {spec!r}; want bf:graph_degree")
+        degree = int(parts[1])
+        tag = f"bf{degree}"
+        flags = ["-DSK_CAGRA_BUILD_ALGO=3", f"-DSK_CAGRA_GRAPH_DEGREE={degree}"]
+        return tag, flags
     if parts[0] == "ivfpq":
         if len(parts) not in (5, 6, 7):
             raise SystemExit(

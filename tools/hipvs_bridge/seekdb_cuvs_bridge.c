@@ -2,6 +2,9 @@
 #include "seekdb_cuvs_bridge.h"
 #include <cuvs/core/c_api.h>
 #include <cuvs/neighbors/cagra.h>
+#if SK_CAGRA_BUILD_ALGO == 3
+#include <cuvs/neighbors/brute_force.h>
+#endif
 #include <dlpack/dlpack.h>
 #ifdef __HIP_PLATFORM_AMD__
 #include <cuvs/cuda_runtime.h>
@@ -114,6 +117,48 @@ void seekdb_cuvs_free(void *handle)
   free(h);
 }
 
+#if SK_CAGRA_BUILD_ALGO == 3
+/* Exact all-neighbours graph via brute force, then adopt it as the CAGRA graph.
+   Every row is sorted by distance, so the index can search it directly; the
+   graph degree equals SK_CAGRA_GRAPH_DEGREE and no pruning pass runs. */
+static int sk_cuvs_build_from_knn(sk_cuvs_index *h, const float *base, long n, long dim)
+{
+  const size_t k = SK_CAGRA_GRAPH_DEGREE;
+  size_t data_bytes = 0, graph_bytes = 0;
+  void *d_base = NULL, *d_graph = NULL, *d_dist = NULL;
+  cuvsBruteForceIndex_t bf = NULL;
+  int rc = 1;
+  if (checked_bytes(n, dim, &data_bytes) ||
+      (size_t)n > SIZE_MAX / k / sizeof(unsigned)) return 1;
+  graph_bytes = (size_t)n * k * sizeof(unsigned);
+  if (cuvsRMMAlloc(h->res, &d_base, data_bytes) != CUVS_SUCCESS) goto done;
+  if (cudaMemcpy(d_base, base, data_bytes, cudaMemcpyDefault) != cudaSuccess) goto done;
+  long dataset_shape[2] = {n, dim}, graph_shape[2] = {n, (long)k};
+  DLManagedTensor dataset = tensor(d_base, dataset_shape, kDLCUDA, kDLFloat);
+  if (cuvsBruteForceIndexCreate(&bf) != CUVS_SUCCESS) goto done;
+  if (cuvsBruteForceBuild(h->res, &dataset, L2Expanded, 0.f, bf) != CUVS_SUCCESS) goto done;
+  if (cuvsRMMAlloc(h->res, &d_graph, graph_bytes) != CUVS_SUCCESS) goto done;
+  if (cuvsRMMAlloc(h->res, &d_dist, graph_bytes) != CUVS_SUCCESS) goto done;
+  DLManagedTensor graph = tensor(d_graph, graph_shape, kDLCUDA, kDLUInt);
+  DLManagedTensor dist = tensor(d_dist, graph_shape, kDLCUDA, kDLFloat);
+  cuvsFilter filter;
+  filter.type = NO_FILTER;
+  filter.addr = (uintptr_t)0;
+  if (cuvsBruteForceSearch(h->res, bf, &dataset, &graph, &dist, filter) != CUVS_SUCCESS ||
+      cuvsStreamSync(h->res) != CUVS_SUCCESS ||
+      cuvsCagraIndexFromArgs(h->res, L2Expanded, &graph, &dataset, h->idx) != CUVS_SUCCESS) {
+    goto done;
+  }
+  rc = 0;
+done:
+  if (bf) cuvsBruteForceIndexDestroy(bf);
+  if (d_base) cuvsRMMFree(h->res, d_base, data_bytes);
+  if (d_graph) cuvsRMMFree(h->res, d_graph, graph_bytes);
+  if (d_dist) cuvsRMMFree(h->res, d_dist, graph_bytes);
+  return rc;
+}
+#endif
+
 void *seekdb_cuvs_build(const float *base, long n, long dim)
 {
   size_t bytes = 0;
@@ -121,8 +166,10 @@ void *seekdb_cuvs_build(const float *base, long n, long dim)
   sk_cuvs_index *h = (sk_cuvs_index *)calloc(1, sizeof(*h));
   if (!h) return NULL;
   if (pthread_mutex_init(&h->mutex, NULL)) { free(h); return NULL; }
+#if SK_CAGRA_BUILD_ALGO != 3
   long shape[2] = {n, dim};
   DLManagedTensor dataset = tensor((void *)base, shape, kDLCPU, kDLFloat);
+#endif
   if (cuvsResourcesCreate(&h->res) != CUVS_SUCCESS ||
       cuvsCagraIndexParamsCreate(&h->ip) != CUVS_SUCCESS ||
       cuvsCagraIndexCreate(&h->idx) != CUVS_SUCCESS ||
@@ -153,8 +200,12 @@ void *seekdb_cuvs_build(const float *base, long n, long dim)
     h->ip->graph_build_params->refinement_rate = SK_CAGRA_IVFPQ_REFINE;
   }
 #endif
+#if SK_CAGRA_BUILD_ALGO == 3
+  if (sk_cuvs_build_from_knn(h, base, n, dim) != 0) goto failed;
+#else
   if (cuvsCagraBuild(h->res, h->ip, &dataset, h->idx) != CUVS_SUCCESS ||
       cuvsStreamSync(h->res) != CUVS_SUCCESS) goto failed;
+#endif
   h->n = n;
   h->dim = dim;
   h->default_itopk = h->sp->itopk_size;
