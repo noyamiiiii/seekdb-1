@@ -120,6 +120,13 @@ void seekdb_cuvs_free(void *handle)
 }
 
 #if SK_CAGRA_BUILD_ALGO == 3
+static void sk_cuvs_log_bf_cuvs_error(const char *stage, int status)
+{
+  const char *error = cuvsGetLastErrorText();
+  fprintf(stderr, "[seekdb_cuvs] bf stage=%s status=%d error=%s\n",
+          stage, status, error ? error : "(unavailable)");
+}
+
 /* Exact all-neighbours graph via brute force, then adopt it as the CAGRA graph.
    Every row is sorted by distance, so the index can search it directly; the
    graph degree equals SK_CAGRA_GRAPH_DEGREE and no pruning pass runs. */
@@ -131,24 +138,61 @@ static int sk_cuvs_build_from_knn(sk_cuvs_index *h, const float *base, long n, l
   cuvsBruteForceIndex_t bf = NULL;
   int rc = 1;
   if (checked_bytes(n, dim, &data_bytes) ||
-      (size_t)n > SIZE_MAX / k / sizeof(unsigned)) return 1;
+      k == 0 || (size_t)n > SIZE_MAX / k / sizeof(unsigned)) {
+    fprintf(stderr, "[seekdb_cuvs] bf stage=validate n=%ld dim=%ld k=%zu\n", n, dim, k);
+    return 1;
+  }
   graph_bytes = (size_t)n * k * sizeof(unsigned);
-  if (cuvsRMMAlloc(h->res, &d_base, data_bytes) != CUVS_SUCCESS) goto done;
-  if (cudaMemcpy(d_base, base, data_bytes, cudaMemcpyDefault) != cudaSuccess) goto done;
+  int status = (int)cuvsRMMAlloc(h->res, &d_base, data_bytes);
+  if (status != CUVS_SUCCESS) {
+    sk_cuvs_log_bf_cuvs_error("alloc-base", status);
+    goto done;
+  }
+  int copy_status = (int)cudaMemcpy(d_base, base, data_bytes, cudaMemcpyDefault);
+  if (copy_status != cudaSuccess) {
+    fprintf(stderr, "[seekdb_cuvs] bf stage=copy-base status=%d\n", copy_status);
+    goto done;
+  }
   long dataset_shape[2] = {n, dim}, graph_shape[2] = {n, (long)k};
   DLManagedTensor dataset = tensor(d_base, dataset_shape, kDLCUDA, kDLFloat);
-  if (cuvsBruteForceIndexCreate(&bf) != CUVS_SUCCESS) goto done;
-  if (cuvsBruteForceBuild(h->res, &dataset, L2Expanded, 0.f, bf) != CUVS_SUCCESS) goto done;
-  if (cuvsRMMAlloc(h->res, &d_graph, graph_bytes) != CUVS_SUCCESS) goto done;
-  if (cuvsRMMAlloc(h->res, &d_dist, graph_bytes) != CUVS_SUCCESS) goto done;
+  status = (int)cuvsBruteForceIndexCreate(&bf);
+  if (status != CUVS_SUCCESS) {
+    sk_cuvs_log_bf_cuvs_error("index-create", status);
+    goto done;
+  }
+  status = (int)cuvsBruteForceBuild(h->res, &dataset, L2Expanded, 0.f, bf);
+  if (status != CUVS_SUCCESS) {
+    sk_cuvs_log_bf_cuvs_error("index-build", status);
+    goto done;
+  }
+  status = (int)cuvsRMMAlloc(h->res, &d_graph, graph_bytes);
+  if (status != CUVS_SUCCESS) {
+    sk_cuvs_log_bf_cuvs_error("alloc-graph", status);
+    goto done;
+  }
+  status = (int)cuvsRMMAlloc(h->res, &d_dist, graph_bytes);
+  if (status != CUVS_SUCCESS) {
+    sk_cuvs_log_bf_cuvs_error("alloc-distances", status);
+    goto done;
+  }
   DLManagedTensor graph = tensor(d_graph, graph_shape, kDLCUDA, kDLUInt);
   DLManagedTensor dist = tensor(d_dist, graph_shape, kDLCUDA, kDLFloat);
   cuvsFilter filter;
   filter.type = NO_FILTER;
   filter.addr = (uintptr_t)0;
-  if (cuvsBruteForceSearch(h->res, bf, &dataset, &graph, &dist, filter) != CUVS_SUCCESS ||
-      cuvsStreamSync(h->res) != CUVS_SUCCESS ||
-      cuvsCagraIndexFromArgs(h->res, L2Expanded, &graph, &dataset, h->idx) != CUVS_SUCCESS) {
+  status = (int)cuvsBruteForceSearch(h->res, bf, &dataset, &graph, &dist, filter);
+  if (status != CUVS_SUCCESS) {
+    sk_cuvs_log_bf_cuvs_error("search", status);
+    goto done;
+  }
+  status = (int)cuvsStreamSync(h->res);
+  if (status != CUVS_SUCCESS) {
+    sk_cuvs_log_bf_cuvs_error("stream-sync", status);
+    goto done;
+  }
+  status = (int)cuvsCagraIndexFromArgs(h->res, L2Expanded, &graph, &dataset, h->idx);
+  if (status != CUVS_SUCCESS) {
+    sk_cuvs_log_bf_cuvs_error("cagra-index-from-args", status);
     goto done;
   }
   rc = 0;
