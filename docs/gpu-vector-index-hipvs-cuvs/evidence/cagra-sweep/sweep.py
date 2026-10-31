@@ -174,8 +174,9 @@ def main() -> int:
             log = OUT / f"{tag}-{dim}.log"
             log.write_text(proc.stdout + proc.stderr)
             if proc.returncode:
-                rows.append({"config": spec, "dim": dim, "error": proc.stderr[-1500:]})
-                print(f"{spec} dim={dim} FAILED, see {log}", flush=True)
+                detail = (proc.stdout + proc.stderr)[-2500:]
+                rows.append({"config": spec, "dim": dim, "error": detail})
+                print(f"{spec} dim={dim} FAILED, log={log}\n{detail}", flush=True)
                 continue
             report = json.loads((HARNESS / f"{tag}-{dim}.json").read_text())
             row = {
