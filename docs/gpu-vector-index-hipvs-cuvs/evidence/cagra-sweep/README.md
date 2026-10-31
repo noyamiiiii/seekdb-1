@@ -15,7 +15,8 @@ AMD_TEST_ROWS=250000 python3 docs/gpu-vector-index-hipvs-cuvs/evidence/cagra-swe
 ```
 
 Pass configurations as arguments to replace the default list, where each entry
-is `graph_degree:intermediate_degree:niter`:
+is `graph_degree:intermediate_degree:niter`, `iter:graph_degree[:intermediate_degree]`,
+or an `ivfpq:...` configuration:
 
 ```bash
 AMD_TEST_ROWS=250000 AMD_SWEEP_DIMS=256 \
@@ -69,9 +70,8 @@ AMD_TEST_ROWS=250000 python3 docs/gpu-vector-index-hipvs-cuvs/evidence/cagra-swe
   160:192:40 ivfpq:160:192:512:20 ivfpq:160:192:1024:32 ivfpq:160:192:2048:64
 ```
 
-The default production build remains NN-descent 160/192/40 until an IVF-PQ
-configuration both beats it on time and keeps Recall@10 comfortably above the
-official thresholds.
+The production default remains NN-descent 160/192/40 until another path beats
+it on build time and keeps Recall@10/100 within the official gates.
 
 The 2026-10-30 IVF-PQ round on 250K Gaussian rows measured 7.70 s / 0.9859 at
 128D for `512:20`, but 11.28 s at 256D, slower than NN-descent. Every IVF-PQ
@@ -96,6 +96,23 @@ If brute force is cheaper than 250K x 250K x 40 NN-descent iterations on this
 GPU, the build becomes compute bound on one fused pass and recall is the exact
 kNN graph rather than an approximation. The trade-off to measure is wall time,
 not quality.
+
+## Iterative CAGRA construction
+
+`ITERATIVE_CAGRA_SEARCH` builds its kNN graph by repeatedly calling CAGRA search
+and graph optimization. The sweep accepts `iter:graph_degree:intermediate_degree`;
+for example:
+
+```bash
+AMD_TEST_ROWS=250000 python3 docs/gpu-vector-index-hipvs-cuvs/evidence/cagra-sweep/sweep.py \
+  160:192:40 192:192:30 192:192:25 224:192:25 224:192:20 256:192:20 iter:160 iter:192
+```
+
+The hipVS API marks this build algorithm experimental. Keep it as a benchmark
+candidate until the real instance confirms both build time and Recall@10/100
+on the relevant data. The latest official result supplied by the user is
+16.686/20 (`build=2.313x`, `query=1.680x`, gates pass); it is the current
+submission baseline, not an estimate of this experiment.
 
 ## Second change in this branch
 

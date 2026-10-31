@@ -10,6 +10,7 @@ Run on the Radeon Cloud instance from the repository root:
     AMD_TEST_ROWS=250000 python3 docs/gpu-vector-index-hipvs-cuvs/evidence/cagra-sweep/sweep.py
 
 NN-descent configurations are written as graph_degree:intermediate_degree:niter.
+Iterative CAGRA configurations are written as iter:graph_degree[:intermediate_degree].
 IVF-PQ configurations are written as
 ivfpq:graph_degree:intermediate_degree:n_lists:n_probes[:pq_bits]. Pass them as
 arguments to override the default list.
@@ -30,9 +31,13 @@ OUT = Path(__file__).resolve().parent
 
 DEFAULT_CONFIGS = [
     "160:192:40",
-    "ivfpq:160:192:512:20:8",
-    "ivfpq:160:192:1024:32:8",
-    "ivfpq:160:192:2048:64:8",
+    "192:192:30",
+    "192:192:25",
+    "224:192:25",
+    "224:192:20",
+    "256:192:20",
+    "iter:160",
+    "iter:192",
 ]
 
 
@@ -44,6 +49,18 @@ def run(cmd: list[str], env: dict[str, str], what: str) -> None:
 
 def parse_config(spec: str) -> tuple[str, list[str]]:
     parts = spec.split(":")
+    if parts[0] == "iter":
+        if len(parts) not in (2, 3):
+            raise SystemExit(f"bad iterative-search config {spec!r}; want iter:degree[:intermediate]")
+        degree = int(parts[1])
+        intermediate = int(parts[2]) if len(parts) == 3 else 192
+        tag = f"iterd{degree}i{intermediate}"
+        flags = [
+            "-DSK_CAGRA_BUILD_ALGO=4",
+            f"-DSK_CAGRA_GRAPH_DEGREE={degree}",
+            f"-DSK_CAGRA_INTERMEDIATE_DEGREE={intermediate}",
+        ]
+        return tag, flags
     if parts[0] == "bf":
         if len(parts) != 2:
             raise SystemExit(f"bad brute-force config {spec!r}; want bf:graph_degree")

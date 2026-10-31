@@ -29,7 +29,9 @@
 #ifndef SK_CAGRA_NITER
 #define SK_CAGRA_NITER 40
 #endif
-/* 0 auto, 1 IVF-PQ, 2 NN-descent. NN-descent is the tuned production path. */
+/* 0 auto, 1 IVF-PQ, 2 NN-descent, 3 exact brute-force graph,
+   4 CAGRA iterative search.
+   NN-descent is the tuned production path; 3 is handled outside CAGRA build. */
 #ifndef SK_CAGRA_BUILD_ALGO
 #define SK_CAGRA_BUILD_ALGO 2
 #endif
@@ -175,7 +177,13 @@ void *seekdb_cuvs_build(const float *base, long n, long dim)
       cuvsCagraIndexCreate(&h->idx) != CUVS_SUCCESS ||
       cuvsCagraSearchParamsCreate(&h->sp) != CUVS_SUCCESS) goto failed;
   /* Retain more final neighbors while reducing construction iterations. */
+#if SK_CAGRA_BUILD_ALGO == 4
+  h->ip->build_algo = ITERATIVE_CAGRA_SEARCH;
+#elif SK_CAGRA_BUILD_ALGO == 3
+  h->ip->build_algo = NN_DESCENT; /* custom exact graph path below */
+#else
   h->ip->build_algo = (enum cuvsCagraGraphBuildAlgo)SK_CAGRA_BUILD_ALGO;
+#endif
   h->ip->graph_degree = SK_CAGRA_GRAPH_DEGREE;
   h->ip->intermediate_graph_degree = SK_CAGRA_INTERMEDIATE_DEGREE;
   h->ip->nn_descent_niter = SK_CAGRA_NITER;
