@@ -1,0 +1,13 @@
+# Continue from the latest v8 branch (2026-10-31)
+
+The official task 47234222 scored a639b462d14633408fbee733dfb8d8dec064453f at 16.731/20: build 2.321x, query 1.706x, gates passed. The current branch head fcf627c65d57f0848f94e01c06a19dfef19130cd adds experimental brute-force diagnostics. This change descends directly from that latest head, preserving the NN-descent production defaults 160 / 192 / 40 and its snapshot I/O improvements.
+
+Two bugs in that head prevented reliable further construction experiments. The host API double used `sizeof(**p->graph_build_params)` against a pointer-to-pointer; it now sizes the pointed-to graph-build parameters correctly. The experimental exact-graph path jumped over initialized declarations in C++, so hipcc's C++ compilation could fail before running. Its locals now precede every possible cleanup jump. Resource cleanup and default-path behavior are unchanged.
+
+The contract runner now syntax-checks all five construction algorithms as C11 and C++17, then runs the actual default bridge under address/undefined/leak sanitizers. All compilation checks and 32 default contract groups pass. These are host contracts; they do not validate alternative GPU algorithms or performance.
+
+The GPU sweep now runs a small HIP kernel preflight before compiling and timing configurations. It checks allocation, launch, synchronization, device-to-host copy and the returned value. A stalled device exits within the diagnostic timeout instead of producing misleading slow-build measurements. The diagnostic is development-only and is not used to skip or alter official evaluation.
+
+Two fresh Radeon Cloud instances in this session allocated device memory successfully but timed out while synchronizing the minimal kernel. A 10K default construction also timed out; the frozen-baseline 250K construction did not complete in its expected window. Those observations are saved in evidence/oct31-validation. Their build timings were excluded. The full-source build and parameter sweep could not be completed on these instances. No production parameter change, official resubmission, speedup claim or full-score claim is made.
+
+Next, on a device that passes `python3 tools/hipvs_bridge/check_gpu.py`, compare the preserved 160:192:40 production configuration against 160:192:30, 160:160:35, 192:192:25 and 192:192:20. Use full Top-10/100 recall deltas against frozen V5, 4096 single-query SQLs, snapshot reload, sampled memory and the official construction window. Select a production change only from completed measurements. The original 16.731-point commit remains the formal scoring reference.

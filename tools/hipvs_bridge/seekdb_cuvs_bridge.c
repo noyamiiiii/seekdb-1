@@ -137,24 +137,27 @@ static int sk_cuvs_build_from_knn(sk_cuvs_index *h, const float *base, long n, l
   void *d_base = NULL, *d_graph = NULL, *d_dist = NULL;
   cuvsBruteForceIndex_t bf = NULL;
   int rc = 1;
+  int status = 0, copy_status = 0;
+  long dataset_shape[2] = {n, dim}, graph_shape[2] = {n, (long)k};
+  DLManagedTensor dataset, graph, dist;
+  cuvsFilter filter;
   if (checked_bytes(n, dim, &data_bytes) ||
       k == 0 || (size_t)n > SIZE_MAX / k / sizeof(unsigned)) {
     fprintf(stderr, "[seekdb_cuvs] bf stage=validate n=%ld dim=%ld k=%zu\n", n, dim, k);
     return 1;
   }
   graph_bytes = (size_t)n * k * sizeof(unsigned);
-  int status = (int)cuvsRMMAlloc(h->res, &d_base, data_bytes);
+  status = (int)cuvsRMMAlloc(h->res, &d_base, data_bytes);
   if (status != CUVS_SUCCESS) {
     sk_cuvs_log_bf_cuvs_error("alloc-base", status);
     goto done;
   }
-  int copy_status = (int)cudaMemcpy(d_base, base, data_bytes, cudaMemcpyDefault);
+  copy_status = (int)cudaMemcpy(d_base, base, data_bytes, cudaMemcpyDefault);
   if (copy_status != cudaSuccess) {
     fprintf(stderr, "[seekdb_cuvs] bf stage=copy-base status=%d\n", copy_status);
     goto done;
   }
-  long dataset_shape[2] = {n, dim}, graph_shape[2] = {n, (long)k};
-  DLManagedTensor dataset = tensor(d_base, dataset_shape, kDLCUDA, kDLFloat);
+  dataset = tensor(d_base, dataset_shape, kDLCUDA, kDLFloat);
   status = (int)cuvsBruteForceIndexCreate(&bf);
   if (status != CUVS_SUCCESS) {
     sk_cuvs_log_bf_cuvs_error("index-create", status);
@@ -175,9 +178,8 @@ static int sk_cuvs_build_from_knn(sk_cuvs_index *h, const float *base, long n, l
     sk_cuvs_log_bf_cuvs_error("alloc-distances", status);
     goto done;
   }
-  DLManagedTensor graph = tensor(d_graph, graph_shape, kDLCUDA, kDLUInt);
-  DLManagedTensor dist = tensor(d_dist, graph_shape, kDLCUDA, kDLFloat);
-  cuvsFilter filter;
+  graph = tensor(d_graph, graph_shape, kDLCUDA, kDLUInt);
+  dist = tensor(d_dist, graph_shape, kDLCUDA, kDLFloat);
   filter.type = NO_FILTER;
   filter.addr = (uintptr_t)0;
   status = (int)cuvsBruteForceSearch(h->res, bf, &dataset, &graph, &dist, filter);

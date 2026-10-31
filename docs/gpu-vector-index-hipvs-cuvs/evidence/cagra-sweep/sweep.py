@@ -151,6 +151,15 @@ def build_variant(tag: str, flags: list[str], env: dict[str, str]) -> None:
 
 
 def main() -> int:
+    # A device can allocate successfully while kernel execution is stuck. Do
+    # not record parameter timings from that state as an algorithm regression.
+    health = subprocess.run(
+        [sys.executable, str(BRIDGE_DIR / "check_gpu.py"),
+         "--output", str(OUT / "gpu-health.json")],
+        capture_output=True, text=True, timeout=120,
+    )
+    if health.returncode:
+        raise SystemExit("GPU preflight failed; no sweep was run:\n" + health.stdout + health.stderr)
     configs = sys.argv[1:] or DEFAULT_CONFIGS
     env = os.environ.copy()
     env["LD_LIBRARY_PATH"] = f"{OUT}:{HARNESS}:/opt/hipvs/lib:/opt/rocm/lib"

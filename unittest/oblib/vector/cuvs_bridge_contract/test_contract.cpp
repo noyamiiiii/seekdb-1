@@ -33,7 +33,7 @@ cuvsError_t cuvsResourcesDestroy(cuvsResources_t r){assert(r);free(r);--resource
 cuvsError_t cuvsStreamSync(cuvsResources_t){return fail("sync")?CUVS_ERROR:CUVS_SUCCESS;}
 cuvsError_t cuvsRMMAlloc(cuvsResources_t,void** p,size_t n){if(fail("alloc"))return CUVS_ERROR;*p=malloc(n);assert(*p);live[*p]=n;++allocations;return CUVS_SUCCESS;}
 cuvsError_t cuvsRMMFree(cuvsResources_t,void* p,size_t n){assert(live.count(p)&&live.at(p)==n);if(fail("free"))return CUVS_ERROR;live.erase(p);free(p);return CUVS_SUCCESS;}
-cuvsError_t cuvsCagraIndexParamsCreate(cuvsCagraIndexParams_t* p){if(fail("ip"))return CUVS_ERROR;*p=(cuvsCagraIndexParams_t)calloc(1,sizeof(**p));(*p)->graph_build_params=(cuvsIvfPqParams_t)calloc(1,sizeof(**p->graph_build_params));++index_params;return CUVS_SUCCESS;}
+cuvsError_t cuvsCagraIndexParamsCreate(cuvsCagraIndexParams_t* p){if(fail("ip"))return CUVS_ERROR;*p=(cuvsCagraIndexParams_t)calloc(1,sizeof(**p));(*p)->graph_build_params=(cuvsIvfPqParams_t)calloc(1,sizeof(*(*p)->graph_build_params));++index_params;return CUVS_SUCCESS;}
 cuvsError_t cuvsCagraIndexParamsDestroy(cuvsCagraIndexParams_t p){free(p->graph_build_params);free(p);--index_params;return CUVS_SUCCESS;}
 cuvsError_t cuvsIvfPqIndexParamsCreate(cuvsIvfPqIndexParams_t* p){assert(p);*p=(cuvsIvfPqIndexParams_t)calloc(1,sizeof(**p));++ivfpq_params;return CUVS_SUCCESS;}
 cuvsError_t cuvsIvfPqIndexParamsDestroy(cuvsIvfPqIndexParams_t p){assert(p);free(p);--ivfpq_params;return CUVS_SUCCESS;}

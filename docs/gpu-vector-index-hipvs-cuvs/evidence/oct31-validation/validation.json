@@ -1,0 +1,26 @@
+{
+  "parent_branch": "amd-cagra-v8-iterative",
+  "parent_commit": "fcf627c65d57f0848f94e01c06a19dfef19130cd",
+  "last_scored_commit": "a639b462d14633408fbee733dfb8d8dec064453f",
+  "official_score": 16.731,
+  "official_build_speedup": 2.321,
+  "official_query_speedup": 1.706,
+  "official_gates_passed": true,
+  "default_parameters_changed": false,
+  "construction_paths_compile_checked": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "compile_languages": [
+    "C11",
+    "C++17"
+  ],
+  "host_contract_groups_passed": 32,
+  "gpu_candidate_tested": false,
+  "new_submission": false,
+  "device_issue": "Two provisioned instances allocated HIP memory but minimal GPU kernel synchronization timed out. No performance conclusion was drawn.",
+  "source_sha256": "95d040a668272c7e510fe0f326c4eb609eb8e712415639b0e6272a912c41cac7"
+}

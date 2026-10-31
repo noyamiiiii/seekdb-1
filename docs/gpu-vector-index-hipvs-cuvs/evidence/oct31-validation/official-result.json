@@ -1,0 +1,11 @@
+{
+  "id": 47234222,
+  "created": "2026-10-31T02:50:26.000+00:00",
+  "branch": "amd-cagra-v8-iterative",
+  "commit": "a639b462d14633408fbee733dfb8d8dec064453f",
+  "taskStatus": 2,
+  "failMsg": 0,
+  "score": 16731,
+  "testCaseResult": "[{\"testCase\":\"使用 hipVS 加速 HNSW 索引构建\",\"resultStatus\":1,\"score\":\"16.731\",\"questionScore\":\"20\",\"message\":\"build=2.321x, query=1.706x, gates=pass\",\"subQuestionId\":800509}]",
+  "errorMessage": ""
+}

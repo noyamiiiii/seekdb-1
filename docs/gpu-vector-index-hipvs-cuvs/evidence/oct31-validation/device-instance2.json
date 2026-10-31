@@ -1,0 +1,5 @@
+{
+  "stage": "timeout",
+  "error": "Command '['/workspace/amd-oct31-lab/device']' timed out after 20 seconds",
+  "partial_stdout": "alloc 0\n"
+}
