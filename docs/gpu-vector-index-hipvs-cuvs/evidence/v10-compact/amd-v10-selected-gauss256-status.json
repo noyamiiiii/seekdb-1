@@ -1,0 +1,61 @@
+{
+  "stage": "completed",
+  "results": [
+    {
+      "kind": "compact10",
+      "niter": 10,
+      "dataset": "gauss256 public/proxy data, not official split",
+      "rows": 250000,
+      "dim": 256,
+      "query_count": 4096,
+      "queries": {
+        "10": {
+          "recall": 0.9352294921875,
+          "qps": 202.4271837913383,
+          "p95_ms": 4.989170527551323,
+          "ids_valid": true
+        },
+        "100": {
+          "recall": 0.8925048828125,
+          "qps": 183.15584889344478,
+          "p95_ms": 5.556093703489751,
+          "ids_valid": true
+        }
+      },
+      "build_first_sec": 11.197454273002222,
+      "vsag_sql_passed": true,
+      "restart_recall100": 0.8971875,
+      "restart_passed": true
+    },
+    {
+      "kind": "scored16",
+      "niter": 16,
+      "dataset": "gauss256 public/proxy data, not official split",
+      "rows": 250000,
+      "dim": 256,
+      "query_count": 4096,
+      "queries": {
+        "10": {
+          "recall": 0.9302734375,
+          "qps": 230.71440419932043,
+          "p95_ms": 4.374818468932062,
+          "ids_valid": true
+        },
+        "100": {
+          "recall": 0.8792138671875,
+          "qps": 205.0266509324981,
+          "p95_ms": 4.932018317049369,
+          "ids_valid": true
+        }
+      },
+      "build_first_sec": 12.60695438995026,
+      "vsag_sql_passed": true,
+      "restart_recall100": 0.8840625,
+      "restart_passed": true
+    }
+  ],
+  "official_test": false,
+  "running": "scored16",
+  "pid": 20629,
+  "topk": 100
+}

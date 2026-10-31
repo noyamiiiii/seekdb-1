@@ -1,0 +1,1 @@
+PASS adaptor compact/legacy snapshots, byte-identical reserialization, original IDs/vectors, no rebuild, malformed/truncated payloads, export-failure cleanup

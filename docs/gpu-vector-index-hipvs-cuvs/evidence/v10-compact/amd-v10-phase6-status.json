@@ -1,0 +1,114 @@
+{
+  "stage": "completed",
+  "results": [
+    {
+      "config": "n8w16r20",
+      "random_samplings": 20,
+      "dataset": "gauss256",
+      "exit": 0,
+      "measurement": {
+        "kind": "n8w16r20",
+        "dataset": "gauss256",
+        "rows": 250000,
+        "dim": 256,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 0.9296875,
+            "query_seconds": 2.9304570972453803,
+            "qps": 174.71677045921547,
+            "p95_seconds": 0.005264529027044773,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.89310546875,
+            "query_seconds": 2.6781153496121988,
+            "qps": 191.17921865245256,
+            "p95_seconds": 0.005288270034361631,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 6.426292476942763,
+        "serialize_sec": 0.4941108609782532,
+        "snapshot_bytes": 416001713,
+        "reload_first_sec": 0.28873491403646767,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "n8w16r20",
+      "random_samplings": 20,
+      "dataset": "gauss128",
+      "exit": 0,
+      "measurement": {
+        "kind": "n8w16r20",
+        "dataset": "gauss128",
+        "rows": 250000,
+        "dim": 128,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 0.97265625,
+            "query_seconds": 1.4573762973304838,
+            "qps": 351.31626673073004,
+            "p95_seconds": 0.002904927945928648,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.9449609375,
+            "query_seconds": 1.6444831755943596,
+            "qps": 311.34401835090205,
+            "p95_seconds": 0.0035775270836893467,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 6.194605055032298,
+        "serialize_sec": 0.33867017598822713,
+        "snapshot_bytes": 288001713,
+        "reload_first_sec": 0.19379249005578458,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "n8w16r20",
+      "random_samplings": 20,
+      "dataset": "sift512",
+      "exit": 0,
+      "measurement": {
+        "kind": "n8w16r20",
+        "dataset": "sift512",
+        "rows": 250000,
+        "dim": 128,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 1.0,
+            "query_seconds": 1.4458848093636334,
+            "qps": 354.10843013513835,
+            "p95_seconds": 0.0028752075508236886,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.99994140625,
+            "query_seconds": 1.6047980316216126,
+            "qps": 319.04326271053276,
+            "p95_seconds": 0.0032118440081831067,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 6.266945765935816,
+        "serialize_sec": 0.3458924370352179,
+        "snapshot_bytes": 288001713,
+        "reload_first_sec": 0.2029324269387871,
+        "snapshot_byte_equal": true
+      }
+    }
+  ],
+  "running": "n8w16r20-sift512"
+}

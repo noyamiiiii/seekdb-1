@@ -10,7 +10,7 @@ typedef struct {uint32_t n_probes;} *cuvsIvfPqSearchParams_t;
 typedef struct {cuvsIvfPqIndexParams_t ivf_pq_build_params;cuvsIvfPqSearchParams_t ivf_pq_search_params;float refinement_rate;} *cuvsIvfPqParams_t;
 typedef struct { int build_algo;size_t graph_degree,intermediate_graph_degree,nn_descent_niter;cuvsIvfPqParams_t graph_build_params; } *cuvsCagraIndexParams_t;
 typedef struct FakeCagraIndex *cuvsCagraIndex_t;
-typedef struct {size_t itopk_size,search_width;} *cuvsCagraSearchParams_t;
+typedef struct {size_t itopk_size,search_width;uint32_t num_random_samplings;} *cuvsCagraSearchParams_t;
 enum {NO_FILTER=0};typedef struct {int type;uintptr_t addr;} cuvsFilter;
 cuvsError_t cuvsCagraIndexParamsCreate(cuvsCagraIndexParams_t*);
 cuvsError_t cuvsCagraIndexParamsDestroy(cuvsCagraIndexParams_t);
@@ -29,6 +29,7 @@ cuvsError_t cuvsCagraDeserialize(cuvsResources_t,const char*,cuvsCagraIndex_t);
 cuvsError_t cuvsCagraIndexGetSize(cuvsCagraIndex_t,int64_t*);
 cuvsError_t cuvsCagraIndexFromArgs(cuvsResources_t,cuvsDistanceType,DLManagedTensor*,DLManagedTensor*,cuvsCagraIndex_t);
 cuvsError_t cuvsCagraIndexGetDims(cuvsCagraIndex_t,int64_t*);
+cuvsError_t cuvsCagraIndexGetDataset(cuvsCagraIndex_t,DLManagedTensor*);
 #ifdef __cplusplus
 }
 #endif

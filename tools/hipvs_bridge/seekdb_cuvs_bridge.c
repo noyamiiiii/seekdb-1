@@ -16,10 +16,11 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
-/* Construction knobs. The defaults are the tuned production values; the sweep
-   harness overrides them at compile time, so a build without -D keeps the
-   configuration that the official evaluation measured. */
+/* Construction/search knobs for this candidate. Compile-time overrides let the
+   development benchmark compare configurations without rewriting source.
+   Official scores and local measurements are recorded separately. */
 #ifndef SK_CAGRA_GRAPH_DEGREE
 #define SK_CAGRA_GRAPH_DEGREE 160
 #endif
@@ -27,7 +28,13 @@
 #define SK_CAGRA_INTERMEDIATE_DEGREE 192
 #endif
 #ifndef SK_CAGRA_NITER
-#define SK_CAGRA_NITER 16
+#define SK_CAGRA_NITER 10
+#endif
+#ifndef SK_CAGRA_SEARCH_WIDTH
+#define SK_CAGRA_SEARCH_WIDTH 16
+#endif
+#ifndef SK_CAGRA_RANDOM_SAMPLINGS
+#define SK_CAGRA_RANDOM_SAMPLINGS 16
 #endif
 /* 0 auto, 1 IVF-PQ, 2 NN-descent, 3 exact brute-force graph,
    4 CAGRA iterative search.
@@ -137,24 +144,27 @@ static int sk_cuvs_build_from_knn(sk_cuvs_index *h, const float *base, long n, l
   void *d_base = NULL, *d_graph = NULL, *d_dist = NULL;
   cuvsBruteForceIndex_t bf = NULL;
   int rc = 1;
+  int status = 0, copy_status = 0;
+  long dataset_shape[2] = {n, dim}, graph_shape[2] = {n, (long)k};
+  DLManagedTensor dataset, graph, dist;
+  cuvsFilter filter;
   if (checked_bytes(n, dim, &data_bytes) ||
       k == 0 || (size_t)n > SIZE_MAX / k / sizeof(unsigned)) {
     fprintf(stderr, "[seekdb_cuvs] bf stage=validate n=%ld dim=%ld k=%zu\n", n, dim, k);
     return 1;
   }
   graph_bytes = (size_t)n * k * sizeof(unsigned);
-  int status = (int)cuvsRMMAlloc(h->res, &d_base, data_bytes);
+  status = (int)cuvsRMMAlloc(h->res, &d_base, data_bytes);
   if (status != CUVS_SUCCESS) {
     sk_cuvs_log_bf_cuvs_error("alloc-base", status);
     goto done;
   }
-  int copy_status = (int)cudaMemcpy(d_base, base, data_bytes, cudaMemcpyDefault);
+  copy_status = (int)cudaMemcpy(d_base, base, data_bytes, cudaMemcpyDefault);
   if (copy_status != cudaSuccess) {
     fprintf(stderr, "[seekdb_cuvs] bf stage=copy-base status=%d\n", copy_status);
     goto done;
   }
-  long dataset_shape[2] = {n, dim}, graph_shape[2] = {n, (long)k};
-  DLManagedTensor dataset = tensor(d_base, dataset_shape, kDLCUDA, kDLFloat);
+  dataset = tensor(d_base, dataset_shape, kDLCUDA, kDLFloat);
   status = (int)cuvsBruteForceIndexCreate(&bf);
   if (status != CUVS_SUCCESS) {
     sk_cuvs_log_bf_cuvs_error("index-create", status);
@@ -175,9 +185,8 @@ static int sk_cuvs_build_from_knn(sk_cuvs_index *h, const float *base, long n, l
     sk_cuvs_log_bf_cuvs_error("alloc-distances", status);
     goto done;
   }
-  DLManagedTensor graph = tensor(d_graph, graph_shape, kDLCUDA, kDLUInt);
-  DLManagedTensor dist = tensor(d_dist, graph_shape, kDLCUDA, kDLFloat);
-  cuvsFilter filter;
+  graph = tensor(d_graph, graph_shape, kDLCUDA, kDLUInt);
+  dist = tensor(d_dist, graph_shape, kDLCUDA, kDLFloat);
   filter.type = NO_FILTER;
   filter.addr = (uintptr_t)0;
   status = (int)cuvsBruteForceSearch(h->res, bf, &dataset, &graph, &dist, filter);
@@ -305,11 +314,14 @@ int seekdb_cuvs_search(void *handle, const float *query, long nq, long topk,
   distances = tensor(h->distances, result_shape, kDLCUDA, kDLFloat);
   filter.type = NO_FILTER;
   filter.addr = (uintptr_t)0;
-  /* Match V5 for every request, including a small query after a large one. */
+  /* Reset supported search parameters for each request, including a small
+     query after a large one. Extra starting samples compensate for a shorter
+     graph construction; the fixed hipVS CAGRA search remains unchanged. */
   h->sp->itopk_size = (size_t)topk * 4;
   if (h->sp->itopk_size < 512) h->sp->itopk_size = 512;
   if (h->sp->itopk_size < h->default_itopk) h->sp->itopk_size = h->default_itopk;
-  h->sp->search_width = 4;
+  h->sp->search_width = SK_CAGRA_SEARCH_WIDTH;
+  h->sp->num_random_samplings = SK_CAGRA_RANDOM_SAMPLINGS;
   if (cuvsCagraSearch(h->res, h->sp, h->idx, &queries, &neighbors, &distances, filter) != CUVS_SUCCESS ||
       cuvsStreamSync(h->res) != CUVS_SUCCESS) { rc = 15; goto done; }
   if (cudaMemcpy(out_ids, h->neighbors, result_bytes, cudaMemcpyDefault) != cudaSuccess) { rc = 16; goto done; }
@@ -367,6 +379,43 @@ failed:
   fprintf(stderr, "[seekdb_cuvs] deserialize failed: %s\n", cuvsGetLastErrorText());
   seekdb_cuvs_free(h);
   return NULL;
+}
+
+int seekdb_cuvs_export_dataset(void *handle, float *base, long n, long dim)
+{
+  sk_cuvs_index *h = (sk_cuvs_index *)handle;
+  size_t bytes = 0;
+  if (!h || !base || n != h->n || dim != h->dim || checked_bytes(n, dim, &bytes)) return 1;
+  if (pthread_mutex_lock(&h->mutex)) return 2;
+  int rc = 1;
+  DLManagedTensor view = {0};
+  size_t pitch = 0, width = (size_t)dim * sizeof(float);
+  const char *source = NULL;
+  if (cuvsStreamSync(h->res) != CUVS_SUCCESS ||
+      cuvsCagraIndexGetDataset(h->idx, &view) != CUVS_SUCCESS) goto done;
+  if (!view.dl_tensor.data || view.dl_tensor.ndim != 2 || !view.dl_tensor.shape ||
+      view.dl_tensor.shape[0] != n || view.dl_tensor.shape[1] != dim ||
+      view.dl_tensor.dtype.code != kDLFloat || view.dl_tensor.dtype.bits != 32 ||
+      view.dl_tensor.dtype.lanes != 1) goto done;
+  pitch = width;
+  if (view.dl_tensor.strides) {
+    if (view.dl_tensor.strides[1] != 1 || view.dl_tensor.strides[0] < dim ||
+        (uint64_t)view.dl_tensor.strides[0] > SIZE_MAX / sizeof(float)) goto done;
+    pitch = (size_t)view.dl_tensor.strides[0] * sizeof(float);
+  }
+  if ((size_t)(n - 1) > (SIZE_MAX - width) / pitch ||
+      view.dl_tensor.byte_offset > SIZE_MAX - ((size_t)(n - 1) * pitch + width)) goto done;
+  source = (const char *)view.dl_tensor.data + (size_t)view.dl_tensor.byte_offset;
+#ifdef __HIP_PLATFORM_AMD__
+  if (hipMemcpy2D(base, width, source, pitch, width, (size_t)n, hipMemcpyDefault) != hipSuccess) goto done;
+#else
+  if (cudaMemcpy2D(base, width, source, pitch, width, (size_t)n, cudaMemcpyDefault) != cudaSuccess) goto done;
+#endif
+  rc = 0;
+done:
+  if (view.deleter) view.deleter(&view);
+  pthread_mutex_unlock(&h->mutex);
+  return rc;
 }
 
 int seekdb_cuvs_cagra_knn(const float *base, long n, long dim,

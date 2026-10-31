@@ -1,0 +1,330 @@
+{
+  "stage": "completed",
+  "results": [
+    {
+      "config": "n10w8r4",
+      "random_samplings": 4,
+      "dataset": "gauss256",
+      "exit": 0,
+      "measurement": {
+        "kind": "n10w8r4",
+        "dataset": "gauss256",
+        "rows": 250000,
+        "dim": 256,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 0.9154296875,
+            "query_seconds": 1.7580833317479119,
+            "qps": 291.22624096035435,
+            "p95_seconds": 0.0034028995258267966,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.8701953125,
+            "query_seconds": 1.9352969938190654,
+            "qps": 264.5588773378045,
+            "p95_seconds": 0.0034332540410105137,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 6.402496195980348,
+        "serialize_sec": 0.48935266793705523,
+        "snapshot_bytes": 416001713,
+        "reload_first_sec": 0.2959874259540811,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "n10w8r4",
+      "random_samplings": 4,
+      "dataset": "gauss128",
+      "exit": 0,
+      "measurement": {
+        "kind": "n10w8r4",
+        "dataset": "gauss128",
+        "rows": 250000,
+        "dim": 128,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 0.9705078125,
+            "query_seconds": 1.149688408127986,
+            "qps": 445.3380554072726,
+            "p95_seconds": 0.0022833600698504595,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.93794921875,
+            "query_seconds": 1.1961160412756726,
+            "qps": 428.05211395204236,
+            "p95_seconds": 0.0024511980009265244,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 6.355820373049937,
+        "serialize_sec": 0.340875674970448,
+        "snapshot_bytes": 288001713,
+        "reload_first_sec": 0.19936693692579865,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "n10w8r4",
+      "random_samplings": 4,
+      "dataset": "sift512",
+      "exit": 0,
+      "measurement": {
+        "kind": "n10w8r4",
+        "dataset": "sift512",
+        "rows": 250000,
+        "dim": 128,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 1.0,
+            "query_seconds": 1.1702457612846047,
+            "qps": 437.5149365531273,
+            "p95_seconds": 0.00225344545324333,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.99994140625,
+            "query_seconds": 1.1893546344945207,
+            "qps": 430.48556347333823,
+            "p95_seconds": 0.0024121399328578264,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 6.455372504075058,
+        "serialize_sec": 0.3526773079065606,
+        "snapshot_bytes": 288001713,
+        "reload_first_sec": 0.19563538604415953,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "n10w8r16",
+      "random_samplings": 16,
+      "dataset": "gauss256",
+      "exit": 0,
+      "measurement": {
+        "kind": "n10w8r16",
+        "dataset": "gauss256",
+        "rows": 250000,
+        "dim": 256,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 0.921875,
+            "query_seconds": 2.1968282961752266,
+            "qps": 233.06327622027368,
+            "p95_seconds": 0.004395689012017101,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.8821484375,
+            "query_seconds": 2.2592093979474157,
+            "qps": 226.62795244441395,
+            "p95_seconds": 0.004417174478294328,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 6.461727361078374,
+        "serialize_sec": 0.4939558949554339,
+        "snapshot_bytes": 416001713,
+        "reload_first_sec": 0.28831865394022316,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "n10w8r16",
+      "random_samplings": 16,
+      "dataset": "gauss128",
+      "exit": 0,
+      "measurement": {
+        "kind": "n10w8r16",
+        "dataset": "gauss128",
+        "rows": 250000,
+        "dim": 128,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 0.9724609375,
+            "query_seconds": 1.3770867714192718,
+            "qps": 371.79937432142754,
+            "p95_seconds": 0.0027172985137440264,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.9414453125,
+            "query_seconds": 1.4704343803459778,
+            "qps": 348.19642878557545,
+            "p95_seconds": 0.0029584570205770434,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 6.638830806943588,
+        "serialize_sec": 0.3430126690072939,
+        "snapshot_bytes": 288001713,
+        "reload_first_sec": 0.20640036393888295,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "n10w8r16",
+      "random_samplings": 16,
+      "dataset": "sift512",
+      "exit": 0,
+      "measurement": {
+        "kind": "n10w8r16",
+        "dataset": "sift512",
+        "rows": 250000,
+        "dim": 128,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 1.0,
+            "query_seconds": 1.3380947024561465,
+            "qps": 382.6336051254039,
+            "p95_seconds": 0.002675405523041263,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.99998046875,
+            "query_seconds": 1.4337854167679325,
+            "qps": 357.0966715187832,
+            "p95_seconds": 0.0029104669752996414,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 6.4654137280303985,
+        "serialize_sec": 0.34770466201007366,
+        "snapshot_bytes": 288001713,
+        "reload_first_sec": 0.19712652394082397,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "n10w8r64",
+      "random_samplings": 64,
+      "dataset": "gauss256",
+      "exit": 0,
+      "measurement": {
+        "kind": "n10w8r64",
+        "dataset": "gauss256",
+        "rows": 250000,
+        "dim": 256,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 0.94375,
+            "query_seconds": 4.170321011682972,
+            "qps": 122.7723234172272,
+            "p95_seconds": 0.008127867430448531,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.91546875,
+            "query_seconds": 4.125251475023106,
+            "qps": 124.11364570135261,
+            "p95_seconds": 0.008125839522108436,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 6.424267148016952,
+        "serialize_sec": 0.488122305017896,
+        "snapshot_bytes": 416001713,
+        "reload_first_sec": 0.2854280109750107,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "n10w8r64",
+      "random_samplings": 64,
+      "dataset": "gauss128",
+      "exit": 0,
+      "measurement": {
+        "kind": "n10w8r64",
+        "dataset": "gauss128",
+        "rows": 250000,
+        "dim": 128,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 0.980078125,
+            "query_seconds": 2.3177241708617657,
+            "qps": 220.906355655613,
+            "p95_seconds": 0.004897041944786906,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.960859375,
+            "query_seconds": 2.7423775085480884,
+            "qps": 186.69931415499062,
+            "p95_seconds": 0.005540034431032836,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 6.454143601004034,
+        "serialize_sec": 0.3458565550390631,
+        "snapshot_bytes": 288001713,
+        "reload_first_sec": 0.2010586189571768,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "n10w8r64",
+      "random_samplings": 64,
+      "dataset": "sift512",
+      "exit": 0,
+      "measurement": {
+        "kind": "n10w8r64",
+        "dataset": "sift512",
+        "rows": 250000,
+        "dim": 128,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 1.0,
+            "query_seconds": 2.252466451143846,
+            "qps": 227.3063821838485,
+            "p95_seconds": 0.004871611495036632,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.99998046875,
+            "query_seconds": 2.731565225869417,
+            "qps": 187.4383211321772,
+            "p95_seconds": 0.005594799981918186,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 6.4395250889938325,
+        "serialize_sec": 0.3450300389667973,
+        "snapshot_bytes": 288001713,
+        "reload_first_sec": 0.19628360192291439,
+        "snapshot_byte_equal": true
+      }
+    }
+  ],
+  "running": "n10w8r64-sift512"
+}

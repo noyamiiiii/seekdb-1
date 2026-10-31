@@ -2,10 +2,16 @@
 
 The construction knobs live in `tools/hipvs_bridge/seekdb_cuvs_bridge.c` as
 `SK_CAGRA_GRAPH_DEGREE`, `SK_CAGRA_INTERMEDIATE_DEGREE` and `SK_CAGRA_NITER`.
-This branch sets the candidate default to 160 / 192 / 16. The last officially
-scored configuration is 160 / 192 / 20; the 16-iteration candidate has not been
-run on the GPU or scored officially. The sweep overrides these values with `-D`
-at compile time and never edits the source between runs.
+The last official result is 18.438/20 for commit
+`1230d0955f2d948f5c61e5221dde0a1c26584c53`, with 160 / 192 / 16,
+build=2.654x, query=1.691x and gates passed. This follow-up uses 160 / 192 / 10,
+search width 16 and 16 random samplings, together with a compact seekdb
+snapshot envelope. See [the v10 validation report](../../v10-compact-results.md)
+for measurements and their limits. It does not have an official score yet.
+
+The sweep overrides construction values with `-D` at compile time. Search
+settings can likewise be overridden with `SK_CAGRA_SEARCH_WIDTH` and
+`SK_CAGRA_RANDOM_SAMPLINGS`; comparisons must report their actual settings.
 
 ## Running on the Radeon instance
 
@@ -33,18 +39,20 @@ summary is written to `sweep-results.json`.
 
 ## Reading the output
 
-`build_sec` is construction plus the mandatory first query, the same window the
-official timing uses. Recall must stay at or above the candidate that already
-scored `build=1.379x`; the pairing matters more than the absolute seconds,
-because the evaluator always compares against the frozen baseline in the same
-run.
+`build_sec` measures the bridge build and first query. It excludes SQL data
+scanning, seekdb snapshot persistence and catalog work, so it is a component
+measurement and must not be presented as the official end-to-end window.
+Full SQL validation times CREATE VECTOR INDEX through the first result.
+Official recall gates compare against frozen V5 on the official data in the
+same run. Proxy data and comparisons with the latest scored candidate are
+development checks; they cannot establish the hidden-data gates or full marks.
 
 ## Results so far
 
-The user-reported official result for the 20-iteration candidate is 17.962/20
-(`build=2.557x`, `query=1.659x`, gates pass). This branch's 16-iteration default
-is an unverified follow-up, not a claim of a higher score. Run the GPU sweep on
-both dimensions and compare Recall@10 and Recall@100 before official submission.
+Official progression: 20 iterations scored 17.962/20; 16 iterations scored
+18.438/20. The current 10-iteration configuration also changes supported search
+parameters to preserve quality. The following October 30 results are historical
+experiments and do not describe the current defaults.
 
 `sweep-2026-10-30.json` is the first round that selected `160:192:50` over
 `160:256:50`. `sweep-2026-10-30-round2.json` is the follow-up that moved the
@@ -76,9 +84,8 @@ AMD_TEST_ROWS=250000 python3 docs/gpu-vector-index-hipvs-cuvs/evidence/cagra-swe
   160:192:40 ivfpq:160:192:512:20 ivfpq:160:192:1024:32 ivfpq:160:192:2048:64
 ```
 
-The previously validated default was NN-descent 160/192/40. The 20-iteration
-candidate later passed official gates; this branch tests 16 iterations and must
-be evaluated for build time and Recall@10/100 before treating it as validated.
+NN-descent remains the default construction algorithm. IVF-PQ remains an
+experimental path; it is not used by the v10 candidate.
 
 The 2026-10-30 IVF-PQ round on 250K Gaussian rows measured 7.70 s / 0.9859 at
 128D for `512:20`, but 11.28 s at 256D, slower than NN-descent. Every IVF-PQ
@@ -115,11 +122,8 @@ AMD_TEST_ROWS=250000 python3 docs/gpu-vector-index-hipvs-cuvs/evidence/cagra-swe
   160:192:40 192:192:30 192:192:25 224:192:25 224:192:20 256:192:20 iter:160 iter:192
 ```
 
-The hipVS API marks this build algorithm experimental. Keep it as a benchmark
-candidate until the real instance confirms both build time and Recall@10/100
-on the relevant data. The latest official result supplied by the user is
-17.962/20 (`build=2.557x`, `query=1.659x`, gates pass), measured after the
-20-iteration candidate; it is not an estimate of this experiment.
+The hipVS API marks this build algorithm experimental. Iterative search remains
+a benchmark option and is not used by the v10 candidate.
 
 ## Second change in this branch
 

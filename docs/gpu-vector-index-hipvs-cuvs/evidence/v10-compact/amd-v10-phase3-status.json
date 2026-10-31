@@ -1,0 +1,123 @@
+{
+  "stage": "completed",
+  "results": [
+    {
+      "config": "n10k1024w4",
+      "dataset": "gauss256",
+      "exit": 1,
+      "error": "BUILD n10k1024w4 gauss256\n[seekdb_cuvs] search rc=15: (null)\nTraceback (most recent call last):\n  File \"/workspace/amd-v10-lab/benchmark.py\", line 46, in <module>\n    query(h,0,100);out['build_first_sec']=time.perf_counter()-t\n    ^^^^^^^^^^^^^^\n  File \"/workspace/amd-v10-lab/benchmark.py\", line 37, in query\n    assert rc==0,('query',rc)\n           ^^^^^\nAssertionError: ('query', 15)\n"
+    },
+    {
+      "config": "n10k1024w2",
+      "dataset": "gauss256",
+      "exit": 1,
+      "error": "BUILD n10k1024w2 gauss256\n[seekdb_cuvs] search rc=15: (null)\nTraceback (most recent call last):\n  File \"/workspace/amd-v10-lab/benchmark.py\", line 46, in <module>\n    query(h,0,100);out['build_first_sec']=time.perf_counter()-t\n    ^^^^^^^^^^^^^^\n  File \"/workspace/amd-v10-lab/benchmark.py\", line 37, in query\n    assert rc==0,('query',rc)\n           ^^^^^\nAssertionError: ('query', 15)\n"
+    },
+    {
+      "config": "n10k512w8",
+      "dataset": "gauss256",
+      "exit": 0,
+      "measurement": {
+        "kind": "n10k512w8",
+        "dataset": "gauss256",
+        "rows": 250000,
+        "dim": 256,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 0.9123046875,
+            "query_seconds": 1.6081509590148926,
+            "qps": 318.3780708706828,
+            "p95_seconds": 0.003170660446630791,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.86865234375,
+            "query_seconds": 1.6306996739003807,
+            "qps": 313.9756560908456,
+            "p95_seconds": 0.003193184023257345,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 6.450553840957582,
+        "serialize_sec": 0.5556723319459707,
+        "snapshot_bytes": 416001713,
+        "reload_first_sec": 0.33613723993767053,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "n10k512w8",
+      "dataset": "gauss128",
+      "exit": 0,
+      "measurement": {
+        "kind": "n10k512w8",
+        "dataset": "gauss128",
+        "rows": 250000,
+        "dim": 128,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 0.9705078125,
+            "query_seconds": 1.101194439921528,
+            "qps": 464.9496777667035,
+            "p95_seconds": 0.0021937320416327566,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.9363671875,
+            "query_seconds": 1.2197205962147564,
+            "qps": 419.7682662643602,
+            "p95_seconds": 0.002358158997958526,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 6.23372860706877,
+        "serialize_sec": 0.36157095595262945,
+        "snapshot_bytes": 288001713,
+        "reload_first_sec": 0.2365109339589253,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "n10k512w8",
+      "dataset": "sift512",
+      "exit": 0,
+      "measurement": {
+        "kind": "n10k512w8",
+        "dataset": "sift512",
+        "rows": 250000,
+        "dim": 128,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 1.0,
+            "query_seconds": 1.138004893087782,
+            "qps": 449.9101920473957,
+            "p95_seconds": 0.002184022043365985,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.99998046875,
+            "query_seconds": 1.1512819943018258,
+            "qps": 444.7216255740134,
+            "p95_seconds": 0.002334247512044385,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 6.511720565031283,
+        "serialize_sec": 0.3659288639901206,
+        "snapshot_bytes": 288001713,
+        "reload_first_sec": 0.22700336307752877,
+        "snapshot_byte_equal": true
+      }
+    }
+  ],
+  "running": "n10k512w8-sift512"
+}

@@ -1,0 +1,10 @@
+PASS: all five construction paths compile as C11 and C++17 (host API headers)
+PASS 43 host contract groups; validated 160/192/10 NN-descent build and search width=16 random_samplings=16; FP32 dataset export and snapshot reload without rebuild; scratch reuse/growth/recovery; 4 concurrent callers; no leaked resources. GPU NOT exercised.
+000000000000027f T seekdb_cuvs_build
+0000000000001214 T seekdb_cuvs_cagra_knn
+0000000000000ca5 T seekdb_cuvs_deserialize
+0000000000000f12 T seekdb_cuvs_export_dataset
+0000000000000121 T seekdb_cuvs_free
+00000000000005bd T seekdb_cuvs_search
+0000000000000bb5 T seekdb_cuvs_serialize
+PASS adaptor compact/legacy snapshots, byte-identical reserialization, original IDs/vectors, no rebuild, malformed/truncated payloads, export-failure cleanup
