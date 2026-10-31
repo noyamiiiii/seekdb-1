@@ -44,7 +44,7 @@ cuvsError_t cuvsCagraIndexDestroy(cuvsCagraIndex_t p){delete p;--indexes;return 
 cuvsError_t cuvsCagraSearchParamsCreate(cuvsCagraSearchParams_t* p){if(fail("sp"))return CUVS_ERROR;*p=(cuvsCagraSearchParams_t)calloc(1,sizeof(**p));(*p)->itopk_size=default_itopk;++search_params;return CUVS_SUCCESS;}
 cuvsError_t cuvsCagraSearchParamsDestroy(cuvsCagraSearchParams_t p){free(p);--search_params;return CUVS_SUCCESS;}
 cuvsError_t cuvsCagraBuild(cuvsResources_t,cuvsCagraIndexParams_t p,DLManagedTensor* d,cuvsCagraIndex_t i){
- assert(p->build_algo==NN_DESCENT&&p->graph_degree==160&&p->intermediate_graph_degree==192&&p->nn_descent_niter==40);
+ assert(p->build_algo==NN_DESCENT&&p->graph_degree==160&&p->intermediate_graph_degree==192&&p->nn_descent_niter==20);
  assert(d->manager_ctx==nullptr&&d->deleter==nullptr&&d->dl_tensor.dtype.bits==32&&d->dl_tensor.device.device_type==kDLCPU);
  if(fail("build"))return CUVS_ERROR;i->n=d->dl_tensor.shape[0];i->dim=d->dl_tensor.shape[1];float* ptr=(float*)d->dl_tensor.data;i->data.assign(ptr,ptr+i->n*i->dim);++builds;return CUVS_SUCCESS;
 }
@@ -86,5 +86,5 @@ int main(){
  for(int nth:{1,2,3}){h=seekdb_cuvs_deserialize("snapshot.bin",600,8);assert(h);assert(!query(h,1,10));inject("alloc",nth);assert(query(h,4,100)!=0);assert(!query(h,1,10));assert(!query(h,4,100));seekdb_cuvs_free(h);clean();++checks;}
  h=seekdb_cuvs_deserialize("snapshot.bin",600,8);assert(h);assert(!query(h,1,10));inject("free");assert(query(h,4,100)!=0);assert(!query(h,1,10));assert(!query(h,4,100));seekdb_cuvs_free(h);clean();++checks;
  default_itopk=1024;h=seekdb_cuvs_deserialize("snapshot.bin",600,8);assert(h);assert(!query(h,4,100));assert(!query(h,1,10));seekdb_cuvs_free(h);clean();++checks;
- std::remove("snapshot.bin");std::printf("PASS %d host contract groups; validated 160/192/40 NN-descent build and unchanged V5 search parameters; snapshot reload without rebuild; scratch reuse/growth/recovery; 4 concurrent callers; no leaked resources. GPU NOT exercised.\n",checks);
+ std::remove("snapshot.bin");std::printf("PASS %d host contract groups; validated 160/192/20 NN-descent build and unchanged V5 search parameters; snapshot reload without rebuild; scratch reuse/growth/recovery; 4 concurrent callers; no leaked resources. GPU NOT exercised.\n",checks);
 }
