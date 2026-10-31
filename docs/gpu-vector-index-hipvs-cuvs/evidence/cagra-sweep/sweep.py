@@ -30,14 +30,10 @@ HARNESS = ROOT / "docs" / "gpu-vector-index-hipvs-cuvs" / "evidence" / "query-wo
 OUT = Path(__file__).resolve().parent
 
 DEFAULT_CONFIGS = [
-    "160:192:40",
-    "192:192:30",
-    "192:192:25",
-    "224:192:25",
-    "224:192:20",
-    "256:192:20",
-    "iter:160",
-    "iter:192",
+    "160:192:20",
+    "160:192:16",
+    "160:192:12",
+    "160:192:10",
 ]
 
 

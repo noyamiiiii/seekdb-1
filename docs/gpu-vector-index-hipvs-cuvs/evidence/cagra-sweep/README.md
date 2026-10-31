@@ -2,9 +2,10 @@
 
 The construction knobs live in `tools/hipvs_bridge/seekdb_cuvs_bridge.c` as
 `SK_CAGRA_GRAPH_DEGREE`, `SK_CAGRA_INTERMEDIATE_DEGREE` and `SK_CAGRA_NITER`.
-Their defaults are the swept best (160 / 192 / 40), so a normal build is
-unchanged. The sweep overrides them with `-D` at compile time and never edits
-the source between runs.
+This branch sets the candidate default to 160 / 192 / 16. The last officially
+scored configuration is 160 / 192 / 20; the 16-iteration candidate has not been
+run on the GPU or scored officially. The sweep overrides these values with `-D`
+at compile time and never edits the source between runs.
 
 ## Running on the Radeon instance
 
@@ -40,6 +41,11 @@ run.
 
 ## Results so far
 
+The user-reported official result for the 20-iteration candidate is 17.962/20
+(`build=2.557x`, `query=1.659x`, gates pass). This branch's 16-iteration default
+is an unverified follow-up, not a claim of a higher score. Run the GPU sweep on
+both dimensions and compare Recall@10 and Recall@100 before official submission.
+
 `sweep-2026-10-30.json` is the first round that selected `160:192:50` over
 `160:256:50`. `sweep-2026-10-30-round2.json` is the follow-up that moved the
 iteration count to 40: on the same 250K-row proxy data it builds in
@@ -70,8 +76,9 @@ AMD_TEST_ROWS=250000 python3 docs/gpu-vector-index-hipvs-cuvs/evidence/cagra-swe
   160:192:40 ivfpq:160:192:512:20 ivfpq:160:192:1024:32 ivfpq:160:192:2048:64
 ```
 
-The production default remains NN-descent 160/192/40 until another path beats
-it on build time and keeps Recall@10/100 within the official gates.
+The previously validated default was NN-descent 160/192/40. The 20-iteration
+candidate later passed official gates; this branch tests 16 iterations and must
+be evaluated for build time and Recall@10/100 before treating it as validated.
 
 The 2026-10-30 IVF-PQ round on 250K Gaussian rows measured 7.70 s / 0.9859 at
 128D for `512:20`, but 11.28 s at 256D, slower than NN-descent. Every IVF-PQ
@@ -111,8 +118,8 @@ AMD_TEST_ROWS=250000 python3 docs/gpu-vector-index-hipvs-cuvs/evidence/cagra-swe
 The hipVS API marks this build algorithm experimental. Keep it as a benchmark
 candidate until the real instance confirms both build time and Recall@10/100
 on the relevant data. The latest official result supplied by the user is
-16.686/20 (`build=2.313x`, `query=1.680x`, gates pass); it is the current
-submission baseline, not an estimate of this experiment.
+17.962/20 (`build=2.557x`, `query=1.659x`, gates pass), measured after the
+20-iteration candidate; it is not an estimate of this experiment.
 
 ## Second change in this branch
 

@@ -27,7 +27,7 @@
 #define SK_CAGRA_INTERMEDIATE_DEGREE 192
 #endif
 #ifndef SK_CAGRA_NITER
-#define SK_CAGRA_NITER 20
+#define SK_CAGRA_NITER 16
 #endif
 /* 0 auto, 1 IVF-PQ, 2 NN-descent, 3 exact brute-force graph,
    4 CAGRA iterative search.
