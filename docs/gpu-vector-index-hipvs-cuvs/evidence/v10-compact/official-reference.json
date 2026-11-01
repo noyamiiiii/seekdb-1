@@ -1,0 +1,11 @@
+{
+  "id": 47234983,
+  "created": "2026-10-31T08:59:02.000+00:00",
+  "branch": "amd-cagra-v8-niter16-test",
+  "commit": "1230d0955f2d948f5c61e5221dde0a1c26584c53",
+  "taskStatus": 2,
+  "failMsg": 0,
+  "score": 18438,
+  "testCaseResult": "[{\"testCase\":\"使用 hipVS 加速 HNSW 索引构建\",\"resultStatus\":1,\"score\":\"18.438\",\"questionScore\":\"20\",\"message\":\"build=2.654x, query=1.691x, gates=pass\",\"subQuestionId\":800509}]",
+  "errorMessage": ""
+}

@@ -1,0 +1,31 @@
+{
+  "stage": "completed",
+  "tests": [
+    {
+      "dim": 7,
+      "rows": 1000,
+      "fp32_bitwise_equal_before_after_reload": true
+    },
+    {
+      "dim": 127,
+      "rows": 1000,
+      "fp32_bitwise_equal_before_after_reload": true
+    },
+    {
+      "dim": 128,
+      "rows": 1000,
+      "fp32_bitwise_equal_before_after_reload": true
+    },
+    {
+      "dim": 129,
+      "rows": 1000,
+      "fp32_bitwise_equal_before_after_reload": true
+    },
+    {
+      "dim": 256,
+      "rows": 1000,
+      "fp32_bitwise_equal_before_after_reload": true
+    }
+  ],
+  "dimension": 256
+}

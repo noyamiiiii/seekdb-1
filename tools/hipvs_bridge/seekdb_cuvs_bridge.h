@@ -25,6 +25,9 @@ int   seekdb_cuvs_search(void* handle, const float* query, long nq, long topk,
 void  seekdb_cuvs_free(void* handle);
 int seekdb_cuvs_serialize(void* handle, const char* filename);
 void* seekdb_cuvs_deserialize(const char* filename, long n, long dim);
+/* Copy the persisted FP32 dataset back to row-major host storage. This avoids
+ * storing a second copy in the seekdb snapshot envelope. */
+int seekdb_cuvs_export_dataset(void* handle, float* base, long n, long dim);
 #ifdef __cplusplus
 }
 #endif

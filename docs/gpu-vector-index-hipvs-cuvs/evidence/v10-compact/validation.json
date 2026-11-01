@@ -1,0 +1,168 @@
+{
+  "base_commit": "1230d0955f2d948f5c61e5221dde0a1c26584c53",
+  "official_reference_score": 18.438,
+  "official_reference_build_speedup": 2.654,
+  "official_reference_query_speedup": 1.691,
+  "candidate_officially_submitted": false,
+  "official_full_marks_established": false,
+  "construction": {
+    "algorithm": "NN_DESCENT",
+    "degree": 160,
+    "intermediate_degree": 192,
+    "iterations": 10
+  },
+  "search": {
+    "width": 16,
+    "random_samplings": 16,
+    "itopk_minimum": 512
+  },
+  "host_contract_groups": 43,
+  "snapshot_contract_passed": true,
+  "gpu_export_dimensions": [
+    7,
+    127,
+    128,
+    129,
+    256
+  ],
+  "full_sql_rows": 250000,
+  "full_sql_query_count": 4096,
+  "comparisons": {
+    "sift": {
+      "build_old_sec": 10.199662680970505,
+      "build_new_sec": 9.000993862980977,
+      "relative_build_speedup": 1.1331707182824975,
+      "recall_deltas": {
+        "10": -4.882812500006661e-05,
+        "100": -2.1972656250035527e-05
+      },
+      "query_ratios": {
+        "10": 1.0889412989595952,
+        "100": 1.056786960468924
+      },
+      "old": {
+        "kind": "scored16",
+        "niter": 16,
+        "dataset": "sift public/proxy data, not official split",
+        "rows": 250000,
+        "dim": 128,
+        "query_count": 4096,
+        "queries": {
+          "10": {
+            "recall": 0.9999755859375,
+            "qps": 268.4377362543777,
+            "p95_ms": 3.877739451127127,
+            "ids_valid": true
+          },
+          "100": {
+            "recall": 0.9999609375,
+            "qps": 227.31602082282777,
+            "p95_ms": 4.5593414979521185,
+            "ids_valid": true
+          }
+        },
+        "build_first_sec": 10.199662680970505,
+        "vsag_sql_passed": true,
+        "restart_recall100": 1.0,
+        "restart_passed": true
+      },
+      "new": {
+        "kind": "compact10",
+        "niter": 10,
+        "dataset": "sift public/proxy data, not official split",
+        "rows": 250000,
+        "dim": 128,
+        "query_count": 4096,
+        "queries": {
+          "10": {
+            "recall": 0.9999267578125,
+            "qps": 292.3129372066153,
+            "p95_ms": 3.5589277395047247,
+            "ids_valid": true
+          },
+          "100": {
+            "recall": 0.99993896484375,
+            "qps": 240.2246067112468,
+            "p95_ms": 4.275117680663243,
+            "ids_valid": true
+          }
+        },
+        "build_first_sec": 9.000993862980977,
+        "vsag_sql_passed": true,
+        "restart_recall100": 1.0,
+        "restart_passed": true
+      }
+    },
+    "gauss256": {
+      "build_old_sec": 12.60695438995026,
+      "build_new_sec": 11.197454273002222,
+      "relative_build_speedup": 1.1258768361614508,
+      "recall_deltas": {
+        "10": 0.004956054687499933,
+        "100": 0.013291015624999902
+      },
+      "query_ratios": {
+        "10": 0.8773929156865992,
+        "100": 0.8933270287565984
+      },
+      "old": {
+        "kind": "scored16",
+        "niter": 16,
+        "dataset": "gauss256 public/proxy data, not official split",
+        "rows": 250000,
+        "dim": 256,
+        "query_count": 4096,
+        "queries": {
+          "10": {
+            "recall": 0.9302734375,
+            "qps": 230.71440419932043,
+            "p95_ms": 4.374818468932062,
+            "ids_valid": true
+          },
+          "100": {
+            "recall": 0.8792138671875,
+            "qps": 205.0266509324981,
+            "p95_ms": 4.932018317049369,
+            "ids_valid": true
+          }
+        },
+        "build_first_sec": 12.60695438995026,
+        "vsag_sql_passed": true,
+        "restart_recall100": 0.8840625,
+        "restart_passed": true
+      },
+      "new": {
+        "kind": "compact10",
+        "niter": 10,
+        "dataset": "gauss256 public/proxy data, not official split",
+        "rows": 250000,
+        "dim": 256,
+        "query_count": 4096,
+        "queries": {
+          "10": {
+            "recall": 0.9352294921875,
+            "qps": 202.4271837913383,
+            "p95_ms": 4.989170527551323,
+            "ids_valid": true
+          },
+          "100": {
+            "recall": 0.8925048828125,
+            "qps": 183.15584889344478,
+            "p95_ms": 5.556093703489751,
+            "ids_valid": true
+          }
+        },
+        "build_first_sec": 11.197454273002222,
+        "vsag_sql_passed": true,
+        "restart_recall100": 0.8971875,
+        "restart_passed": true
+      }
+    }
+  },
+  "hidden_dataset_available": false,
+  "source_sha256": {
+    "tools/hipvs_bridge/seekdb_cuvs_bridge.c": "5883e2ae6321673256b754a297e91944610e4881e7b165805fad8aed698d2cd8",
+    "tools/hipvs_bridge/seekdb_cuvs_bridge.h": "c90987f6f885c71b5ef358a586a0172cb373e2bd7f93d40fafcfb82ef792b258",
+    "src/oblib/lib/vector/ob_vsag_adaptor.cpp": "5ae92c8e8c0c069e39797b94ce97fd20cc22756ce2c258b0d9d2045772251661"
+  }
+}

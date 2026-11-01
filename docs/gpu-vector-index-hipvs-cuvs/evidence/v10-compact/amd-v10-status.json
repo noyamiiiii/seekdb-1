@@ -1,0 +1,398 @@
+{
+  "stage": "completed",
+  "base_commit": "1230d0955f2d948f5c61e5221dde0a1c26584c53",
+  "results": [
+    {
+      "config": "baseline",
+      "niter": null,
+      "dataset": "gauss128",
+      "exit": 0,
+      "gpu_initial": 88080384,
+      "gpu_peak": 671088640,
+      "gpu_increment": 583008256,
+      "measurement": {
+        "kind": "baseline",
+        "dataset": "gauss128",
+        "rows": 250000,
+        "dim": 128,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 0.990625,
+            "query_seconds": 2.204579146229662,
+            "qps": 232.24387333774698,
+            "p95_seconds": 0.005596701579634099,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.96404296875,
+            "query_seconds": 2.4462104504927993,
+            "qps": 209.30333279250584,
+            "p95_seconds": 0.006356453086482361,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 24.311762550962158,
+        "serialize_sec": 0.3152938790153712,
+        "snapshot_bytes": 256001713,
+        "reload_first_sec": 0.1989467591047287,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "n16",
+      "niter": 16,
+      "dataset": "gauss128",
+      "exit": 0,
+      "gpu_initial": 90177536,
+      "gpu_peak": 704643072,
+      "gpu_increment": 614465536,
+      "measurement": {
+        "kind": "n16",
+        "dataset": "gauss128",
+        "rows": 250000,
+        "dim": 128,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 0.9783203125,
+            "query_seconds": 1.6432541320100427,
+            "qps": 311.57688273920064,
+            "p95_seconds": 0.003136133006773889,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.94939453125,
+            "query_seconds": 1.7376869535073638,
+            "qps": 294.6445554917555,
+            "p95_seconds": 0.0037454084435012192,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 7.36401154298801,
+        "serialize_sec": 0.35583073599264026,
+        "snapshot_bytes": 288001713,
+        "reload_first_sec": 0.23300954303704202,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "n12",
+      "niter": 12,
+      "dataset": "gauss128",
+      "exit": 0,
+      "gpu_initial": 88080384,
+      "gpu_peak": 704643072,
+      "gpu_increment": 616562688,
+      "measurement": {
+        "kind": "n12",
+        "dataset": "gauss128",
+        "rows": 250000,
+        "dim": 128,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 0.972265625,
+            "query_seconds": 1.653206507093273,
+            "qps": 309.7011763522615,
+            "p95_seconds": 0.0031369685020763427,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.9416015625,
+            "query_seconds": 1.7161391101544723,
+            "qps": 298.3441126482538,
+            "p95_seconds": 0.00374115442391485,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 6.853074842016213,
+        "serialize_sec": 0.3539571650326252,
+        "snapshot_bytes": 288001713,
+        "reload_first_sec": 0.23359905509278178,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "n10",
+      "niter": 10,
+      "dataset": "gauss128",
+      "exit": 0,
+      "gpu_initial": 88080384,
+      "gpu_peak": 704643072,
+      "gpu_increment": 616562688,
+      "measurement": {
+        "kind": "n10",
+        "dataset": "gauss128",
+        "rows": 250000,
+        "dim": 128,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 0.9693359375,
+            "query_seconds": 1.619102528435178,
+            "qps": 316.2245694809921,
+            "p95_seconds": 0.003135000489419326,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.93552734375,
+            "query_seconds": 1.7471577040851116,
+            "qps": 293.0473870806675,
+            "p95_seconds": 0.0037597150017973035,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 6.526670782011934,
+        "serialize_sec": 0.36878258106298745,
+        "snapshot_bytes": 288001713,
+        "reload_first_sec": 0.23082903493195772,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "n8",
+      "niter": 8,
+      "dataset": "gauss128",
+      "exit": 0,
+      "gpu_initial": 90177536,
+      "gpu_peak": 704643072,
+      "gpu_increment": 614465536,
+      "measurement": {
+        "kind": "n8",
+        "dataset": "gauss128",
+        "rows": 250000,
+        "dim": 128,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 0.966796875,
+            "query_seconds": 1.5918001948157325,
+            "qps": 321.64840893191956,
+            "p95_seconds": 0.003142603492597118,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.93025390625,
+            "query_seconds": 1.720507456571795,
+            "qps": 297.58662076372974,
+            "p95_seconds": 0.003749841544777155,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 6.185883545083925,
+        "serialize_sec": 0.36290541698690504,
+        "snapshot_bytes": 288001713,
+        "reload_first_sec": 0.21389200096018612,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "baseline",
+      "niter": null,
+      "dataset": "gauss256",
+      "exit": 0,
+      "gpu_initial": 88080384,
+      "gpu_peak": 799014912,
+      "gpu_increment": 710934528,
+      "measurement": {
+        "kind": "baseline",
+        "dataset": "gauss256",
+        "rows": 250000,
+        "dim": 256,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 0.9521484375,
+            "query_seconds": 2.6899351575411856,
+            "qps": 190.33916061679668,
+            "p95_seconds": 0.006813244597287849,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.8984765625,
+            "query_seconds": 2.802087078569457,
+            "qps": 182.72094536811832,
+            "p95_seconds": 0.00684121506055817,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 23.57189949194435,
+        "serialize_sec": 0.462504873983562,
+        "snapshot_bytes": 384001713,
+        "reload_first_sec": 0.2887172569753602,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "n16",
+      "niter": 16,
+      "dataset": "gauss256",
+      "exit": 0,
+      "gpu_initial": 88080384,
+      "gpu_peak": 832569344,
+      "gpu_increment": 744488960,
+      "measurement": {
+        "kind": "n16",
+        "dataset": "gauss256",
+        "rows": 250000,
+        "dim": 256,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 0.9263671875,
+            "query_seconds": 2.1237281772773713,
+            "qps": 241.08546728253435,
+            "p95_seconds": 0.004130375967361033,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.878515625,
+            "query_seconds": 2.0967089963378385,
+            "qps": 244.19220831039087,
+            "p95_seconds": 0.004129897593520582,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 7.840966199990362,
+        "serialize_sec": 0.5155937820672989,
+        "snapshot_bytes": 416001713,
+        "reload_first_sec": 0.31890947406645864,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "n12",
+      "niter": 12,
+      "dataset": "gauss256",
+      "exit": 0,
+      "gpu_initial": 88080384,
+      "gpu_peak": 832569344,
+      "gpu_increment": 744488960,
+      "measurement": {
+        "kind": "n12",
+        "dataset": "gauss256",
+        "rows": 250000,
+        "dim": 256,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 0.9212890625,
+            "query_seconds": 2.1375154722481966,
+            "qps": 239.53042990677793,
+            "p95_seconds": 0.004127373534720391,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.8731640625,
+            "query_seconds": 2.086333545274101,
+            "qps": 245.40658954545725,
+            "p95_seconds": 0.004130072973202914,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 7.151717472006567,
+        "serialize_sec": 0.5075388840632513,
+        "snapshot_bytes": 416001713,
+        "reload_first_sec": 0.3457321389578283,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "n10",
+      "niter": 10,
+      "dataset": "gauss256",
+      "exit": 0,
+      "gpu_initial": 88080384,
+      "gpu_peak": 832569344,
+      "gpu_increment": 744488960,
+      "measurement": {
+        "kind": "n10",
+        "dataset": "gauss256",
+        "rows": 250000,
+        "dim": 256,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 0.9130859375,
+            "query_seconds": 2.097812671097927,
+            "qps": 244.0637369837393,
+            "p95_seconds": 0.004122227436164394,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.867734375,
+            "query_seconds": 2.0981693690409884,
+            "qps": 244.0222450840659,
+            "p95_seconds": 0.004132404021220282,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 6.661198985995725,
+        "serialize_sec": 0.5172470270190388,
+        "snapshot_bytes": 416001713,
+        "reload_first_sec": 0.3081710049882531,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "n8",
+      "niter": 8,
+      "dataset": "gauss256",
+      "exit": 0,
+      "gpu_initial": 88080384,
+      "gpu_peak": 832569344,
+      "gpu_increment": 744488960,
+      "measurement": {
+        "kind": "n8",
+        "dataset": "gauss256",
+        "rows": 250000,
+        "dim": 256,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 0.9080078125,
+            "query_seconds": 2.1199834725121036,
+            "qps": 241.51131678083252,
+            "p95_seconds": 0.0041462555876933035,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.8641015625,
+            "query_seconds": 2.126048998092301,
+            "qps": 240.82229546892682,
+            "p95_seconds": 0.004148136533331126,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 6.282228885916993,
+        "serialize_sec": 0.5147140750195831,
+        "snapshot_bytes": 416001713,
+        "reload_first_sec": 0.30717363592702895,
+        "snapshot_byte_equal": true
+      }
+    }
+  ],
+  "sql_test": false,
+  "running": "n8-gauss256"
+}

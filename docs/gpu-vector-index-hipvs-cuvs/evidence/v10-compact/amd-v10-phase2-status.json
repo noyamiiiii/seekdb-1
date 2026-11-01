@@ -1,0 +1,399 @@
+{
+  "stage": "failed",
+  "base_commit": "1230d0955f2d948f5c61e5221dde0a1c26584c53",
+  "results": [
+    {
+      "config": "baseline",
+      "dataset": "sift512",
+      "exit": 0,
+      "measurement": {
+        "kind": "baseline",
+        "dataset": "sift512",
+        "rows": 250000,
+        "dim": 128,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 1.0,
+            "query_seconds": 1.9594308790983632,
+            "qps": 261.3003630092826,
+            "p95_seconds": 0.003997128538321704,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 1.0,
+            "query_seconds": 2.1337281946325675,
+            "qps": 239.9555863244182,
+            "p95_seconds": 0.004491966939531267,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 23.449563570902683,
+        "serialize_sec": 0.3048647770192474,
+        "snapshot_bytes": 256001713,
+        "reload_first_sec": 0.19213842798490077,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "n16",
+      "dataset": "sift512",
+      "exit": 0,
+      "measurement": {
+        "kind": "n16",
+        "dataset": "sift512",
+        "rows": 250000,
+        "dim": 128,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 1.0,
+            "query_seconds": 1.5332892172737047,
+            "qps": 333.92265088146365,
+            "p95_seconds": 0.003120906586991623,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.9999609375,
+            "query_seconds": 1.6130274679744616,
+            "qps": 317.41554943446647,
+            "p95_seconds": 0.0033006160345394166,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 7.192661173990928,
+        "serialize_sec": 0.35611067106947303,
+        "snapshot_bytes": 288001713,
+        "reload_first_sec": 0.21884299092926085,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "n12",
+      "dataset": "sift512",
+      "exit": 0,
+      "measurement": {
+        "kind": "n12",
+        "dataset": "sift512",
+        "rows": 250000,
+        "dim": 128,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 1.0,
+            "query_seconds": 1.5761296090204269,
+            "qps": 324.8463813316792,
+            "p95_seconds": 0.003095641970867291,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.99998046875,
+            "query_seconds": 1.687499763793312,
+            "qps": 303.407449876663,
+            "p95_seconds": 0.0036041054991073906,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 6.885487456922419,
+        "serialize_sec": 0.3674025289947167,
+        "snapshot_bytes": 288001713,
+        "reload_first_sec": 0.2313236049376428,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "n10",
+      "dataset": "sift512",
+      "exit": 0,
+      "measurement": {
+        "kind": "n10",
+        "dataset": "sift512",
+        "rows": 250000,
+        "dim": 128,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 1.0,
+            "query_seconds": 1.5998217419255525,
+            "qps": 320.0356555873247,
+            "p95_seconds": 0.0031279330141842365,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.99994140625,
+            "query_seconds": 1.708931359113194,
+            "qps": 299.60243708424264,
+            "p95_seconds": 0.003692168992711231,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 6.333964877994731,
+        "serialize_sec": 0.36677491397131234,
+        "snapshot_bytes": 288001713,
+        "reload_first_sec": 0.22002820402849466,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "n8",
+      "dataset": "sift512",
+      "exit": 0,
+      "measurement": {
+        "kind": "n8",
+        "dataset": "sift512",
+        "rows": 250000,
+        "dim": 128,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 1.0,
+            "query_seconds": 1.5790171907283366,
+            "qps": 324.2523279710686,
+            "p95_seconds": 0.0031138785067014395,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.9998828125,
+            "query_seconds": 1.7664644687902182,
+            "qps": 289.8444939289657,
+            "p95_seconds": 0.0036966150102671234,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 6.538121582940221,
+        "serialize_sec": 0.3641807660460472,
+        "snapshot_bytes": 288001713,
+        "reload_first_sec": 0.20757730689365417,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "g192n12",
+      "dataset": "gauss128",
+      "exit": 0,
+      "measurement": {
+        "kind": "g192n12",
+        "dataset": "gauss128",
+        "rows": 250000,
+        "dim": 128,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 0.9810546875,
+            "query_seconds": 1.6757777178427204,
+            "qps": 305.5297815148856,
+            "p95_seconds": 0.003321597562171519,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.9533984375,
+            "query_seconds": 1.9136940961470827,
+            "qps": 267.5453726020424,
+            "p95_seconds": 0.004045178421074524,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 7.610313320998102,
+        "serialize_sec": 0.3912146969232708,
+        "snapshot_bytes": 320001713,
+        "reload_first_sec": 0.2315082650166005,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "g192n12",
+      "dataset": "gauss256",
+      "exit": 0,
+      "measurement": {
+        "kind": "g192n12",
+        "dataset": "gauss256",
+        "rows": 250000,
+        "dim": 256,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 0.9310546875,
+            "query_seconds": 2.2865112397121266,
+            "qps": 223.92192573016223,
+            "p95_seconds": 0.004494794056518004,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.8910546875,
+            "query_seconds": 2.3191669364459813,
+            "qps": 220.7689286846323,
+            "p95_seconds": 0.004517422500066459,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 7.514722510939464,
+        "serialize_sec": 0.5438163870712742,
+        "snapshot_bytes": 448001713,
+        "reload_first_sec": 0.34121086192317307,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "g192n12",
+      "dataset": "sift512",
+      "exit": 0,
+      "measurement": {
+        "kind": "g192n12",
+        "dataset": "sift512",
+        "rows": 250000,
+        "dim": 128,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 1.0,
+            "query_seconds": 1.6814999371999875,
+            "qps": 304.4900500279387,
+            "p95_seconds": 0.0033096774655859917,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 1.0,
+            "query_seconds": 1.9184327780967578,
+            "qps": 266.8845141959813,
+            "p95_seconds": 0.0039415950479451565,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 7.444418914965354,
+        "serialize_sec": 0.39646617404650897,
+        "snapshot_bytes": 320001713,
+        "reload_first_sec": 0.24389254592824727,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "g192n10",
+      "dataset": "gauss128",
+      "exit": 0,
+      "measurement": {
+        "kind": "g192n10",
+        "dataset": "gauss128",
+        "rows": 250000,
+        "dim": 128,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 0.97734375,
+            "query_seconds": 1.6931855921866372,
+            "qps": 302.3885877382088,
+            "p95_seconds": 0.0033296399749815466,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.94861328125,
+            "query_seconds": 1.9022182127228007,
+            "qps": 269.159445838305,
+            "p95_seconds": 0.0040449679712764915,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 6.911670163972303,
+        "serialize_sec": 0.39127790299244225,
+        "snapshot_bytes": 320001713,
+        "reload_first_sec": 0.23851270996965468,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "g192n10",
+      "dataset": "gauss256",
+      "exit": 0,
+      "measurement": {
+        "kind": "g192n10",
+        "dataset": "gauss256",
+        "rows": 250000,
+        "dim": 256,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 0.926953125,
+            "query_seconds": 2.2953415791271254,
+            "qps": 223.06048243795757,
+            "p95_seconds": 0.004494876996614039,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.8856640625,
+            "query_seconds": 2.2930516845081,
+            "qps": 223.28323581150897,
+            "p95_seconds": 0.00449651702074334,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 7.7529765899525955,
+        "serialize_sec": 0.5574815849540755,
+        "snapshot_bytes": 448001713,
+        "reload_first_sec": 0.3437330350279808,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "g192n10",
+      "dataset": "sift512",
+      "exit": 0,
+      "measurement": {
+        "kind": "g192n10",
+        "dataset": "sift512",
+        "rows": 250000,
+        "dim": 128,
+        "queries": 512,
+        "sql_test": false,
+        "real_gpu": true,
+        "modes": {
+          "10": {
+            "recall": 1.0,
+            "query_seconds": 1.6746874565724283,
+            "qps": 305.7286886520945,
+            "p95_seconds": 0.003295624488964677,
+            "ids_distances_valid": true
+          },
+          "100": {
+            "recall": 0.99998046875,
+            "query_seconds": 1.8336407125461847,
+            "qps": 279.22591186854663,
+            "p95_seconds": 0.003949087444925681,
+            "ids_distances_valid": true
+          }
+        },
+        "build_first_sec": 7.187842670013197,
+        "serialize_sec": 0.39796345692593604,
+        "snapshot_bytes": 320001713,
+        "reload_first_sec": 0.24180615798104554,
+        "snapshot_byte_equal": true
+      }
+    },
+    {
+      "config": "n10k768",
+      "dataset": "gauss128",
+      "exit": 1,
+      "error": "BUILD n10k768 gauss128\n[seekdb_cuvs] search rc=15: (null)\nTraceback (most recent call last):\n  File \"/workspace/amd-v10-lab/benchmark.py\", line 46, in <module>\n    query(h,0,100);out['build_first_sec']=time.perf_counter()-t\n    ^^^^^^^^^^^^^^\n  File \"/workspace/amd-v10-lab/benchmark.py\", line 37, in query\n    assert rc==0,('query',rc)\n           ^^^^^\nAssertionError: ('query', 15)\n"
+    }
+  ],
+  "running": "n10k768-gauss128",
+  "error": "benchmark failed"
+}
