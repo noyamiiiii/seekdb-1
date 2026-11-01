@@ -9,9 +9,11 @@ separate v10 experiment used 10 iterations and search width 16; its measurements
 are documented in [the v10 validation report](../../v10-compact-results.md) and
 must not be attributed to this candidate.
 
-The sweep overrides construction values with `-D` at compile time. It uses the
-search defaults compiled into the bridge source, currently width 4 and one
-random sampling; this script does not accept per-run search overrides.
+The default screen holds search settings at width 4 and one random sampling,
+then compares 160/192 at 12, 11 and 10 iterations with 160/160 at 12
+iterations. The sweep overrides construction values with `-D` at compile time.
+These are public-data proxy measurements; use them to select candidates, not to
+claim official recall or full marks.
 
 ## Running on the Radeon instance
 
