@@ -2,7 +2,7 @@
 //!
 //! A page is a fixed-size buffer (64 KiB). The front holds a slot table
 //! (`offset`, `length`); record payloads grow downwards from the end. A slot
-//! with length zero is a tombstone: the payload bytes stay until the page is
+//! with the high length bit set is a tombstone: the payload bytes stay until the page is
 //! compacted, which keeps record ids stable across deletes.
 //!
 //! Layout of the buffer:
@@ -11,9 +11,9 @@
 //! [0..2]  slot count
 //! [2..4]  start of the free gap
 //! [4..6]  end of the free gap
-//! [6..7]  flags (unused today)
+//! [6..7]  flags (overflow head/continuation and tombstone)
 //! [7]     reserved
-//! [8..]   slot table: (offset u16, length u16, tombstone flag in bit 15)
+//! [8..]   slot table: (offset u32, length u32, tombstone flag in bit 31)
 //! ```
 
 pub const PAGE_SIZE: usize = 64 * 1024;
@@ -21,9 +21,9 @@ pub const PAGE_SIZE: usize = 64 * 1024;
 pub const MAX_RECORD_SIZE: usize = PAGE_SIZE - HEADER - SLOT_SIZE;
 
 const HEADER: usize = 8;
-const SLOT_SIZE: usize = 4;
-/// Bit 15 of the length marks a tombstone slot.
-const TOMBSTONE: u16 = 0x8000;
+const SLOT_SIZE: usize = 8;
+/// Bit 31 of the length marks a tombstone slot.
+const TOMBSTONE: u32 = 0x8000_0000;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Page {
@@ -53,8 +53,12 @@ impl Page {
         };
         // A freshly allocated file region reads as zeros: treat it as empty
         // rather than as a corrupt page.
-        if page.slot_count() == 0 && page.free_end() == 0 {
+        if page.slot_count() == 0 && page.free_start() == 0 {
             return Some(Self::new());
+        }
+        if page.is_overflow() {
+            let n = u32::from_le_bytes(page.buf[12..16].try_into().ok()?) as usize;
+            return (n <= PAGE_SIZE - 16).then_some(page);
         }
         let count = page.slot_count() as usize;
         let free_start = page.free_start() as usize;
@@ -70,6 +74,27 @@ impl Page {
         Some(page)
     }
 
+    pub fn overflow(payload: &[u8], next: Option<u32>, head: bool) -> Self {
+        let mut page = Self::new();
+        page.buf[0..2].copy_from_slice(&1u16.to_le_bytes());
+        page.buf[6] = if head { 0x81 } else { 0x82 };
+        page.buf[8..12].copy_from_slice(&next.unwrap_or(u32::MAX).to_le_bytes());
+        page.buf[12..16].copy_from_slice(&(payload.len() as u32).to_le_bytes());
+        page.buf[16..16+payload.len()].copy_from_slice(payload);
+        page
+    }
+    pub fn is_overflow(&self) -> bool { self.buf[6] & 0x80 != 0 }
+    pub fn is_overflow_head(&self) -> bool { self.buf[6] & 0x83 == 0x81 }
+    pub fn overflow_next(&self) -> Option<u32> {
+        let id = u32::from_le_bytes(self.buf[8..12].try_into().unwrap());
+        (id != u32::MAX).then_some(id)
+    }
+    pub fn overflow_payload(&self) -> &[u8] {
+        let n = u32::from_le_bytes(self.buf[12..16].try_into().unwrap()) as usize;
+        &self.buf[16..16+n]
+    }
+    pub fn is_overflow_live(&self) -> bool { self.is_overflow_head() && self.buf[6] & 0x40 == 0 }
+
     pub fn as_bytes(&self) -> &[u8] {
         &self.buf
     }
@@ -82,31 +107,32 @@ impl Page {
         u16::from_le_bytes([self.buf[2], self.buf[3]])
     }
 
-    fn free_end(&self) -> u16 {
-        u16::from_le_bytes([self.buf[4], self.buf[5]])
+    fn free_end(&self) -> usize {
+        let end = u16::from_le_bytes([self.buf[4], self.buf[5]]);
+        if end == 0 { PAGE_SIZE } else { end as usize }
     }
 
-    fn set_free(&mut self, start: u16, end: u16) {
+    fn set_free(&mut self, start: u16, end: usize) {
         self.buf[2..4].copy_from_slice(&start.to_le_bytes());
-        self.buf[4..6].copy_from_slice(&end.to_le_bytes());
+        self.buf[4..6].copy_from_slice(&(end as u16).to_le_bytes());
     }
 
-    fn slot_at(&self, slot: u16) -> (u16, u16) {
+    fn slot_at(&self, slot: u16) -> (u32, u32) {
         let base = HEADER + slot as usize * SLOT_SIZE;
-        let off = u16::from_le_bytes([self.buf[base], self.buf[base + 1]]);
-        let raw = u16::from_le_bytes([self.buf[base + 2], self.buf[base + 3]]);
+        let off = u32::from_le_bytes(self.buf[base..base + 4].try_into().unwrap());
+        let raw = u32::from_le_bytes(self.buf[base + 4..base + 8].try_into().unwrap());
         (off, raw)
     }
 
-    fn set_slot(&mut self, slot: u16, off: u16, raw_len: u16) {
+    fn set_slot(&mut self, slot: u16, off: u32, raw_len: u32) {
         let base = HEADER + slot as usize * SLOT_SIZE;
-        self.buf[base..base + 2].copy_from_slice(&off.to_le_bytes());
-        self.buf[base + 2..base + 4].copy_from_slice(&raw_len.to_le_bytes());
+        self.buf[base..base + 4].copy_from_slice(&off.to_le_bytes());
+        self.buf[base + 4..base + 8].copy_from_slice(&raw_len.to_le_bytes());
     }
 
     /// Free bytes available for one more record of `len` (slot included).
     pub fn can_fit(&self, len: usize) -> bool {
-        len <= MAX_RECORD_SIZE && self.free_bytes() >= len + SLOT_SIZE
+        !self.is_overflow() && len <= MAX_RECORD_SIZE && self.free_bytes() >= len + SLOT_SIZE
     }
 
     fn free_bytes(&self) -> usize {
@@ -126,19 +152,13 @@ impl Page {
     /// Appends `payload` and returns its slot id, compacting the page if the
     /// tail of the page is exhausted but garbage would make room.
     pub fn insert(&mut self, payload: &[u8]) -> Option<u16> {
-        if !self.can_fit(payload.len()) {
-            if self.garbage() == 0 {
-                return None;
-            }
-            self.compact();
-            if !self.can_fit(payload.len()) {
-                return None;
-            }
-        }
+        // Never compact or reuse tombstones here: live RIDs and transaction
+        // undo records must retain their original slots and payloads.
+        if !self.can_fit(payload.len()) { return None; }
         let slot = self.slot_count();
-        let off = self.free_end() - payload.len() as u16;
+        let off = self.free_end() - payload.len();
         self.buf[off as usize..off as usize + payload.len()].copy_from_slice(payload);
-        self.set_slot(slot, off, payload.len() as u16);
+        self.set_slot(slot, off as u32, payload.len() as u32);
         self.buf[0..2].copy_from_slice(&(slot + 1).to_le_bytes());
         self.set_free(self.free_start() + SLOT_SIZE as u16, off);
         Some(slot)
@@ -146,6 +166,7 @@ impl Page {
 
     /// Payload of a live record; `None` for tombstones and invalid slots.
     pub fn record(&self, slot: u16) -> Option<&[u8]> {
+        if self.is_overflow() { return (slot == 0 && self.is_overflow_live()).then(|| self.overflow_payload()); }
         if slot >= self.slot_count() {
             return None;
         }
@@ -158,6 +179,10 @@ impl Page {
     }
 
     pub fn tombstone(&mut self, slot: u16) -> bool {
+        if self.is_overflow() {
+            if slot != 0 || !self.is_overflow_live() { return false; }
+            self.buf[6] |= 0x40; return true;
+        }
         if slot >= self.slot_count() {
             return false;
         }
@@ -171,6 +196,10 @@ impl Page {
 
     /// Revives a tombstoned record, used when a transaction rolls back.
     pub fn revive(&mut self, slot: u16) -> bool {
+        if self.is_overflow() {
+            if slot != 0 || !self.is_overflow_head() || self.buf[6] & 0x40 == 0 { return false; }
+            self.buf[6] &= !0x40; return true;
+        }
         if slot >= self.slot_count() {
             return false;
         }

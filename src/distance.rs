@@ -31,6 +31,12 @@ pub fn squared_stored(query: &[f32], stored: &[u8]) -> Option<f64> {
     if stored.len() != query.len() * 4 {
         return None;
     }
+    #[cfg(target_arch = "x86_64")]
+    if std::is_x86_feature_detected!("avx2") && std::is_x86_feature_detected!("fma") {
+        // SAFETY: loads are explicitly unaligned; no aligned f32 slice is
+        // fabricated from record bytes. Dimensions were validated above.
+        return Some(unsafe { squared_stored_avx2(query, stored) });
+    }
     let mut acc = [0.0f64; 8];
     let body = query.len() - query.len() % 8;
     let mut i = 0;
@@ -116,9 +122,67 @@ unsafe fn squared_avx2(a: &[f32], b: &[f32]) -> f64 {
     total
 }
 
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
+unsafe fn squared_stored_avx2(a: &[f32], b: &[u8]) -> f64 {
+    use std::arch::x86_64::*;
+
+    let n = a.len();
+    let pa = a.as_ptr();
+    let pb = b.as_ptr().cast::<f32>();
+    let mut acc0 = _mm256_setzero_pd();
+    let mut acc1 = _mm256_setzero_pd();
+    let body = n - n % 8;
+    let mut i = 0;
+    while i < body {
+        let va = _mm256_loadu_ps(pa.add(i));
+        let vb = _mm256_loadu_ps(pb.add(i));
+        let lo_a = _mm256_cvtps_pd(_mm256_castps256_ps128(va));
+        let lo_b = _mm256_cvtps_pd(_mm256_castps256_ps128(vb));
+        let hi_a = _mm256_cvtps_pd(_mm256_extractf128_ps(va, 1));
+        let hi_b = _mm256_cvtps_pd(_mm256_extractf128_ps(vb, 1));
+        let d0 = _mm256_sub_pd(lo_a, lo_b);
+        let d1 = _mm256_sub_pd(hi_a, hi_b);
+        acc0 = _mm256_fmadd_pd(d0, d0, acc0);
+        acc1 = _mm256_fmadd_pd(d1, d1, acc1);
+        i += 8;
+    }
+    let sum = _mm256_add_pd(acc0, acc1);
+    let lo = _mm256_castpd256_pd128(sum);
+    let hi = _mm256_extractf128_pd(sum, 1);
+    let pair = _mm_add_pd(lo, hi);
+    let mut total = _mm_cvtsd_f64(_mm_hadd_pd(pair, pair));
+    while i < n {
+        let d = f64::from(*pa.add(i)) - f64::from(f32::from_le_bytes(b[i*4..i*4+4].try_into().unwrap()));
+        total += d * d;
+        i += 1;
+    }
+    total
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stored_simd_matches_f64_reference_on_unaligned_bytes_and_all_tails() {
+        for dim in 1..=257 {
+            let a: Vec<f32> = (0..dim).map(|i| ((i * 71 + dim * 19) % 997) as f32 / 17.0 - 23.0).collect();
+            let b: Vec<f32> = (0..dim).map(|i| ((i * 31 + dim * 11) % 991) as f32 / 19.0 - 29.0).collect();
+            let expected = squared_scalar(&a,&b);
+            for offset in 0..8 {
+                let mut bytes = vec![0;offset];
+                for x in &b { bytes.extend_from_slice(&x.to_le_bytes()); }
+                let actual = squared_stored(&a,&bytes[offset..]).unwrap();
+                assert!((actual-expected).abs() <= expected.abs().max(1.0)*1e-12);
+            }
+        }
+        let a = [f32::MAX;13];let b = [-f32::MAX;13];
+        let bytes: Vec<u8> = b.iter().flat_map(|x|x.to_le_bytes()).collect();
+        let actual = squared_stored(&a,&bytes).unwrap();
+        assert!(actual.is_finite());
+        assert!((actual-squared_scalar(&a,&b)).abs()/actual < 1e-12);
+    }
 
     #[test]
     fn computes_known_distances() {

@@ -4,3 +4,6 @@ target/
 *.wal
 tests/cases/*.out
 docs/protocol.md.bak
+docs/evidence/
+tools/__pycache__/
+tools/final_validation_local.py

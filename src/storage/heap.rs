@@ -5,7 +5,7 @@
 //! ([`crate::storage::wal`]) and only then flushes. Rolling back is therefore
 //! just dropping the modified pages.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
@@ -28,6 +28,8 @@ pub struct HeapFile {
     /// Page that still had room at the last insert.
     open_page: Option<u32>,
     scratch: Vec<u8>,
+    spill: File,
+    spilled: BTreeSet<u32>,
 }
 
 impl HeapFile {
@@ -40,22 +42,19 @@ impl HeapFile {
             .truncate(false)
             .open(&path)?;
         let len = file.metadata()?.len();
-        if len % PAGE_SIZE as u64 != 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "{} has {len} bytes, not a multiple of the page size",
-                    path.display()
-                ),
-            ));
-        }
+        // A killed heap write may leave a partial final page. WAL replay
+        // repairs it before any row is inspected.
+        let spill = OpenOptions::new().read(true).write(true).create(true)
+            .truncate(true).open(path.with_extension("txn"))?;
         Ok(Self {
             path,
             file,
-            num_pages: (len / PAGE_SIZE as u64) as u32,
+            num_pages: len.div_ceil(PAGE_SIZE as u64) as u32,
             dirty: BTreeMap::new(),
             open_page: None,
             scratch: vec![0u8; PAGE_SIZE],
+            spill,
+            spilled: BTreeSet::new(),
         })
     }
 
@@ -71,6 +70,11 @@ impl HeapFile {
     pub fn read_page(&mut self, id: u32) -> io::Result<Page> {
         if let Some(page) = self.dirty.get(&id) {
             return Ok(page.clone());
+        }
+        if self.spilled.contains(&id) {
+            self.spill.seek(SeekFrom::Start(id as u64 * PAGE_SIZE as u64))?;
+            self.spill.read_exact(&mut self.scratch)?;
+            return Page::from_bytes(&self.scratch).ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid transaction page"));
         }
         self.read_from_disk(id)
     }
@@ -91,11 +95,19 @@ impl HeapFile {
     /// The writable version of a page, loading it into the transaction's set.
     pub fn page_mut(&mut self, id: u32) -> io::Result<&mut Page> {
         if !self.dirty.contains_key(&id) {
-            let page = if id < self.num_pages {
-                self.read_from_disk(id)?
+            let page = if id < self.num_pages || self.spilled.contains(&id) {
+                self.read_page(id)?
             } else {
                 Page::new()
             };
+            // Bound resident transaction pages independently of table size.
+            if self.dirty.len() >= 16 {
+                let (&victim, _) = self.dirty.first_key_value().unwrap();
+                let old = self.dirty.remove(&victim).unwrap();
+                self.spill.seek(SeekFrom::Start(victim as u64 * PAGE_SIZE as u64))?;
+                self.spill.write_all(old.as_bytes())?;
+                self.spilled.insert(victim);
+            }
             self.dirty.insert(id, page);
         }
         Ok(self.dirty.get_mut(&id).unwrap())
@@ -113,17 +125,21 @@ impl HeapFile {
     /// Returns `None` when the record is larger than a page can hold.
     pub fn insert(&mut self, payload: &[u8]) -> io::Result<Option<Rid>> {
         if payload.len() > super::page::MAX_RECORD_SIZE {
-            return Ok(None);
-        }
-        if let Some(id) = self.open_page {
-            if let Some(slot) = self.page_mut(id)?.insert(payload) {
-                return Ok(Some(Rid { page: id, slot }));
+            let first = self.num_pages;
+            let chunks = payload.chunks(PAGE_SIZE - 16);
+            let count = chunks.len();
+            for (i, chunk) in chunks.enumerate() {
+                let id = first + i as u32;
+                let next = (i + 1 < count).then_some(id + 1);
+                *self.page_mut(id)? = Page::overflow(chunk, next, i == 0);
+                self.num_pages = id + 1;
             }
+            return Ok(Some(Rid { page: first, slot: 0 }));
         }
-        // Probe forward from the open page; pages are filled in order, so this
-        // walks at most to the end of the heap once per new page.
-        let start = self.open_page.map_or(0, |id| id + 1);
-        for id in start..self.num_pages {
+        // The heap is append-only between explicit compactions. Probe only
+        // its tail, never rescan old full pages after a rollback or restart.
+        let tail = self.open_page.or_else(|| self.num_pages.checked_sub(1));
+        if let Some(id) = tail {
             if let Some(slot) = self.page_mut(id)?.insert(payload) {
                 self.open_page = Some(id);
                 return Ok(Some(Rid { page: id, slot }));
@@ -144,6 +160,20 @@ impl HeapFile {
             return Ok(None);
         }
         let page = self.read_page(rid.page)?;
+        if page.is_overflow() {
+            if rid.slot != 0 || !page.is_overflow_live() { return Ok(None); }
+            let mut payload = page.overflow_payload().to_vec();
+            let mut next = page.overflow_next();
+            let mut visited = 0;
+            while let Some(id) = next {
+                if id >= self.num_pages || visited >= self.num_pages { return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid overflow chain")); }
+                let part = self.read_page(id)?;
+                if !part.is_overflow() || part.is_overflow_head() { return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid overflow continuation")); }
+                payload.extend_from_slice(part.overflow_payload());
+                next = part.overflow_next(); visited += 1;
+            }
+            return Ok(Some(payload));
+        }
         Ok(page.record(rid.slot).map(|r| r.to_vec()))
     }
 
@@ -168,6 +198,12 @@ impl HeapFile {
     {
         for id in 0..self.num_pages {
             let page = self.read_page(id)?;
+            if page.is_overflow() {
+                if page.is_overflow_live() {
+                    if let Some(record) = self.record(Rid { page: id, slot: 0 })? { visit(id, 0, &record)?; }
+                }
+                continue;
+            }
             for (slot, record) in page.live_records() {
                 visit(id, slot, record)?;
             }
@@ -181,7 +217,29 @@ impl HeapFile {
     }
 
     pub fn has_dirty(&self) -> bool {
-        !self.dirty.is_empty()
+        !self.dirty.is_empty() || !self.spilled.is_empty()
+    }
+
+    pub fn for_each_dirty<F>(&mut self, mut visit: F) -> io::Result<()>
+    where F: FnMut(u32, &[u8]) -> io::Result<()> {
+        for id in &self.spilled {
+            if self.dirty.contains_key(id) { continue; }
+            self.spill.seek(SeekFrom::Start(*id as u64 * PAGE_SIZE as u64))?;
+            self.spill.read_exact(&mut self.scratch)?;
+            visit(*id, &self.scratch)?;
+        }
+        for (id, page) in &self.dirty { visit(*id, page.as_bytes())?; }
+        Ok(())
+    }
+
+    pub fn apply_recovered(&mut self, id: u32, image: &[u8]) -> io::Result<()> {
+        if Page::from_bytes(image).is_none() {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid recovered page"));
+        }
+        self.file.seek(SeekFrom::Start(id as u64 * PAGE_SIZE as u64))?;
+        self.file.write_all(image)?;
+        self.num_pages = self.num_pages.max(id + 1);
+        Ok(())
     }
 
     /// Writes modified pages to the file and drops them from memory. The caller
@@ -196,6 +254,15 @@ impl HeapFile {
     /// Safe only once the log holds the same images: a crash may leave a torn
     /// page on disk, and recovery rewrites it from the log.
     pub fn write_dirty(&mut self) -> io::Result<()> {
+        for id in &self.spilled {
+            if self.dirty.contains_key(id) { continue; }
+            self.spill.seek(SeekFrom::Start(*id as u64 * PAGE_SIZE as u64))?;
+            self.spill.read_exact(&mut self.scratch)?;
+            self.file.seek(SeekFrom::Start(*id as u64 * PAGE_SIZE as u64))?;
+            self.file.write_all(&self.scratch)?;
+        }
+        self.spilled.clear();
+        self.spill.set_len(0)?;
         for (id, page) in std::mem::take(&mut self.dirty) {
             self.scratch.copy_from_slice(page.as_bytes());
             let offset = id as u64 * PAGE_SIZE as u64;
@@ -213,6 +280,8 @@ impl HeapFile {
     /// Drops uncommitted changes; the next read comes from the file again.
     pub fn discard_changes(&mut self) {
         self.dirty.clear();
+        self.spilled.clear();
+        let _ = self.spill.set_len(0);
         self.open_page = None;
         // Pages allocated since the last commit exist only in memory, so taking
         // the page count from the file keeps reads from running past its end.
@@ -233,42 +302,17 @@ impl HeapFile {
         F: FnMut(u32, u16, &[u8]) -> io::Result<bool>,
     {
         let tmp_path = tmp_path(&self.path);
-        let mut out = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&tmp_path)?;
-
-        let mut page = Page::new();
-        let mut written = 0u32;
-        let spill = |page: &mut Page, out: &mut File, written: &mut u32| -> io::Result<()> {
-            out.write_all(page.as_bytes())?;
-            *written += 1;
-            *page = Page::new();
-            Ok(())
-        };
-
-        for id in 0..self.num_pages {
-            let loaded = self.read_page(id)?;
-            for (slot, record) in loaded.live_records() {
-                if !keep(id, slot, record)? {
-                    continue;
-                }
-                if page.insert(record).is_none() {
-                    spill(&mut page, &mut out, &mut written)?;
-                    page.insert(record)
-                        .expect("a record that fit before still fits");
-                }
+        if tmp_path.exists() { std::fs::remove_file(&tmp_path)?; }
+        let mut out = HeapFile::open(tmp_path.clone())?;
+        self.for_each_live(|id, slot, record| {
+            if keep(id, slot, record)? {
+                out.insert(record)?.ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "cannot compact row"))?;
             }
-        }
-        if page.live_records().next().is_some() {
-            spill(&mut page, &mut out, &mut written)?;
-        }
-        out.sync_all()?;
+            Ok(())
+        })?;
+        let written = out.num_pages;
+        out.flush()?;
         drop(out);
-
-        // The rename is atomic; the directory fsync makes the new entry durable
-        // before the old name can be lost after a power failure.
         std::fs::rename(&tmp_path, &self.path)?;
         sync_parent(&self.path)?;
 

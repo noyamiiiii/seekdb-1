@@ -22,8 +22,17 @@ use crate::schema::TableSchema;
 use crate::storage::Storage;
 
 /// One connected client: parsed statements in, rendered responses out.
+struct RawScanCache {
+    table: String,
+    bytes: Option<Vec<u8>>,
+    ranges: Vec<(usize, usize)>,
+}
+
 pub struct Session {
     storage: Storage,
+    // Bounded exact scan index, rebuilt after every visibility change.
+    // Larger tables always fall back to streaming heap reads.
+    scan_cache: Option<RawScanCache>,
 }
 
 impl Session {
@@ -31,16 +40,19 @@ impl Session {
     pub fn open(dir: impl AsRef<Path>) -> DbResult<Self> {
         Ok(Self {
             storage: Storage::open(dir)?,
+            scan_cache: None,
         })
     }
 
     pub fn storage(&mut self) -> &mut Storage {
+        self.scan_cache = None;
         &mut self.storage
     }
 
     /// Flushes buffered pages and truncates the log; called on a clean shutdown
     /// so that the next start does not replay it.
     pub fn shutdown(&mut self) -> DbResult<()> {
+        self.storage.rollback_quietly();
         self.storage.checkpoint()
     }
 
@@ -53,6 +65,9 @@ impl Session {
     }
 
     pub fn run(&mut self, stmt: &Statement) -> Response {
+        if !matches!(stmt, Statement::Select(_) | Statement::SelectConst { .. } | Statement::ShowTables | Statement::ShowColumns { .. }) {
+            self.scan_cache = None;
+        }
         match self.dispatch(stmt) {
             Ok(response) => response,
             Err(err) => Response::Err(err),
@@ -73,9 +88,19 @@ impl Session {
                 self.storage.rollback()?;
                 Ok(Response::ok(0))
             }
-            // Session variables are accepted and ignored: the task defines no
-            // observable behaviour for them.
-            Statement::Set(_) => Ok(Response::ok(0)),
+            // Accept only the documented mode and encoding values.
+            Statement::Set(setting) => {
+                if setting.name.eq_ignore_ascii_case("vector_mode") {
+                    if !setting.value.eq_ignore_ascii_case("exact") && !setting.value.eq_ignore_ascii_case("ann") {
+                        return Err(DbError::new(ErrorCode::WrongValue,"vector_mode must be exact or ann"));
+                    }
+                    // Both modes use the exact flat index; ANN permits this
+                    // stricter result and always meets its recall threshold.
+                    Ok(Response::ok(0))
+                } else if setting.name.eq_ignore_ascii_case("names") && setting.value.eq_ignore_ascii_case("utf8mb4") {
+                    Ok(Response::ok(0))
+                } else { Err(DbError::unsupported("this session variable")) }
+            },
             Statement::CreateTable(create) => {
                 self.implicit_commit()?;
                 self.storage.create_table(create)?;
@@ -103,14 +128,12 @@ impl Session {
             }
             Statement::ShowTables => Ok(Response::Rows(self.show_tables())),
             Statement::ShowColumns { table } => Ok(Response::Rows(self.show_columns(table)?)),
-            // Vector indexes are implicit in this engine: dropping one changes
-            // nothing observable, but the statement must still validate the
-            // table it names.
-            Statement::DropIndex { table } => {
-                self.storage.schema(table)?;
+            // Index definitions are persistent; exact results come from rows.
+            Statement::DropIndex { table, name } => {
+                self.storage.drop_vector_index(table,name)?;
                 Ok(Response::ok(0))
             }
-            Statement::Noop => Ok(Response::ok(0)),
+            Statement::Noop => Err(DbError::unsupported("database namespaces")),
             Statement::SelectConst { items } => Ok(Response::Rows(select_const(items))),
             Statement::Insert(_)
             | Statement::Select(_)
@@ -131,7 +154,10 @@ impl Session {
     /// transaction is open.
     fn run_dml(&mut self, stmt: &Statement) -> DbResult<Response> {
         if self.storage.in_explicit_txn() {
-            return self.execute_dml(stmt);
+            let mark = self.storage.statement_mark();
+            let result = self.execute_dml(stmt);
+            if result.is_err() { self.storage.rollback_statement(mark); }
+            return result;
         }
         self.storage.begin_statement()?;
         match self.execute_dml(stmt) {
@@ -168,10 +194,11 @@ impl Session {
                 format!("column '{}' is not a VECTOR column", index.column),
             ));
         }
-        // The index itself, and its metadata, arrives with the vector index
-        // module; the statement is validated and accepted until then.
-        let _ = index.name.as_str();
-        Ok(())
+        // A bounded exact flat index never weakens the recall contract. Larger
+        // tables use its streaming backing store rather than growing memory.
+        self.prepare_scan_cache(&index.table)?;
+        self.storage.declare_vector_index(&index.table, &index.name, &index.column)
+
     }
 
     // ----- DML ----------------------------------------------------------
@@ -203,6 +230,12 @@ impl Session {
 
     fn update(&mut self, update: &Update) -> DbResult<u64> {
         let schema = self.storage.schema(&update.table)?.clone();
+        if let Some(filter) = &update.filter { validate_expr(&schema, filter)?; }
+        for (name, _) in &update.assignments {
+            if schema.column(name)?.0 == schema.primary_key {
+                return Err(DbError::new(ErrorCode::NotSupported, "updating the primary key is not supported"));
+            }
+        }
         let assigned: Vec<(usize, Value)> = update
             .assignments
             .iter()
@@ -229,6 +262,7 @@ impl Session {
     }
 
     fn delete(&mut self, delete: &Delete) -> DbResult<u64> {
+        if let Some(filter) = &delete.filter { validate_expr(self.storage.schema(&delete.table)?, filter)?; }
         let pks = self.matching_pks(&delete.table, delete.filter.as_ref())?;
         let mut affected = 0u64;
         for pk in pks {
@@ -363,6 +397,7 @@ impl Session {
 
     fn select(&mut self, select: &Select) -> DbResult<ResultSet> {
         let schema = self.storage.schema(&select.table)?.clone();
+        if let Some(filter) = &select.filter { validate_expr(&schema, filter)?; }
         let outs = plan_outputs(&schema, &select.items)?;
         let columns: Vec<String> = outs.iter().map(|o| o.name.clone()).collect();
         let limit = select.limit.map(|n| n as usize);
@@ -496,6 +531,25 @@ impl Session {
         Ok(ResultSet { columns, rows })
     }
 
+    fn prepare_scan_cache(&mut self, table: &str) -> DbResult<()> {
+        const BUDGET: usize = 8 * 1024 * 1024;
+        let key = table.to_ascii_lowercase();
+        if self.scan_cache.as_ref().is_some_and(|cache| cache.table == key) { return Ok(()); }
+        let mut bytes = Vec::new();
+        let mut ranges = Vec::new();
+        let mut fits = true;
+        self.storage.for_each_raw(table, |row| {
+            if bytes.len().saturating_add(row.len()).saturating_add((ranges.len()+1)*16) > BUDGET {
+                fits = false;return Ok(false);
+            }
+            let start = bytes.len();bytes.extend_from_slice(row);ranges.push((start,bytes.len()));
+            Ok(true)
+        })?;
+        self.scan_cache = Some(if fits { RawScanCache { table:key, bytes:Some(bytes), ranges } }
+            else { RawScanCache { table:key, bytes:None, ranges:Vec::new() } });
+        Ok(())
+    }
+
     /// `ORDER BY <distance> LIMIT n` evaluated straight on encoded rows.
     ///
     /// Only the columns the filter and the distance need are looked at, the row
@@ -515,6 +569,7 @@ impl Session {
         ascending: bool,
         keep: usize,
     ) -> DbResult<ResultSet> {
+        self.prepare_scan_cache(table)?;
         let mut top = TopK::new(Some(keep), ascending);
         let mut failure: Option<DbError> = None;
         let corrupt = || {
@@ -523,7 +578,7 @@ impl Session {
                 format!("corrupt row in table '{}'", schema.name),
             )
         };
-        self.storage.for_each_raw(table, |bytes| {
+        let mut visit = |bytes: &[u8]| {
             if failure.is_some() {
                 return Ok(false);
             }
@@ -545,14 +600,18 @@ impl Session {
                 ));
                 return Ok(false);
             };
-            match top.offer(EvalValue::Real(squared.sqrt()), pk, || Ok(Vec::new())) {
+            match top.offer(EvalValue::Real(squared), pk, || Ok(Vec::new())) {
                 Ok(()) => Ok(true),
                 Err(err) => {
                     failure = Some(err);
                     Ok(false)
                 }
             }
-        })?;
+        };
+        let cache = self.scan_cache.as_ref().unwrap();
+        if let Some(bytes) = &cache.bytes {
+            for &(start,end) in &cache.ranges { if !visit(&bytes[start..end])? { break; } }
+        } else { self.storage.for_each_raw(table, visit)?; }
         if let Some(err) = failure {
             return Err(err);
         }
@@ -922,6 +981,22 @@ impl From<&Value> for EvalValue {
             Value::Vector(v) => EvalValue::Vector(v.clone()),
         }
     }
+}
+
+fn validate_expr(schema: &TableSchema, expr: &Expr) -> DbResult<()> {
+    match expr {
+        Expr::Column(name) => { schema.column(name)?; }
+        Expr::Lit(_) => {}
+        Expr::Distance { column, query } => {
+            let (_, def) = schema.column(column)?;
+            if !matches!(def.ty, ColumnType::Vector(dim) if dim == query.len()) {
+                return Err(DbError::new(ErrorCode::WrongValue, "invalid distance vector type or dimensions"));
+            }
+        }
+        Expr::Compare { left, right, .. } | Expr::And(left, right) => { validate_expr(schema,left)?; validate_expr(schema,right)?; }
+        Expr::In { left, .. } => { validate_expr(schema,left)?; }
+    }
+    Ok(())
 }
 
 fn filter_matches(expr: &Expr, row: &[Value], schema: &TableSchema) -> DbResult<bool> {

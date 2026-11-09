@@ -1,17 +1,17 @@
 # MiniVectorDB stdio protocol (v0.1)
 
-This document is the contract between the server binary and the evaluation
-driver. Everything below is fixed by the project (the task statement leaves
-framing details open); changing it means changing both sides.
+This document describes the current server and local test adapter. The public
+task package does not yet include a frozen official driver; these framing and
+error-code choices require confirmation against that driver before formal use.
 
 ## 1. Process lifecycle
 
 * The server runs in the **foreground**: no daemon, no socket, no fork.
 * It reads SQL from **stdin** and writes results to **stdout**; diagnostics go to
   stderr. stdout is never used for logging.
-* All persistent data lives under the data directory, `--data <dir>`
+* All persistent data lives under the data directory, `--data-dir <dir>` (also `--data` / `-d`)
   (default `/data`).
-* Start-up: recover the data directory and rebuild vector indexes, **then** print
+* Start-up: replay committed WAL, rebuild the primary-key maps, **then** print
   exactly one line:
 
   ```
@@ -123,8 +123,8 @@ Message text is free-form but must not span lines.
 
 ## 6. Session state
 
-* `SET vector_mode = 'exact' | 'ann'` selects the search strategy for subsequent
-  `SELECT` statements in the session; the default is `exact`.
+* `SET vector_mode = 'exact' | 'ann'` accepts either mode; both use exact flat
+  search in this implementation. Other values are rejected.
 * Statements are executed one at a time; there is no pipelining requirement
   beyond the per-block flush.
 * `exit` inside a transaction rolls back and still answers `BYE`.

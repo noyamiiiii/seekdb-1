@@ -46,7 +46,7 @@ pub enum Statement {
     ShowColumns { table: String },
     /// `DROP INDEX name ON table`: vector indexes are implicit in this engine,
     /// so the statement only exists to keep MySQL clients happy.
-    DropIndex { table: String },
+    DropIndex { table: String, name: String },
     /// Statements a MySQL client sends that have no meaning here (`USE db`,
     /// `CREATE DATABASE db`, `DROP DATABASE db`, ...).
     Noop,

@@ -61,11 +61,11 @@ impl Wal {
         self.file.write_all(payload)
     }
 
-    fn begin(&mut self, txn: u64) -> io::Result<()> {
+    pub(crate) fn begin(&mut self, txn: u64) -> io::Result<()> {
         self.write_record(KIND_BEGIN, &txn.to_le_bytes())
     }
 
-    fn page(&mut self, txn: u64, table: &str, page_id: u32, image: &[u8]) -> io::Result<()> {
+    pub(crate) fn page(&mut self, txn: u64, table: &str, page_id: u32, image: &[u8]) -> io::Result<()> {
         let name = table.as_bytes();
         let mut payload = Vec::with_capacity(14 + name.len() + image.len());
         payload.extend_from_slice(&txn.to_le_bytes());
@@ -90,6 +90,11 @@ impl Wal {
             debug_assert_eq!(image.len(), PAGE_SIZE);
             self.page(txn, table, page_id, image)?;
         }
+        self.commit(txn)?;
+        self.file.sync_all()
+    }
+
+    pub(crate) fn finish_commit(&mut self, txn: u64) -> io::Result<()> {
         self.commit(txn)?;
         self.file.sync_all()
     }
@@ -173,6 +178,58 @@ pub fn recover(path: &Path) -> io::Result<Vec<(String, u32, Vec<u8>)>> {
         pos = end;
     }
     Ok(applied)
+}
+
+/// Stream committed page images; retain offsets, never whole transactions.
+/// Replaying twice is safe because the images replace fixed heap pages.
+pub fn replay<F>(path: &Path, mut apply: F) -> io::Result<()>
+where F: FnMut(&str, u32, &[u8]) -> io::Result<()> {
+    let mut file = match File::open(path) {
+        Ok(f) => f,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e),
+    };
+    let len = file.metadata()?.len();
+    if len < MAGIC.len() as u64 { return Ok(()); }
+    let mut magic = [0; 8]; file.read_exact(&mut magic)?;
+    if &magic != MAGIC { return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid WAL header")); }
+    let mut transaction = None;
+    let mut pending: Vec<(String, u32, u64)> = Vec::new();
+    loop {
+        let mut header = [0; 5];
+        if let Err(e) = file.read_exact(&mut header) {
+            if e.kind() == io::ErrorKind::UnexpectedEof { break; }
+            return Err(e);
+        }
+        let n = u32::from_le_bytes(header[1..].try_into().unwrap()) as usize;
+        if n > PAGE_SIZE + 65550 || file.stream_position()? + n as u64 > len { break; }
+        let mut payload = vec![0; n]; file.read_exact(&mut payload)?;
+        if n < 8 { break; }
+        let txn = u64::from_le_bytes(payload[..8].try_into().unwrap());
+        match header[0] {
+            KIND_BEGIN if n == 8 => { pending.clear(); transaction = Some(txn); }
+            KIND_PAGE if transaction == Some(txn) && n >= 14 => {
+                let name_len = u16::from_le_bytes(payload[8..10].try_into().unwrap()) as usize;
+                let end = 10 + name_len;
+                if end + 4 + PAGE_SIZE != n { break; }
+                let name = std::str::from_utf8(&payload[10..end]).map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid WAL table"))?;
+                let id = u32::from_le_bytes(payload[end..end+4].try_into().unwrap());
+                pending.push((name.to_owned(), id, file.stream_position()? - PAGE_SIZE as u64));
+            }
+            KIND_COMMIT if transaction == Some(txn) && n == 8 => {
+                let resume = file.stream_position()?;
+                let mut image = vec![0; PAGE_SIZE];
+                for (name, id, offset) in pending.drain(..) {
+                    file.seek(SeekFrom::Start(offset))?;file.read_exact(&mut image)?;
+                    apply(&name, id, &image)?;
+                }
+                file.seek(SeekFrom::Start(resume))?;
+                transaction = None;
+            }
+            _ => break,
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

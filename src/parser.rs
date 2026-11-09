@@ -185,10 +185,10 @@ impl Parser {
 
     fn parse_drop(&mut self) -> DbResult<Statement> {
         if self.eat_word("index") {
-            self.identifier()?;
+            let name = self.identifier()?;
             self.expect_word("on")?;
             let table = self.identifier()?;
-            return Ok(Statement::DropIndex { table });
+            return Ok(Statement::DropIndex { table, name });
         }
         if self.eat_word("database") || self.eat_word("schema") {
             self.eat_if_exists();
@@ -263,12 +263,14 @@ impl Parser {
                 self.expect_kind(Kind::LParen, "'('")?;
                 let col = self.identifier()?;
                 self.expect_kind(Kind::RParen, "')'")?;
+                if primary_key.is_some() { return Err(self.error_here("multiple primary keys are not supported")); }
                 primary_key = Some(col);
             } else {
                 let col_name = self.identifier()?;
                 let ty = self.parse_column_type()?;
                 if self.eat_word("primary") {
                     self.expect_word("key")?;
+                    if primary_key.is_some() { return Err(self.error_here("multiple primary keys are not supported")); }
                     primary_key = Some(col_name.clone());
                 }
                 columns.push(ColumnDef { name: col_name, ty });

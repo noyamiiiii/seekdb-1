@@ -1,26 +1,18 @@
-# MiniVectorDB: build the engine from source, then ship only the binary.
-#
-# The crate has no dependencies outside the Rust standard library, so the build
-# stage never touches the network beyond fetching the pinned base images and the
-# runtime image needs no extra packages.
-FROM rust:1.88-slim-bookworm AS build
-
+# Base artifacts are pinned by content. Registry overrides are only for local
+# mirror access; the tested artifacts use the same immutable digests.
+ARG RUST_IMAGE=rust:1.88-slim-bookworm@sha256:38bc5a86d998772d4aec2348656ed21438d20fcdce2795b56ca434cf21430d89
+ARG RUNTIME_IMAGE=debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc
+FROM ${RUST_IMAGE} AS build
 WORKDIR /src
-# Copy the manifest first so a later `cargo build` can reuse the layer when only
-# the sources change. There is no registry index to fetch: no dependencies.
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 COPY examples ./examples
-RUN cargo build --release --locked --bin minivectordb
-
-FROM debian:bookworm-slim
-
+COPY tests ./tests
+RUN cargo test --release --locked --offline && cargo build --release --locked --offline --bin minivectordb
+FROM ${RUNTIME_IMAGE}
 RUN mkdir -p /data
 COPY --from=build /src/target/release/minivectordb /usr/local/bin/minivectordb
-
 VOLUME ["/data"]
 WORKDIR /data
-
-# The grading driver talks to the server over stdin/stdout, as the task requires:
-# run the image with `-i`, never `-d`/`-t`, and keep stdout clean.
-ENTRYPOINT ["/usr/local/bin/minivectordb", "--data", "/data"]
+ENTRYPOINT ["/usr/local/bin/minivectordb"]
+CMD ["--data-dir", "/data"]

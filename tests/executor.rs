@@ -472,14 +472,14 @@ fn show_tables_and_describe_report_the_catalog() {
 }
 
 #[test]
-fn housekeeping_statements_are_accepted() {
+fn unsupported_namespace_statements_are_rejected() {
     let dir = TempDir::new();
     let mut s = session(&dir);
     seed(&mut s);
 
-    run_ok(&mut s, "USE test");
-    run_ok(&mut s, "CREATE DATABASE IF NOT EXISTS test");
-    run_ok(&mut s, "DROP DATABASE IF EXISTS test");
+    assert_eq!(error_code(s.execute("USE test")), ErrorCode::NotSupported);
+    assert_eq!(error_code(s.execute("CREATE DATABASE IF NOT EXISTS test")), ErrorCode::NotSupported);
+    assert_eq!(error_code(s.execute("DROP DATABASE IF EXISTS test")), ErrorCode::NotSupported);
     run_ok(&mut s, "CREATE VECTOR INDEX idx ON items(emb)");
     run_ok(&mut s, "DROP INDEX idx ON items");
     // Dropping an index on a missing table is still an error.

@@ -4,11 +4,10 @@
 //! vectors, loaded in batches of 100, then 1,000 TopK (K = 10) queries of
 //! which half carry an equality filter on a plain column.
 //!
-//! Run with `cargo run --release --example bench`. The numbers printed are the
-//! ones the ranking uses: wall clock for the two phases, bytes read and
-//! written by the process (`/proc/self/io`) and peak resident memory
-//! (`VmHWM`). They are local measurements, not platform cgroup numbers, but
-//! they move in the same direction.
+//! Run with `cargo run --release --example bench`. Wall clock, process I/O
+//! (`/proc/self/io`) and peak resident memory (`VmHWM`) are local proxies.
+//! Official scoring uses a frozen driver and cgroup accounting including cache;
+//! these measurements cannot predict the final rank or score.
 
 use std::fmt::Write as _;
 use std::path::PathBuf;
@@ -124,6 +123,7 @@ fn main() {
     let raw_scan = t.elapsed();
 
     // ---- query phase ---------------------------------------------------
+    let query_io_start = process_io();
     let query_start = Instant::now();
     let mut seen = 0usize;
     for (category, vector) in &queries {
@@ -142,7 +142,7 @@ fn main() {
         seen += rows.rows.len();
     }
     let query_time = query_start.elapsed();
-    let query_io = process_io().since(start_io.since(write_io));
+    let query_io = process_io().since(query_io_start);
 
     // How much of the write phase is the durable commit itself?
     let commit_start = Instant::now();

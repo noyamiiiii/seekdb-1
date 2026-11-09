@@ -3,3 +3,8 @@
 *.wal
 catalog.bin
 data/
+__pycache__/
+/docs/evidence/
+/tools/final_validation_local.py
+*.txn
+*.vidx

@@ -26,7 +26,6 @@ use crate::schema::TableSchema;
 
 use catalog::Catalog;
 use heap::{HeapFile, Rid};
-use page::Page;
 use wal::Wal;
 
 /// Converts an I/O failure into the protocol's generic error.
@@ -63,32 +62,24 @@ impl Table {
     fn open(dir: &Path, schema: TableSchema) -> DbResult<Self> {
         let heap = HeapFile::open(dir.join(format!("{}.heap", schema.name)))
             .map_err(|e| io_err("cannot open heap file", e))?;
-        let mut table = Self {
+        let table = Self {
             schema,
             heap,
             index: HashMap::new(),
             rows: 0,
         };
-        table.rebuild_index()?;
         Ok(table)
     }
 
     /// Rebuilds the primary-key index from the heap. This runs once at open,
     /// which is why every record repeats its primary key in front.
     fn rebuild_index(&mut self) -> DbResult<()> {
-        let mut entries: Vec<(i64, Rid)> = Vec::new();
-        self.heap
-            .for_each_live(|page, slot, bytes| {
-                if let Some(pk) = record::prefix_pk(bytes) {
-                    entries.push((pk, Rid { page, slot }));
-                }
-                Ok(())
-            })
-            .map_err(|e| io_err("cannot scan heap for index rebuild", e))?;
         self.index.clear();
-        for (pk, rid) in entries {
-            self.index.insert(pk, rid);
-        }
+        let index = &mut self.index;
+        self.heap.for_each_live(|page, slot, bytes| {
+            if let Some(pk) = record::prefix_pk(bytes) { index.insert(pk, Rid { page, slot }); }
+            Ok(())
+        }).map_err(|e| io_err("cannot scan heap for index rebuild", e))?;
         self.rows = self.index.len() as u64;
         Ok(())
     }
@@ -180,26 +171,13 @@ impl Storage {
             tables.insert(schema.name.clone(), Table::open(&dir, schema.clone())?);
         }
 
-        // Roll forward committed page images from an interrupted commit.
-        let images =
-            wal::recover(&dir.join("wal.log")).map_err(|e| io_err("cannot read the log", e))?;
-        if !images.is_empty() {
-            for (table, page_id, image) in images {
-                let Some(target) = tables.get_mut(&table) else {
-                    // The table was dropped before the crash; its pages are gone.
-                    continue;
-                };
-                let page = Page::from_bytes(&image).ok_or_else(|| {
-                    DbError::new(ErrorCode::Unknown, "log contains a corrupt page image")
-                })?;
-                target.heap.put_page(page_id, page);
-            }
-            for table in tables.values_mut() {
-                table
-                    .heap
-                    .flush()
-                    .map_err(|e| io_err("cannot apply recovered pages", e))?;
-            }
+        // Apply committed images before inspecting possibly torn heap pages.
+        wal::replay(&dir.join("wal.log"), |name, id, image| {
+            if let Some(table) = tables.get_mut(name) { table.heap.apply_recovered(id, image)?; }
+            Ok(())
+        }).map_err(|e| io_err("cannot replay the log", e))?;
+        for table in tables.values_mut() {
+            table.heap.sync().map_err(|e| io_err("cannot sync recovered pages", e))?;
         }
 
         let mut wal =
@@ -300,8 +278,17 @@ impl Storage {
         }
     }
 
-    fn undo(&mut self, txn: Txn) {
-        for entry in txn.undo.into_iter().rev() {
+    pub fn statement_mark(&self) -> usize {
+        self.txn.as_ref().map_or(0, |txn| txn.undo.len())
+    }
+
+    pub fn rollback_statement(&mut self, mark: usize) {
+        let entries = self.txn.as_mut().map(|txn| txn.undo.split_off(mark)).unwrap_or_default();
+        self.undo_entries(entries);
+    }
+
+    fn undo_entries(&mut self, entries: Vec<Undo>) {
+        for entry in entries.into_iter().rev() {
             match entry {
                 Undo::Insert { table, rid, pk } => {
                     if let Some(t) = self.tables.get_mut(&table) {
@@ -319,6 +306,10 @@ impl Storage {
                 }
             }
         }
+    }
+
+    fn undo(&mut self, txn: Txn) {
+        self.undo_entries(txn.undo);
         self.discard_buffers();
     }
 
@@ -333,14 +324,12 @@ impl Storage {
         if dirty {
             {
                 let Storage { tables, wal, .. } = self;
-                let mut images: Vec<(&str, u32, &[u8])> = Vec::new();
-                for (name, table) in tables.iter() {
-                    for (page_id, image) in table.heap.dirty_pages() {
-                        images.push((name.as_str(), page_id, image));
-                    }
+                wal.begin(txn_id).map_err(|e| io_err("cannot begin log transaction", e))?;
+                for (name, table) in tables.iter_mut() {
+                    table.heap.for_each_dirty(|id, image| wal.page(txn_id, name, id, image))
+                        .map_err(|e| io_err("cannot write log pages", e))?;
                 }
-                wal.append_commit(txn_id, images)
-                    .map_err(|e| io_err("cannot write the log", e))?;
+                wal.finish_commit(txn_id).map_err(|e| io_err("cannot commit the log", e))?;
             }
             // The log now survives a crash on its own, so the heap pages can be
             // written back without waiting for their own fsync. They are only
@@ -455,10 +444,45 @@ impl Storage {
         }
         let mut schema = TableSchema::from_create(create)?;
         schema.name = key.clone();
+        // A previous DROP may have died after catalog replacement but before
+        // unlinking its heap. An absent catalog name always means a new heap.
+        self.remove_index_metadata(&key)?;
+        let heap_path = self.dir.join(format!("{}.heap", key));
+        if heap_path.exists() { fs::remove_file(&heap_path).map_err(|e| io_err("cannot remove orphan heap", e))?; }
         let table = Table::open(&self.dir, schema.clone())?;
         self.tables.insert(key.clone(), table);
         self.catalog.tables.insert(key, schema);
         self.finish_ddl()
+    }
+
+    pub fn declare_vector_index(&mut self, table: &str, name: &str, column: &str) -> DbResult<()> {
+        use std::io::Write;
+        let path = self.dir.join(format!("{}.{}.vidx",table.to_ascii_lowercase(),name.to_ascii_lowercase()));
+        if path.exists() { return Err(DbError::new(ErrorCode::DuplicateEntry,"vector index already exists")); }
+        let tmp = path.with_extension("vidx.tmp");
+        let mut out = fs::File::create(&tmp).map_err(|e| io_err("cannot create index metadata",e))?;
+        writeln!(out,"MVFLAT01\n{}\n{}",table.to_ascii_lowercase(),column.to_ascii_lowercase()).map_err(|e| io_err("cannot write index metadata",e))?;
+        out.sync_all().map_err(|e| io_err("cannot sync index metadata",e))?;
+        fs::rename(tmp,path).map_err(|e| io_err("cannot publish index metadata",e))?;
+        sync_dir(&self.dir).map_err(|e| io_err("cannot sync index directory",e))
+    }
+
+    pub fn drop_vector_index(&mut self, table: &str, name: &str) -> DbResult<()> {
+        self.schema(table)?;
+        let path = self.dir.join(format!("{}.{}.vidx",table.to_ascii_lowercase(),name.to_ascii_lowercase()));
+        fs::remove_file(path).map_err(|e| io_err("cannot drop vector index",e))?;
+        sync_dir(&self.dir).map_err(|e| io_err("cannot sync index directory",e))
+    }
+
+    fn remove_index_metadata(&self, table: &str) -> DbResult<()> {
+        for item in fs::read_dir(&self.dir).map_err(|e| io_err("cannot list index metadata",e))? {
+            let path = item.map_err(|e| io_err("cannot read index metadata",e))?.path();
+            let name = path.file_name().and_then(|s|s.to_str()).unwrap_or_default();
+            if name.starts_with(&format!("{}.",table.to_ascii_lowercase())) && name.ends_with(".vidx") {
+                fs::remove_file(path).map_err(|e| io_err("cannot remove stale index metadata",e))?;
+            }
+        }
+        Ok(())
     }
 
     pub fn drop_table(&mut self, name: &str) -> DbResult<()> {
@@ -469,6 +493,7 @@ impl Storage {
             ));
         }
         let key = name.to_ascii_lowercase();
+        self.checkpoint()?;
         let Some(table) = self.tables.remove(&key) else {
             return Err(DbError::new(
                 ErrorCode::NoSuchTable,
@@ -481,6 +506,7 @@ impl Storage {
         self.catalog_dirty = true;
         self.make_durable(0)?;
         let _ = fs::remove_file(heap_path);
+        self.remove_index_metadata(&key)?;
         sync_dir(&self.dir).map_err(|e| io_err("cannot sync the data directory", e))?;
         Ok(())
     }
@@ -571,21 +597,12 @@ impl Storage {
             let t = self.table(&key)?;
             t.index.get(&pk).copied()
         };
-        let Some(old_rid) = old_rid else {
+        let Some(_old_rid) = old_rid else {
             return Ok(false);
         };
-        let (new_rid, _) = {
-            let t = self.table(&key)?;
-            t.delete_row(pk)?;
-            let result = t.insert_row(&new_values)?;
-            result
-        };
+        self.delete(&key, pk)?;
+        let (new_rid, _) = self.table(&key)?.insert_row(&new_values)?;
         if let Some(txn) = &mut self.txn {
-            txn.undo.push(Undo::Delete {
-                table: key.clone(),
-                rid: old_rid,
-                pk,
-            });
             txn.undo.push(Undo::Insert {
                 table: key,
                 rid: new_rid,

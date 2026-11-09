@@ -19,7 +19,7 @@ fn main() -> ExitCode {
     let mut data_dir = DEFAULT_DATA_DIR.to_string();
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
-        if let Some(value) = flag_value(&arg, "--data", "-d") {
+        if let Some(value) = flag_value(&arg, "--data", "-d").or_else(|| flag_value(&arg, "--data-dir", "-d")) {
             data_dir = value.unwrap_or_else(|| args.next().unwrap_or_default());
             if data_dir.is_empty() {
                 eprintln!("minivectordb: --data needs a directory");
