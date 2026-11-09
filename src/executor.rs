@@ -96,6 +96,22 @@ impl Session {
                     Err(err) => Err(err),
                 }
             }
+            Statement::Truncate(table) => {
+                self.implicit_commit()?;
+                self.truncate(table)?;
+                Ok(Response::ok(0))
+            }
+            Statement::ShowTables => Ok(Response::Rows(self.show_tables())),
+            Statement::ShowColumns { table } => Ok(Response::Rows(self.show_columns(table)?)),
+            // Vector indexes are implicit in this engine: dropping one changes
+            // nothing observable, but the statement must still validate the
+            // table it names.
+            Statement::DropIndex { table } => {
+                self.storage.schema(table)?;
+                Ok(Response::ok(0))
+            }
+            Statement::Noop => Ok(Response::ok(0)),
+            Statement::SelectConst { items } => Ok(Response::Rows(select_const(items))),
             Statement::Insert(_)
             | Statement::Select(_)
             | Statement::Update(_)
@@ -221,6 +237,89 @@ impl Session {
             }
         }
         Ok(affected)
+    }
+
+    /// Removes every row, atomically. MySQL's `TRUNCATE` commits implicitly,
+    /// so the caller has already closed the explicit transaction.
+    fn truncate(&mut self, table: &str) -> DbResult<()> {
+        let schema = self.storage.schema(table)?.clone();
+        let pks = {
+            let mut pks = Vec::new();
+            let mut failure = None;
+            self.storage.for_each_row(table, |row| {
+                match row[schema.primary_key] {
+                    Value::Int(pk) => pks.push(pk),
+                    _ => {
+                        failure = Some(DbError::new(
+                            ErrorCode::WrongValue,
+                            "primary key is not an integer",
+                        ));
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
+            })?;
+            match failure {
+                Some(err) => return Err(err),
+                None => pks,
+            }
+        };
+        self.storage.begin_statement()?;
+        for pk in pks {
+            if let Err(err) = self.storage.delete(table, pk) {
+                self.storage.rollback_quietly();
+                return Err(err);
+            }
+        }
+        self.storage.commit()
+    }
+
+    fn show_tables(&mut self) -> ResultSet {
+        let mut names: Vec<String> = self.storage.table_names().map(str::to_string).collect();
+        names.sort();
+        ResultSet {
+            columns: vec!["Tables_in_test".to_string()],
+            rows: names
+                .into_iter()
+                .map(|name| vec![Cell::Text(name)])
+                .collect(),
+        }
+    }
+
+    fn show_columns(&mut self, table: &str) -> DbResult<ResultSet> {
+        let schema = self.storage.schema(table)?.clone();
+        let rows = schema
+            .columns
+            .iter()
+            .enumerate()
+            .map(|(index, def)| {
+                let ty = match def.ty {
+                    ColumnType::BigInt => "bigint".to_string(),
+                    ColumnType::Varchar(n) => format!("varchar({n})"),
+                    ColumnType::Vector(n) => format!("vector({n})"),
+                };
+                let key = if index == schema.primary_key {
+                    "PRI"
+                } else {
+                    ""
+                };
+                vec![
+                    Cell::Text(def.name.clone()),
+                    Cell::Text(ty),
+                    Cell::Text("NO".to_string()),
+                    Cell::Text(key.to_string()),
+                    Cell::Text("NULL".to_string()),
+                    Cell::Text(String::new()),
+                ]
+            })
+            .collect();
+        Ok(ResultSet {
+            columns: ["Field", "Type", "Null", "Key", "Default", "Extra"]
+                .iter()
+                .map(|name| name.to_string())
+                .collect(),
+            rows,
+        })
     }
 
     /// Primary keys of every row that satisfies `filter`.
@@ -788,6 +887,22 @@ fn cell_from_value(value: &Value) -> Cell {
     }
 }
 
+/// `SELECT 1 [AS one], 'x'`: one row built from literals only. As in MySQL the
+/// column name defaults to the literal's own text.
+fn select_const(items: &[(Value, Option<String>)]) -> ResultSet {
+    let mut columns = Vec::with_capacity(items.len());
+    let mut row = Vec::with_capacity(items.len());
+    for (value, alias) in items {
+        let cell = cell_from_value(value);
+        columns.push(alias.clone().unwrap_or_else(|| cell.render()));
+        row.push(cell);
+    }
+    ResultSet {
+        columns,
+        rows: vec![row],
+    }
+}
+
 // ----- expressions ------------------------------------------------------
 
 /// Values as seen by the evaluator: stored cells plus computed distances.
@@ -826,6 +941,12 @@ fn filter_matches(expr: &Expr, row: &[Value], schema: &TableSchema) -> DbResult<
         Expr::And(left, right) => {
             Ok(filter_matches(left, row, schema)? && filter_matches(right, row, schema)?)
         }
+        Expr::In { left, values } => {
+            let left = eval(left, row, schema)?;
+            Ok(values
+                .iter()
+                .any(|value| total_cmp(&left, &EvalValue::from(value)) == Ordering::Equal))
+        }
         _ => Err(DbError::new(
             ErrorCode::NotSupported,
             "WHERE must combine comparisons with AND",
@@ -862,7 +983,7 @@ fn eval(expr: &Expr, row: &[Value], schema: &TableSchema) -> DbResult<EvalValue>
             })?;
             Ok(EvalValue::Real(d))
         }
-        Expr::Compare { .. } | Expr::And(_, _) => {
+        Expr::Compare { .. } | Expr::And(_, _) | Expr::In { .. } => {
             filter_matches(expr, row, schema).map(|b| EvalValue::Int(i64::from(b)))
         }
     }

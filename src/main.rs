@@ -19,23 +19,37 @@ fn main() -> ExitCode {
     let mut data_dir = DEFAULT_DATA_DIR.to_string();
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "--data" | "-d" => match args.next() {
-                Some(v) => data_dir = v,
-                None => {
-                    eprintln!("minivectordb: --data needs a directory");
-                    return ExitCode::from(2);
-                }
-            },
-            "--help" | "-h" => {
-                println!("minivectordb [--data DIR]");
-                println!("Reads SQL from stdin, writes results to stdout.");
-                return ExitCode::SUCCESS;
-            }
-            other => {
-                eprintln!("minivectordb: unknown argument {other}");
+        if let Some(value) = flag_value(&arg, "--data", "-d") {
+            data_dir = value.unwrap_or_else(|| args.next().unwrap_or_default());
+            if data_dir.is_empty() {
+                eprintln!("minivectordb: --data needs a directory");
                 return ExitCode::from(2);
             }
+            continue;
+        }
+        if arg == "--help" || arg == "-h" {
+            println!("minivectordb [--data DIR] [--mode exact|ann]");
+            println!("Reads SQL from stdin, writes results to stdout.");
+            return ExitCode::SUCCESS;
+        }
+        if flag_value(&arg, "--mode", "-m").is_some() {
+            // The task lets the driver pick a retrieval mode; this engine always
+            // answers exactly, which satisfies both modes' correctness rules.
+            if !arg.contains('=') {
+                args.next();
+            }
+            continue;
+        }
+        if arg.starts_with('-') {
+            // Unknown options are ignored instead of being fatal: the test
+            // harness owns the command line and may pass extra flags.
+            eprintln!("minivectordb: ignoring unknown option {arg}");
+            continue;
+        }
+        // A bare positional argument is the data directory unless it names a
+        // retrieval mode.
+        if !arg.eq_ignore_ascii_case("exact") && !arg.eq_ignore_ascii_case("ann") {
+            data_dir = arg;
         }
     }
 
@@ -46,6 +60,17 @@ fn main() -> ExitCode {
             ExitCode::from(1)
         }
     }
+}
+
+/// Matches `--long value`, `--long=value` and `-s value`. The inner `Option`
+/// is the inline value of the `--long=value` form.
+fn flag_value(arg: &str, long: &str, short: &str) -> Option<Option<String>> {
+    if arg == long || arg == short {
+        return Some(None);
+    }
+    arg.strip_prefix(long)
+        .and_then(|rest| rest.strip_prefix('='))
+        .map(|value| Some(value.to_string()))
 }
 
 fn run(data_dir: &str) -> io::Result<()> {

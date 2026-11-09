@@ -39,6 +39,21 @@ pub enum Statement {
     Begin,
     Commit,
     Rollback,
+    /// `TRUNCATE [TABLE] name`
+    Truncate(String),
+    ShowTables,
+    /// `DESCRIBE name`, `DESC name`, `SHOW COLUMNS FROM name`
+    ShowColumns { table: String },
+    /// `DROP INDEX name ON table`: vector indexes are implicit in this engine,
+    /// so the statement only exists to keep MySQL clients happy.
+    DropIndex { table: String },
+    /// Statements a MySQL client sends that have no meaning here (`USE db`,
+    /// `CREATE DATABASE db`, `DROP DATABASE db`, ...).
+    Noop,
+    /// `SELECT 1 [AS one]`: expressions without a FROM clause.
+    SelectConst {
+        items: Vec<(Value, Option<String>)>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -156,6 +171,11 @@ pub enum Expr {
         right: Box<Expr>,
     },
     And(Box<Expr>, Box<Expr>),
+    /// `col IN (1, 2, 3)`
+    In {
+        left: Box<Expr>,
+        values: Vec<Value>,
+    },
 }
 
 impl Expr {
@@ -170,6 +190,7 @@ impl Expr {
                     && !matches!(&**right, Expr::Distance { .. })
             }
             Expr::And(l, r) => l.is_supported_filter() && r.is_supported_filter(),
+            Expr::In { left, .. } => matches!(&**left, Expr::Column(_) | Expr::Lit(_)),
             _ => false,
         }
     }

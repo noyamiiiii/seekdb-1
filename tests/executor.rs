@@ -400,3 +400,117 @@ fn topk_streams_a_large_table_and_matches_the_brute_force_order() {
 
     assert_eq!(got, expected);
 }
+
+// ----- MySQL housekeeping statements -----------------------------------
+
+#[test]
+fn start_transaction_is_begin() {
+    let dir = TempDir::new();
+    let mut s = session(&dir);
+    seed(&mut s);
+
+    run_ok(&mut s, "START TRANSACTION");
+    run_ok(&mut s, "INSERT INTO items VALUES (5, 'e', '[1,1]')");
+    assert_eq!(ids(run_ok(&mut s, "SELECT id FROM items ORDER BY id")), vec![1, 2, 3, 4, 5]);
+    run_ok(&mut s, "ROLLBACK");
+    assert_eq!(ids(run_ok(&mut s, "SELECT id FROM items ORDER BY id")), vec![1, 2, 3, 4]);
+}
+
+#[test]
+fn truncate_removes_every_row_and_commits() {
+    let dir = TempDir::new();
+    let mut s = session(&dir);
+    seed(&mut s);
+
+    run_ok(&mut s, "TRUNCATE TABLE items");
+    let (_, all) = rows(run_ok(&mut s, "SELECT * FROM items"));
+    assert!(all.is_empty());
+
+    // The table itself is still there, and usable.
+    run_ok(&mut s, "INSERT INTO items VALUES (1, 'a', '[0,0]')");
+    assert_eq!(ids(run_ok(&mut s, "SELECT id FROM items")), vec![1]);
+}
+
+#[test]
+fn show_tables_and_describe_report_the_catalog() {
+    let dir = TempDir::new();
+    let mut s = session(&dir);
+    seed(&mut s);
+    run_ok(&mut s, "CREATE TABLE other (id BIGINT PRIMARY KEY, v VARCHAR(4))");
+
+    let (columns, table_rows) = rows(run_ok(&mut s, "SHOW TABLES"));
+    assert_eq!(columns, vec!["Tables_in_test"]);
+    assert_eq!(
+        table_rows,
+        vec![
+            vec![Cell::Text("items".into())],
+            vec![Cell::Text("other".into())],
+        ]
+    );
+
+    let (columns, described) = rows(run_ok(&mut s, "DESCRIBE items"));
+    assert_eq!(
+        columns,
+        vec!["Field", "Type", "Null", "Key", "Default", "Extra"]
+    );
+    let fields: Vec<String> = described
+        .iter()
+        .map(|row| match &row[0] {
+            Cell::Text(name) => name.clone(),
+            other => panic!("expected a name, got {other:?}"),
+        })
+        .collect();
+    assert_eq!(fields, vec!["id", "name", "emb"]);
+    assert_eq!(described[0][1], Cell::Text("bigint".into()));
+    assert_eq!(described[0][3], Cell::Text("PRI".into()));
+    assert_eq!(described[2][1], Cell::Text("vector(2)".into()));
+
+    // SHOW COLUMNS is the same statement in MySQL.
+    let (columns, again) = rows(run_ok(&mut s, "SHOW COLUMNS FROM items"));
+    assert_eq!(columns, vec!["Field", "Type", "Null", "Key", "Default", "Extra"]);
+    assert_eq!(again.len(), 3);
+}
+
+#[test]
+fn housekeeping_statements_are_accepted() {
+    let dir = TempDir::new();
+    let mut s = session(&dir);
+    seed(&mut s);
+
+    run_ok(&mut s, "USE test");
+    run_ok(&mut s, "CREATE DATABASE IF NOT EXISTS test");
+    run_ok(&mut s, "DROP DATABASE IF EXISTS test");
+    run_ok(&mut s, "CREATE VECTOR INDEX idx ON items(emb)");
+    run_ok(&mut s, "DROP INDEX idx ON items");
+    // Dropping an index on a missing table is still an error.
+    assert_eq!(
+        error_code(s.execute("DROP INDEX idx ON missing")),
+        ErrorCode::NoSuchTable
+    );
+}
+
+#[test]
+fn in_and_between_filters() {
+    let dir = TempDir::new();
+    let mut s = session(&dir);
+    seed(&mut s);
+
+    assert_eq!(
+        ids(run_ok(&mut s, "SELECT id FROM items WHERE id IN (2, 4) ORDER BY id")),
+        vec![2, 4]
+    );
+    assert_eq!(
+        ids(run_ok(
+            &mut s,
+            "SELECT id FROM items WHERE id BETWEEN 2 AND 3 ORDER BY id"
+        )),
+        vec![2, 3]
+    );
+    assert_eq!(
+        ids(run_ok(
+            &mut s,
+            "SELECT id FROM items WHERE name IN ('a', 'c') ORDER BY id"
+        )),
+        vec![1, 3]
+    );
+}

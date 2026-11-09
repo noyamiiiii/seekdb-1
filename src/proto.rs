@@ -56,7 +56,7 @@ impl<R: BufRead> StatementReader<R> {
             self.pos = 0;
             if self.inner.read_line(&mut self.line)? == 0 {
                 let pending = std::mem::take(&mut self.buf);
-                let trimmed = pending.trim();
+                let trimmed = pending.trim().trim_start_matches('\u{feff}');
                 if trimmed.is_empty() {
                     return Ok(None);
                 }
@@ -123,7 +123,7 @@ impl<R: BufRead> StatementReader<R> {
                     self.buf.push_str(&self.line[piece_start..i]);
                     let stmt = std::mem::take(&mut self.buf);
                     self.pos = i + 1;
-                    let trimmed = stmt.trim();
+                    let trimmed = stmt.trim().trim_start_matches('\u{feff}');
                     if !trimmed.is_empty() {
                         return Some(trimmed.to_string());
                     }
@@ -193,6 +193,11 @@ mod tests {
     #[test]
     fn skips_empty_statements() {
         assert_eq!(split(";;\nSELECT 1;;\n"), vec!["SELECT 1".to_string()]);
+    }
+
+    #[test]
+    fn strips_a_leading_byte_order_mark() {
+        assert_eq!(split("\u{feff}SELECT 1;\n"), vec!["SELECT 1".to_string()]);
     }
 
     #[test]

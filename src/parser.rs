@@ -122,7 +122,28 @@ impl Parser {
             self.parse_delete()?
         } else if tok.text.eq_ignore_ascii_case("drop") {
             self.bump();
-            self.parse_drop_table()?
+            self.parse_drop()?
+        } else if tok.text.eq_ignore_ascii_case("truncate") {
+            self.bump();
+            self.eat_word("table");
+            Statement::Truncate(self.identifier()?)
+        } else if tok.text.eq_ignore_ascii_case("show") {
+            self.bump();
+            self.parse_show()?
+        } else if tok.text.eq_ignore_ascii_case("describe") || tok.text.eq_ignore_ascii_case("desc") {
+            self.bump();
+            self.eat_word("table");
+            Statement::ShowColumns {
+                table: self.identifier()?,
+            }
+        } else if tok.text.eq_ignore_ascii_case("use") {
+            self.bump();
+            self.identifier()?;
+            Statement::Noop
+        } else if tok.text.eq_ignore_ascii_case("start") {
+            self.bump();
+            self.expect_word("transaction")?;
+            Statement::Begin
         } else if tok.text.eq_ignore_ascii_case("set") {
             self.bump();
             self.parse_set()?
@@ -151,11 +172,71 @@ impl Parser {
         } else if self.eat_word("vector") {
             self.expect_word("index")?;
             self.parse_create_vector_index()
+        } else if self.eat_word("database") || self.eat_word("schema") {
+            self.eat_if_not_exists();
+            self.identifier()?;
+            Ok(Statement::Noop)
         } else if self.at_word("index") {
             Err(self.unsupported_here("plain CREATE INDEX is not supported"))
         } else {
             Err(self.error_here("expected TABLE or VECTOR INDEX after CREATE"))
         }
+    }
+
+    fn parse_drop(&mut self) -> DbResult<Statement> {
+        if self.eat_word("index") {
+            self.identifier()?;
+            self.expect_word("on")?;
+            let table = self.identifier()?;
+            return Ok(Statement::DropIndex { table });
+        }
+        if self.eat_word("database") || self.eat_word("schema") {
+            self.eat_if_exists();
+            self.identifier()?;
+            return Ok(Statement::Noop);
+        }
+        self.parse_drop_table()
+    }
+
+    /// Consumes `IF NOT EXISTS` when present (accepted, then ignored).
+    fn eat_if_not_exists(&mut self) -> bool {
+        if self.at_word("if")
+            && self.peek_at(1).is_some_and(|t| t.is_word("not"))
+            && self.peek_at(2).is_some_and(|t| t.is_word("exists"))
+        {
+            self.bump();
+            self.bump();
+            self.bump();
+            return true;
+        }
+        false
+    }
+
+    /// Consumes `IF EXISTS` when present (accepted, then ignored).
+    fn eat_if_exists(&mut self) -> bool {
+        if self.at_word("if") && self.peek_at(1).is_some_and(|t| t.is_word("exists")) {
+            self.bump();
+            self.bump();
+            return true;
+        }
+        false
+    }
+
+    fn peek_at(&self, offset: usize) -> Option<&Token> {
+        self.tokens.get(self.pos + offset)
+    }
+
+    fn parse_show(&mut self) -> DbResult<Statement> {
+        if self.eat_word("tables") {
+            return Ok(Statement::ShowTables);
+        }
+        if self.eat_word("columns") {
+            self.expect_word("from")?;
+            return Ok(Statement::ShowColumns {
+                table: self.identifier()?,
+            });
+        }
+        Err(self.unsupported_here("only SHOW TABLES and SHOW COLUMNS are supported"))
     }
 
     fn parse_drop_table(&mut self) -> DbResult<Statement> {
@@ -290,16 +371,31 @@ impl Parser {
     }
 
     fn parse_select(&mut self) -> DbResult<Statement> {
-        let mut items = Vec::new();
+        let mut items: Vec<SelectItem> = Vec::new();
+        let mut consts: Vec<(Value, Option<String>)> = Vec::new();
         loop {
-            items.push(self.parse_select_item()?);
+            if matches!(self.peek().kind, Kind::Number | Kind::Str | Kind::LBracket) {
+                let value = self.parse_value()?;
+                let alias = self.parse_optional_alias()?;
+                consts.push((value, alias));
+            } else {
+                items.push(self.parse_select_item()?);
+            }
             if self.peek().kind == Kind::Comma {
                 self.bump();
                 continue;
             }
             break;
         }
-        self.expect_word("from")?;
+        if !self.eat_word("from") {
+            if !consts.is_empty() && items.is_empty() {
+                return Ok(Statement::SelectConst { items: consts });
+            }
+            return Err(self.error_here("expected FROM"));
+        }
+        if !consts.is_empty() {
+            return Err(self.unsupported_here("literal and column select items cannot be mixed"));
+        }
         let table = self.identifier()?;
         let filter = if self.eat_word("where") {
             Some(self.parse_filter()?)
@@ -331,6 +427,17 @@ impl Parser {
             order_by,
             limit,
         }))
+    }
+
+    fn parse_optional_alias(&mut self) -> DbResult<Option<String>> {
+        if self.eat_word("as") {
+            return Ok(Some(self.identifier()?));
+        }
+        // `SELECT 1 one` is valid MySQL too, but `FROM` must not be swallowed.
+        if self.peek().kind == Kind::Word && !self.at_word("from") {
+            return Ok(Some(self.identifier()?));
+        }
+        Ok(None)
     }
 
     fn parse_select_item(&mut self) -> DbResult<SelectItem> {
@@ -401,6 +508,39 @@ impl Parser {
 
     fn parse_comparison(&mut self) -> DbResult<Expr> {
         let left = self.parse_operand()?;
+        if self.eat_word("between") {
+            let low = self.parse_operand()?;
+            self.expect_word("and")?;
+            let high = self.parse_operand()?;
+            let lower = Expr::Compare {
+                left: Box::new(left.clone()),
+                op: CmpOp::Ge,
+                right: Box::new(low),
+            };
+            let upper = Expr::Compare {
+                left: Box::new(left),
+                op: CmpOp::Le,
+                right: Box::new(high),
+            };
+            return Ok(Expr::And(Box::new(lower), Box::new(upper)));
+        }
+        if self.eat_word("in") {
+            self.expect_kind(Kind::LParen, "'('")?;
+            let mut values = Vec::new();
+            loop {
+                values.push(self.parse_value()?);
+                if self.peek().kind == Kind::Comma {
+                    self.bump();
+                    continue;
+                }
+                break;
+            }
+            self.expect_kind(Kind::RParen, "')'")?;
+            return Ok(Expr::In {
+                left: Box::new(left),
+                values,
+            });
+        }
         let op = match self.peek().kind {
             Kind::Eq => CmpOp::Eq,
             Kind::Lt => CmpOp::Lt,

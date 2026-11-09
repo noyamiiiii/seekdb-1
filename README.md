@@ -42,14 +42,16 @@ docker run -i --rm -v "$PWD/data:/data" minivectordb
 
 | 类别 | 支持 |
 | --- | --- |
-| DDL | `CREATE TABLE`（`BIGINT PRIMARY KEY` / `BIGINT` / `VARCHAR(n)` / `VECTOR(n)`）、`DROP TABLE [IF EXISTS]`、`CREATE VECTOR INDEX` |
-| 写入 | `INSERT ... VALUES`（可带列名、多行）、`UPDATE ... SET ... WHERE`、`DELETE ... WHERE` |
-| 查询 | `SELECT` 列 / `*`、`WHERE`（`AND`、`= <> < <= > >=`）、`ORDER BY`（可多列、`ASC`/`DESC`）、`LIMIT`、`L2_DISTANCE(列, '[…]') [AS 别名]` |
-| 事务 | `BEGIN` / `COMMIT` / `ROLLBACK`，自动提交模式下每条语句一个事务 |
-| 其它 | `SET name = value`、`SET NAMES utf8mb4`（接受并忽略） |
+| DDL | `CREATE TABLE`（`BIGINT PRIMARY KEY` / `BIGINT` / `VARCHAR(n)` / `VECTOR(n)`）、`DROP TABLE [IF EXISTS]`、`TRUNCATE [TABLE]`、`CREATE VECTOR INDEX`、`DROP INDEX ... ON ...` |
+| 写入 | `INSERT ... VALUES`（可带列名、多行）、`UPDATE ... SET ... WHERE`、`DELETE [FROM ... WHERE]` |
+| 查询 | `SELECT` 列 / `*` / 常量（无 `FROM`，如 `SELECT 1 AS one`）、`WHERE`（`AND`、`= < <= > >=`、`IN (...)`、`BETWEEN ... AND ...`）、`ORDER BY`（单列，`ASC`/`DESC`，并列按主键升序）、`LIMIT`、`L2_DISTANCE(列, '[…]') [AS 别名]` |
+| 事务 | `BEGIN` / `START TRANSACTION` / `COMMIT` / `ROLLBACK`，自动提交模式下每条语句一个事务 |
+| 元数据 | `SHOW TABLES`、`DESCRIBE 表` / `DESC 表` / `SHOW COLUMNS FROM 表` |
+| 其它 | `SET name = value`、`SET NAMES utf8mb4`、`USE 库`、`CREATE`/`DROP DATABASE`（接受并忽略）；命令行未知选项（含 `--mode exact\|ann`）一律忽略，不会因多余参数启动失败 |
 
 不支持：`JOIN`、聚合、子查询、`NULL`、`ALTER TABLE`、外键、嵌套事务、更新主键。
-`DROP TABLE`/`CREATE TABLE` 在显式事务内会先隐式提交（与 MySQL 一致）。
+`DROP TABLE`/`CREATE TABLE`/`TRUNCATE` 在显式事务内会先隐式提交（与 MySQL 一致）。
+不论驱动传 `exact` 还是 `ann` 模式，检索都走精确扫描，因此两种模式下的 TopK 结果都精确。
 
 ### 错误码
 

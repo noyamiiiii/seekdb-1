@@ -44,7 +44,7 @@ fn prints_ready_before_anything_else() {
 
 #[test]
 fn one_block_per_statement() {
-    let (out, code) = run("blocks", "SELECT 1;\nSELECT 2;\n");
+    let (out, code) = run("blocks", "SELECT * FROM t;\nSELECT * FROM u;\n");
     assert_eq!(code, 0);
     let blocks: Vec<&str> = out.lines().filter(|l| l.starts_with("ERROR")).collect();
     assert_eq!(blocks.len(), 2, "stdout was:\n{out}");
@@ -52,7 +52,7 @@ fn one_block_per_statement() {
 
 #[test]
 fn exit_stops_reading_the_stream() {
-    let (out, _) = run("exit", "SELECT 1;\nexit;\nSELECT 2;\n");
+    let (out, _) = run("exit", "SELECT * FROM t;\nexit;\nSELECT * FROM u;\n");
     assert!(out.ends_with("BYE\n"), "stdout was:\n{out}");
     assert_eq!(out.matches("ERROR").count(), 1);
 }
@@ -68,20 +68,38 @@ fn multi_line_and_commented_statement_is_one_block() {
 
 #[test]
 fn eof_without_exit_ends_with_success() {
-    let (out, code) = run("eof", "SELECT 1");
+    let (out, code) = run("eof", "SELECT * FROM t");
     assert_eq!(code, 0);
     assert!(out.starts_with("READY\n"));
     assert_eq!(out.matches("ERROR").count(), 1);
 }
 
 #[test]
-fn unknown_argument_is_a_usage_error() {
-    let status = Command::new(env!("CARGO_BIN_EXE_minivectordb"))
-        .arg("--nonsense")
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .expect("spawn");
-    assert_eq!(status.code(), Some(2));
+fn a_constant_select_is_one_row() {
+    let (out, code) = run("const", "SELECT 1 AS one;\n");
+    assert_eq!(code, 0);
+    assert!(out.contains("1 row in set"), "stdout was:\n{out}");
+    assert!(out.contains("| one |"), "stdout was:\n{out}");
+}
+
+#[test]
+fn unknown_options_are_ignored() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_minivectordb"))
+        .args(["--nonsense", "--mode=ann", "--data"])
+        .arg(data_dir("unknown-options"))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn server");
+    child
+        .stdin
+        .take()
+        .expect("stdin")
+        .write_all(b"exit;\n")
+        .expect("write");
+    let out = child.wait_with_output().expect("wait");
+    assert_eq!(out.status.code(), Some(0));
+    let stdout = String::from_utf8(out.stdout).expect("utf-8");
+    assert!(stdout.ends_with("BYE\n"), "stdout was:\n{stdout}");
 }
