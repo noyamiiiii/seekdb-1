@@ -449,11 +449,7 @@ impl Parser {
         }
         if self.at_word("l2_distance") {
             let (column, query) = self.parse_l2_call()?;
-            let alias = if self.eat_word("as") {
-                Some(self.identifier()?)
-            } else {
-                None
-            };
+            let alias = self.parse_optional_alias()?;
             return Ok(SelectItem::L2Distance {
                 column,
                 query,
@@ -468,7 +464,10 @@ impl Parser {
                 format!("function '{name}' is not supported"),
             ));
         }
-        Ok(SelectItem::Column(name))
+        match self.parse_optional_alias()? {
+            Some(alias) => Ok(SelectItem::AliasedColumn { column: name, alias }),
+            None => Ok(SelectItem::Column(name)),
+        }
     }
 
     /// Parses `L2_DISTANCE ( column , '[1,2,3]' )` or `L2_DISTANCE ( column , [1,2,3] )`.
@@ -497,15 +496,33 @@ impl Parser {
     }
 
     fn parse_filter(&mut self) -> DbResult<Expr> {
-        let mut expr = self.parse_comparison()?;
+        self.parse_conjunction(0)
+    }
+
+    fn parse_conjunction(&mut self, depth: usize) -> DbResult<Expr> {
+        if depth > 128 {
+            return Err(self.unsupported_here("predicate nesting is too deep"));
+        }
+        let mut expr = self.parse_predicate(depth)?;
         while self.eat_word("and") {
-            let rhs = self.parse_comparison()?;
+            let rhs = self.parse_predicate(depth)?;
             expr = Expr::And(Box::new(expr), Box::new(rhs));
         }
         if self.at_word("or") {
             return Err(self.unsupported_here("OR is not supported"));
         }
         Ok(expr)
+    }
+
+    fn parse_predicate(&mut self, depth: usize) -> DbResult<Expr> {
+        if self.peek().kind == Kind::LParen {
+            self.bump();
+            let expr = self.parse_conjunction(depth + 1)?;
+            self.expect_kind(Kind::RParen, "')'")?;
+            Ok(expr)
+        } else {
+            self.parse_comparison()
+        }
     }
 
     fn parse_comparison(&mut self) -> DbResult<Expr> {

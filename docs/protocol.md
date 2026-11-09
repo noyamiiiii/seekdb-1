@@ -19,7 +19,9 @@ error-code choices require confirmation against that driver before formal use.
   ```
 
   The driver sends the first statement only after it has read this line.
-* Shutdown: `exit;` / `quit;` / `\q` (also `exit 1`) answers `BYE` and exits 0.
+* Shutdown: `exit;` / `quit;` / `\q` (also `exit 1;`) answers `BYE` and exits 0.
+  Standalone `exit`, `quit`, and `\q` also terminate at a newline, without
+  waiting for a semicolon or for the client to close stdin.
   End of input without `exit` is a clean shutdown: the server rolls back any open
   transaction, flushes, and exits 0. A crash (non-zero exit) is a failure.
 
@@ -29,7 +31,8 @@ error-code choices require confirmation against that driver before formal use.
   (`'...'`, with `''` and `\` escapes) or inside a comment does not terminate.
 * Statements may span any number of lines; leading/trailing whitespace is not
   significant.
-* Comments: `-- ` to end of line, `#` to end of line, `/* ... */` (no nesting).
+* Comments: `--` to end of line, `#` to end of line, `/* ... */` (no nesting).
+  Removing a comment preserves whitespace between the surrounding tokens.
 * An empty statement (`;;`) is ignored and produces no block.
 * At most one open transaction per session; the session survives statement
   errors.

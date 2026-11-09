@@ -17,7 +17,7 @@ docker run --rm -i --network none --mount type=bind,source="$PWD/data",target=/d
 
 - 类型：完整 `i64` 范围的 `BIGINT`、按 Unicode 字符计数的 `VARCHAR(n)`、固定维度且仅接受有限 `float32` 的 `VECTOR(n)`。每表一个 BIGINT 主键，最多一列向量。
 - DDL：`CREATE TABLE`、`DROP TABLE [IF EXISTS]`、`TRUNCATE`、`CREATE VECTOR INDEX ... ON ...`、`DROP INDEX ... ON ...`。
-- DML：多行 `INSERT`、`UPDATE`、`DELETE`；查询支持投影、比较、`AND`、`IN`、`BETWEEN`、排序、`LIMIT`、`L2_DISTANCE`。过滤在 TopK 选取之前执行，距离相同按主键升序，输出距离为欧氏距离。
+- DML：多行 `INSERT`、`UPDATE`、`DELETE`；查询支持投影及列别名、比较、带括号的 `AND`、`IN`、`BETWEEN`、排序、`LIMIT`、`L2_DISTANCE`。过滤在 TopK 选取之前执行，距离相同按主键升序，输出距离为欧氏距离。
 - 事务：`BEGIN` / `START TRANSACTION`、`COMMIT`、`ROLLBACK`，读到自己的修改。失败语句撤回自身修改，保留显式事务中更早的成功语句；正常退出撤回尚未提交的事务。成功提交前同步日志。
 - 会话：`SET vector_mode = 'exact'` 或 `'ann'`、`SET NAMES utf8mb4`。两种向量模式均使用精确检索。未知变量和数据库命名空间命令返回不支持。
 - 辅助：`SHOW TABLES`、`DESCRIBE`、常量 `SELECT`。不支持聚合、JOIN、子查询、NULL、外键、嵌套事务和更新主键。

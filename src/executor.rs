@@ -875,6 +875,10 @@ fn plan_outputs(schema: &TableSchema, items: &[SelectItem]) -> DbResult<Vec<OutC
                     kind: OutKind::Column(index),
                 });
             }
+            SelectItem::AliasedColumn { column, alias } => {
+                let (index, _) = schema.column(column)?;
+                outs.push(OutColumn { name: alias.clone(), kind: OutKind::Column(index) });
+            }
             SelectItem::L2Distance {
                 column,
                 query,

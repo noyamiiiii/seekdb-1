@@ -55,7 +55,11 @@ impl<R: BufRead> StatementReader<R> {
             self.line.clear();
             self.pos = 0;
             if self.inner.read_line(&mut self.line)? == 0 {
-                let pending = std::mem::take(&mut self.buf);
+                let mut pending = std::mem::take(&mut self.buf);
+                if self.in_block {
+                    // Preserve a lexical error instead of executing the SQL prefix.
+                    pending.push_str(" /*");
+                }
                 let trimmed = pending.trim().trim_start_matches('\u{feff}');
                 if trimmed.is_empty() {
                     return Ok(None);
@@ -105,16 +109,21 @@ impl<R: BufRead> StatementReader<R> {
                 }
                 b'-' if bytes.get(i + 1) == Some(&b'-') => {
                     self.buf.push_str(&self.line[piece_start..i]);
+                    // A removed comment is whitespace, never token concatenation.
+                    self.buf.push('\n');
                     self.pos = bytes.len();
-                    return None;
+                    return self.take_line_command();
                 }
                 b'#' => {
                     self.buf.push_str(&self.line[piece_start..i]);
+                    // A removed comment is whitespace, never token concatenation.
+                    self.buf.push('\n');
                     self.pos = bytes.len();
-                    return None;
+                    return self.take_line_command();
                 }
                 b'/' if bytes.get(i + 1) == Some(&b'*') => {
                     self.buf.push_str(&self.line[piece_start..i]);
+                    self.buf.push(' ');
                     self.in_block = true;
                     i += 2;
                     piece_start = i;
@@ -127,15 +136,34 @@ impl<R: BufRead> StatementReader<R> {
                     if !trimmed.is_empty() {
                         return Some(trimmed.to_string());
                     }
-                    // Empty statement (`;;`): restart the scan right here.
-                    return self.scan_line();
+                    // Keep an empty-statement run iterative to avoid stack growth.
+                    i += 1;
+                    piece_start = i;
+                    continue;
                 }
                 _ => i += 1,
             }
         }
         self.buf.push_str(&self.line[piece_start..]);
         self.pos = bytes.len();
-        None
+        self.take_line_command()
+    }
+
+    fn take_line_command(&mut self) -> Option<String> {
+        if self.in_str || self.in_block {
+            return None;
+        }
+        let command = self.buf.trim().trim_start_matches('\u{feff}').trim();
+        if command.eq_ignore_ascii_case("exit")
+            || command.eq_ignore_ascii_case("quit")
+            || command == "\\q"
+        {
+            let command = command.to_string();
+            self.buf.clear();
+            Some(command)
+        } else {
+            None
+        }
     }
 }
 
@@ -206,5 +234,26 @@ mod tests {
             split("CREATE TABLE t (id BIGINT PRIMARY KEY, v VECTOR(3));"),
             vec!["CREATE TABLE t (id BIGINT PRIMARY KEY, v VECTOR(3))".to_string()]
         );
+    }
+}
+
+#[cfg(test)]
+mod regression_tests {
+    use super::StatementReader;
+    use std::io::Cursor;
+
+    #[test]
+    fn removed_comments_preserve_token_boundaries() {
+        let mut r = StatementReader::new(Cursor::new("CREATE/* a */TABLE t(id BIGINT PRIMARY KEY); SELECT id-- tail\nFROM t;"));
+        assert_eq!(r.next_statement().unwrap().unwrap(), "CREATE TABLE t(id BIGINT PRIMARY KEY)");
+        assert_eq!(r.next_statement().unwrap().unwrap(), "SELECT id\nFROM t");
+    }
+
+    #[test]
+    fn long_empty_statement_runs_do_not_recurse() {
+        let input = format!("{}SELECT 1;", ";".repeat(100_000));
+        let mut r = StatementReader::new(Cursor::new(input));
+        assert_eq!(r.next_statement().unwrap().as_deref(), Some("SELECT 1"));
+        assert!(r.next_statement().unwrap().is_none());
     }
 }

@@ -101,6 +101,7 @@ pub enum SelectItem {
     /// `*`: every column in table order.
     Star,
     Column(String),
+    AliasedColumn { column: String, alias: String },
     /// `L2_DISTANCE(vector_column, '[1,2,3]')`, optionally aliased.
     L2Distance {
         column: String,

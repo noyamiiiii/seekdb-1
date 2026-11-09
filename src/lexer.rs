@@ -1,8 +1,7 @@
 //! Tokenizer for the SQL subset.
 //!
-//! Statements arrive from [`crate::proto`] with comments already removed, so the
-//! lexer only deals with whitespace, words, numbers, string literals and the few
-//! punctuation characters the grammar uses.
+//! Comments are accepted here as well as by the stream framer, so direct
+//! in-process execution and the stdio server interpret the same SQL text.
 
 use crate::error::{DbError, DbResult};
 
@@ -53,6 +52,20 @@ pub fn tokenize(input: &str) -> DbResult<Vec<Token>> {
         let pos = i;
         match b {
             b' ' | b'\t' | b'\r' | b'\n' => i += 1,
+            b'#' => {
+                while i < bytes.len() && bytes[i] != b'\n' { i += 1; }
+            }
+            b'-' if bytes.get(i + 1) == Some(&b'-') => {
+                while i < bytes.len() && bytes[i] != b'\n' { i += 1; }
+            }
+            b'/' if bytes.get(i + 1) == Some(&b'*') => {
+                i += 2;
+                while i + 1 < bytes.len() && &bytes[i..i + 2] != b"*/" { i += 1; }
+                if i + 1 >= bytes.len() {
+                    return Err(syntax_at(pos, "unterminated block comment"));
+                }
+                i += 2;
+            }
             b'(' => push(&mut tokens, Kind::LParen, pos, &mut i),
             b')' => push(&mut tokens, Kind::RParen, pos, &mut i),
             b'[' => push(&mut tokens, Kind::LBracket, pos, &mut i),

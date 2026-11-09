@@ -57,3 +57,25 @@ fn unicode_codepoints_bigints_and_invalid_vectors(){
  for v in ["[NaN,0]","[Infinity,0]","[1e100,0]","[1]","[1,2,3]"] {assert!(matches!(s.execute(&format!("INSERT INTO t VALUES(2,'x','{v}')")),Response::Err(_)),"{v}");}
  assert_eq!(rows(&mut s,"SELECT id FROM t WHERE id=9223372036854775807"),vec![vec![Cell::Int(i64::MAX)]]);
 }
+
+#[test]
+fn grouped_filters_and_projected_aliases_preserve_order_and_mutations() {
+ let d=Db::new();let mut s=Session::open(&d.0).unwrap();
+ ok(&mut s,"CREATE TABLE t(id BIGINT PRIMARY KEY, label VARCHAR(4), v VECTOR(2))");
+ ok(&mut s,"INSERT INTO t VALUES(1,'甲','[1,0]'),(2,'乙','[-1,0]'),(3,'丙','[3,0]')");
+ let sql="SELECT id AS item_id, L2_DISTANCE(v,'[0,0]') distance FROM t WHERE ((id>=1 AND id<=3) AND (label='甲' AND id=1)) ORDER BY distance DESC LIMIT 2";
+ let r=match s.execute(sql) {Response::Rows(r)=>r,x=>panic!("alias/grouped filter failed: {x:?}")};
+ assert_eq!(r.columns,vec!["item_id","distance"]);assert_eq!(r.rows,vec![vec![Cell::Int(1),Cell::Real(1.0)]]);
+ assert_eq!(rows(&mut s,"SELECT id item_id FROM t WHERE (id>=1 AND id<=2) ORDER BY item_id DESC"),vec![vec![Cell::Int(2)],vec![Cell::Int(1)]]);
+ ok(&mut s,"BEGIN");ok(&mut s,"UPDATE t SET label='改' WHERE (id=1 AND (id>=1))");ok(&mut s,"DELETE FROM t WHERE (id=2)");ok(&mut s,"ROLLBACK");
+ assert!(matches!(s.execute("SELECT id AS item_id FROM t WHERE (id=1 AND label='甲') OR id=2"),Response::Err(_)));
+}
+
+#[test]
+fn direct_execution_understands_comments_without_joining_keywords() {
+ let d=Db::new();let mut s=Session::open(&d.0).unwrap();
+ ok(&mut s,"CREATE/*gap*/TABLE t(id BIGINT PRIMARY KEY,s VARCHAR(20))");
+ ok(&mut s,"INSERT/*gap*/INTO t VALUES(1,'/*文字*/;--')");
+ assert_eq!(rows(&mut s,"SELECT id-- gap\nFROM t WHERE id/*gap*/=1"),vec![vec![Cell::Int(1)]]);
+ assert!(matches!(s.execute("SELECT 1 /* never closed"),Response::Err(_)));
+}
