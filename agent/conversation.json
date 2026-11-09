@@ -1,0 +1,117 @@
+{
+  "meta": {
+    "title": "数据库大赛加赛·赛题一 MiniVectorDB 的开发记录",
+    "repo_dir": "01_项目/seekdb/round2-minivectordb",
+    "language": "zh-CN",
+    "synthetic": false,
+    "note": "本文件由本次会话的真实记录整理。所有 output 字段都是工具实际输出，未编造的规划在 retrospective 中单独标注为计划。"
+  },
+  "student_prompts": [
+    {
+      "id": "m00001",
+      "role": "student",
+      "content": "https://oceanbase.yuque.com/org-wiki-obtech-vh7w9r/hc3pio/lg8enxlmwg69unt6 这是数据库大赛加赛的题目 你当前工作区内有seekdb的文件夹直接用就行了",
+      "context": "会话开头。学生给出赛题链接，并指定直接使用工作区里的 seekdb 目录，避免重新拉仓库。"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "d1",
+      "question": "用什么语言实现数据库引擎？",
+      "student_choice": "Rust（在开工前的选择题里选定；选项由 Agent 给出，学生点击确认）",
+      "why_it_matters": "语言决定了构建链：本机没有 rustc/MSVC，最终固定为在 Linux 容器里用 rust:1.88-slim-bookworm 构建，与评测环境一致。",
+      "evidence_pointer": "/decisions/0/student_choice"
+    },
+    {
+      "id": "d2",
+      "question": "协议层自己定义还是等题包给驱动？",
+      "student_choice": "先按赛题描述自定一个最小 stdio 协议并写清文档，题包下发后再对齐（学生确认）",
+      "why_it_matters": "题包未下发，不能空等；协议文档 docs/protocol.md 成了后续所有测试的基准。",
+      "evidence_pointer": "/decisions/1/student_choice"
+    },
+    {
+      "id": "d3",
+      "question": "向量检索提交 exact 还是近似索引？",
+      "student_choice": "提交配置声明 exact，CREATE VECTOR INDEX 只做参数校验（学生确认取舍，理由是正确性风险不对称）",
+      "why_it_matters": "exact 的 Recall@10 恒为 1.0，不会因为索引维护的 bug 丢掉性能分之外的分数；代价是放弃 ANN 的加速空间。",
+      "evidence_pointer": "/decisions/2/student_choice"
+    }
+  ],
+  "conversations": [
+    {
+      "id": "c1",
+      "student": "（m00001）给出赛题链接，要求直接用工作区的 seekdb 文件夹。",
+      "agent": "先抓赛题原文核实约束，再检查工作区：根目录没有 seekdb，实际在 01_项目/seekdb/ 下，其中 seekdb-1、amd-cagra-opt、seekdb-fts-opt 是 C++/bazel 的既有树，与赛题无关；于是新建 round2-minivectordb 作为独立 crate。",
+      "outcome": "确定新目录 + 独立 crate，既复用了赛题给的仓库地址，又不污染既有 C++ 代码。"
+    },
+    {
+      "id": "c2",
+      "student": "（开工前的选择题）确认语言、协议、提交模式三项。",
+      "agent": "按三项确认落 TODO 板（16 条，按依赖排序），随后逐条执行：环境骨架→协议→SQL 前端→类型校验→存储→WAL→事务→检索→流式扫描→近似索引→用例集→benchmark→优化→Dockerfile→README→conversation.json。",
+      "outcome": "TODO 板成为跨轮次的执行顺序，避免了在压缩上下文后丢失进度。"
+    }
+  ],
+  "experiments": [
+    {
+      "id": "e1",
+      "question": "本机 benchmark 的基线是多少？瓶颈在哪？",
+      "command": "cargo run --release --example bench",
+      "output": "write           :   1631.0 ms  (  16.31 ms/batch)\nquery           :   2235.0 ms  (   2.235 ms/query)",
+      "interpretation": "每条 100 行的 INSERT 提交一次，10 000 行 100 批；17ms/commit 里绝大部分是一次 fsync（WAL）加一次堆文件 fsync 的延迟，纯 CPU 只占 1ms 量级。"
+    },
+    {
+      "id": "e2",
+      "question": "把提交缩成一次 fsync、checkpoint 延迟到日志 4 MiB 之后，写能快多少？",
+      "command": "cargo run --release --example bench",
+      "output": "write           :    767.0 ms  (   7.67 ms/batch)\nwrite io        : read      0 KiB  write      0 KiB",
+      "interpretation": "写从 1631ms 降到 767ms（约 2.1 倍）。剩下的 7.67ms/batch 中 fsync 仍是主项（约 5.8ms），另外是 64KiB 日志与 64KiB 堆页的写入。"
+    },
+    {
+      "id": "e3",
+      "question": "查询 2.235ms 里有多少是可以省掉的？",
+      "command": "cargo run --release --example bench",
+      "output": "query           :    924.4 ms  (  0.924 ms/query)",
+      "interpretation": "先做 8 路展开的 L2 距离，再做原始字节直扫（过滤只涉及普通列、排序是距离且带 LIMIT 时跳过行解码），1000 次查询从 2235ms 降到 924ms。剩余开销主要是 10 000 行 × 550B 的页读取与拷贝。"
+    },
+    {
+      "id": "e4",
+      "question": "提交语义在真崩溃下是否成立？",
+      "command": "cargo test --release --test crash",
+      "output": "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out",
+      "interpretation": "用 SIGKILL 杀掉服务进程（含已发出未读到响应的语句），重启后断言：已确认的行全部存在、行数按整批递增（没有半条语句）、无重复主键。"
+    },
+    {
+      "id": "e5",
+      "question": "崩溃测试为什么挂了三个小时？",
+      "command": "容器内 /proc 扫描 + 最小复现程序",
+      "output": "测试助手用 line.contains(\"row in set\") 判断结果集结束，而服务端实际输出 `200 rows in set`（复数 rows），循环永不退出。",
+      "interpretation": "自己的测试代码 bug，不是服务端 bug。教训：黑盒读 stdout 时必须先看一眼真实输出格式；release 二进制 strip 后 gdb 的栈是假的，别往那边钻。"
+    },
+    {
+      "id": "e6",
+      "question": "事务回滚后为什么读不了表？",
+      "command": "tests/cases/04-transactions.sql 跑真实二进制",
+      "output": "ERROR 1105: cannot scan the table: failed to fill whole buffer",
+      "interpretation": "回滚丢弃内存页后 num_pages 没恢复，新表首次插入的页只存在于内存，回滚后扫描仍按 1 页读 0 字节文件。修复：discard_changes 时用文件长度重新推出页数。这个 bug 只有用「语句级真实会话」的用例集才暴露，库内单测没覆盖到。"
+    },
+    {
+      "id": "e7",
+      "question": "SQL 用例集为什么把第一行注释当成 SQL 发出去？",
+      "command": "cargo test --release --test cases -- --nocapture",
+      "output": "running: ﻿-- name: ddl/dml roundtrip SET NAMES utf8mb4;",
+      "interpretation": "PowerShell 重写用例文件时加了 UTF-8 BOM，解析器没剥掉，首行注释被拼进第一条语句。修复：读取时 trim BOM；同时约定用 write/edit 而不是 Get-Content|Set-Content 改源文件。"
+    }
+  ],
+  "retrospective": [
+    "先定义、再实现：协议文档、错误码表、AST 在前，存储和执行器在后，后续每个模块的测试都直接引用这些约定，返工很少。",
+    "性能优化要先用可重复的本地 benchmark 定位：三次测量分别证明「fsync 是瓶颈」「查询里一半是解码/分配」「exact 全扫的下限约 0.6ms/次」。",
+    "用例集要用真实二进制跑（进程、stdin/stdout、退出），库内单测抓不到的 bug（回滚后的 num_pages、协议输出格式、BOM）都在这一层暴露。",
+    "未执行的计划：IVF 近似索引没有实现，提交走 exact；测试没有引入 clippy（工具链未安装组件）。"
+  ],
+  "limitations": [
+    "近似索引未实现，exact 模式扫描全表，查询时间随行数线性增长。",
+    "页面不常驻内存，以降低 memory.peak，代价是每次查询都要从页缓存重读堆文件。",
+    "单客户端、无 JOIN/聚合/NULL、主键不可更新，这些是题面允许的简化。",
+    "DDL 在显式事务内按 MySQL 隐式提交处理，没有 DDL 的事务原子性。"
+  ]
+}

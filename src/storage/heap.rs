@@ -1,0 +1,398 @@
+//! The heap file of one table: an append-only array of [`Page`]s with an
+//! in-memory set of pages modified by the current transaction.
+//!
+//! Uncommitted pages never reach the file: the caller commits through the WAL
+//! ([`crate::storage::wal`]) and only then flushes. Rolling back is therefore
+//! just dropping the modified pages.
+
+use std::collections::BTreeMap;
+use std::fs::{File, OpenOptions};
+use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::path::{Path, PathBuf};
+
+use super::page::{Page, PAGE_SIZE};
+
+/// Where a record lives.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Rid {
+    pub page: u32,
+    pub slot: u16,
+}
+
+pub struct HeapFile {
+    path: PathBuf,
+    file: File,
+    num_pages: u32,
+    /// Pages touched by the current transaction, in page order.
+    dirty: BTreeMap<u32, Page>,
+    /// Page that still had room at the last insert.
+    open_page: Option<u32>,
+    scratch: Vec<u8>,
+}
+
+impl HeapFile {
+    pub fn open(path: impl Into<PathBuf>) -> io::Result<Self> {
+        let path = path.into();
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&path)?;
+        let len = file.metadata()?.len();
+        if len % PAGE_SIZE as u64 != 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{} has {len} bytes, not a multiple of the page size",
+                    path.display()
+                ),
+            ));
+        }
+        Ok(Self {
+            path,
+            file,
+            num_pages: (len / PAGE_SIZE as u64) as u32,
+            dirty: BTreeMap::new(),
+            open_page: None,
+            scratch: vec![0u8; PAGE_SIZE],
+        })
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn num_pages(&self) -> u32 {
+        self.num_pages
+    }
+
+    /// Reads a page, preferring the current transaction's version.
+    pub fn read_page(&mut self, id: u32) -> io::Result<Page> {
+        if let Some(page) = self.dirty.get(&id) {
+            return Ok(page.clone());
+        }
+        self.read_from_disk(id)
+    }
+
+    fn read_from_disk(&mut self, id: u32) -> io::Result<Page> {
+        let offset = id as u64 * PAGE_SIZE as u64;
+        self.file.seek(SeekFrom::Start(offset))?;
+        let mut buf = vec![0u8; PAGE_SIZE];
+        self.file.read_exact(&mut buf)?;
+        Page::from_bytes(&buf).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("corrupt page {id} in {}", self.path.display()),
+            )
+        })
+    }
+
+    /// The writable version of a page, loading it into the transaction's set.
+    pub fn page_mut(&mut self, id: u32) -> io::Result<&mut Page> {
+        if !self.dirty.contains_key(&id) {
+            let page = if id < self.num_pages {
+                self.read_from_disk(id)?
+            } else {
+                Page::new()
+            };
+            self.dirty.insert(id, page);
+        }
+        Ok(self.dirty.get_mut(&id).unwrap())
+    }
+
+    /// Replaces a page with a recovered image, growing the file when needed.
+    pub fn put_page(&mut self, id: u32, page: Page) {
+        if id >= self.num_pages {
+            self.num_pages = id + 1;
+        }
+        self.dirty.insert(id, page);
+    }
+
+    /// Appends a record, allocating a page when the tail of the heap is full.
+    /// Returns `None` when the record is larger than a page can hold.
+    pub fn insert(&mut self, payload: &[u8]) -> io::Result<Option<Rid>> {
+        if payload.len() > super::page::MAX_RECORD_SIZE {
+            return Ok(None);
+        }
+        if let Some(id) = self.open_page {
+            if let Some(slot) = self.page_mut(id)?.insert(payload) {
+                return Ok(Some(Rid { page: id, slot }));
+            }
+        }
+        // Probe forward from the open page; pages are filled in order, so this
+        // walks at most to the end of the heap once per new page.
+        let start = self.open_page.map_or(0, |id| id + 1);
+        for id in start..self.num_pages {
+            if let Some(slot) = self.page_mut(id)?.insert(payload) {
+                self.open_page = Some(id);
+                return Ok(Some(Rid { page: id, slot }));
+            }
+        }
+        let id = self.num_pages;
+        let slot = self
+            .page_mut(id)?
+            .insert(payload)
+            .expect("a fresh page fits any valid record");
+        self.num_pages += 1;
+        self.open_page = Some(id);
+        Ok(Some(Rid { page: id, slot }))
+    }
+
+    pub fn record(&mut self, rid: Rid) -> io::Result<Option<Vec<u8>>> {
+        if rid.page >= self.num_pages && !self.dirty.contains_key(&rid.page) {
+            return Ok(None);
+        }
+        let page = self.read_page(rid.page)?;
+        Ok(page.record(rid.slot).map(|r| r.to_vec()))
+    }
+
+    pub fn tombstone(&mut self, rid: Rid) -> io::Result<bool> {
+        if rid.page >= self.num_pages {
+            return Ok(false);
+        }
+        Ok(self.page_mut(rid.page)?.tombstone(rid.slot))
+    }
+
+    pub fn revive(&mut self, rid: Rid) -> io::Result<bool> {
+        if rid.page >= self.num_pages {
+            return Ok(false);
+        }
+        Ok(self.page_mut(rid.page)?.revive(rid.slot))
+    }
+
+    /// Iterates every live record without keeping pages in memory.
+    pub fn for_each_live<F>(&mut self, mut visit: F) -> io::Result<()>
+    where
+        F: FnMut(u32, u16, &[u8]) -> io::Result<()>,
+    {
+        for id in 0..self.num_pages {
+            let page = self.read_page(id)?;
+            for (slot, record) in page.live_records() {
+                visit(id, slot, record)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Snapshot of every page modified by the current transaction.
+    pub fn dirty_pages(&self) -> impl Iterator<Item = (u32, &[u8])> {
+        self.dirty.iter().map(|(id, page)| (*id, page.as_bytes()))
+    }
+
+    pub fn has_dirty(&self) -> bool {
+        !self.dirty.is_empty()
+    }
+
+    /// Writes modified pages to the file and drops them from memory. The caller
+    /// must have made the matching WAL records durable first.
+    pub fn flush(&mut self) -> io::Result<()> {
+        self.write_dirty()?;
+        self.file.sync_all()
+    }
+
+    /// Writes modified pages to the file without flushing them to the device.
+    ///
+    /// Safe only once the log holds the same images: a crash may leave a torn
+    /// page on disk, and recovery rewrites it from the log.
+    pub fn write_dirty(&mut self) -> io::Result<()> {
+        for (id, page) in std::mem::take(&mut self.dirty) {
+            self.scratch.copy_from_slice(page.as_bytes());
+            let offset = id as u64 * PAGE_SIZE as u64;
+            self.file.seek(SeekFrom::Start(offset))?;
+            self.file.write_all(&self.scratch)?;
+        }
+        Ok(())
+    }
+
+    /// Pushes everything written so far to the device.
+    pub fn sync(&mut self) -> io::Result<()> {
+        self.file.sync_all()
+    }
+
+    /// Drops uncommitted changes; the next read comes from the file again.
+    pub fn discard_changes(&mut self) {
+        self.dirty.clear();
+        self.open_page = None;
+        // Pages allocated since the last commit exist only in memory, so taking
+        // the page count from the file keeps reads from running past its end.
+        if let Ok(meta) = self.file.metadata() {
+            self.num_pages = (meta.len() / PAGE_SIZE as u64) as u32;
+        }
+    }
+
+    /// Rewrites the file from scratch, dropping tombstones and shrinking it.
+    ///
+    /// The live records are streamed into a sibling `*.heap.tmp` file, which is
+    /// fsynced and then renamed over the original, so a crash leaves either the
+    /// old file or the new one, never a half-written heap. Pages buffered by
+    /// the current transaction are included, which commits them to the file;
+    /// the caller must persist the matching index state.
+    pub fn compact<F>(&mut self, mut keep: F) -> io::Result<()>
+    where
+        F: FnMut(u32, u16, &[u8]) -> io::Result<bool>,
+    {
+        let tmp_path = tmp_path(&self.path);
+        let mut out = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&tmp_path)?;
+
+        let mut page = Page::new();
+        let mut written = 0u32;
+        let spill = |page: &mut Page, out: &mut File, written: &mut u32| -> io::Result<()> {
+            out.write_all(page.as_bytes())?;
+            *written += 1;
+            *page = Page::new();
+            Ok(())
+        };
+
+        for id in 0..self.num_pages {
+            let loaded = self.read_page(id)?;
+            for (slot, record) in loaded.live_records() {
+                if !keep(id, slot, record)? {
+                    continue;
+                }
+                if page.insert(record).is_none() {
+                    spill(&mut page, &mut out, &mut written)?;
+                    page.insert(record)
+                        .expect("a record that fit before still fits");
+                }
+            }
+        }
+        if page.live_records().next().is_some() {
+            spill(&mut page, &mut out, &mut written)?;
+        }
+        out.sync_all()?;
+        drop(out);
+
+        // The rename is atomic; the directory fsync makes the new entry durable
+        // before the old name can be lost after a power failure.
+        std::fs::rename(&tmp_path, &self.path)?;
+        sync_parent(&self.path)?;
+
+        self.file = OpenOptions::new().read(true).write(true).open(&self.path)?;
+        self.num_pages = written;
+        self.dirty.clear();
+        self.open_page = None;
+        Ok(())
+    }
+}
+
+fn tmp_path(path: &Path) -> PathBuf {
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(".tmp");
+    path.with_file_name(name)
+}
+
+/// Makes a directory entry change durable on filesystems that need it.
+fn sync_parent(path: &Path) -> io::Result<()> {
+    let Some(parent) = path.parent() else {
+        return Ok(());
+    };
+    #[cfg(unix)]
+    {
+        File::open(parent)?.sync_all()
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = parent;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    static NEXT: AtomicU32 = AtomicU32::new(0);
+
+    struct TempDir(PathBuf);
+
+    impl TempDir {
+        fn new() -> Self {
+            let id = NEXT.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!("mvdb-heap-{}-{id}", std::process::id()));
+            std::fs::create_dir_all(&path).unwrap();
+            Self(path)
+        }
+
+        fn file(&self, name: &str) -> PathBuf {
+            self.0.join(name)
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn inserts_survive_flush_and_reopen() {
+        let dir = TempDir::new();
+        let path = dir.file("t.heap");
+        let mut heap = HeapFile::open(&path).unwrap();
+        let mut rids = Vec::new();
+        for i in 0..1000u32 {
+            let payload = format!("row-{i:04}");
+            rids.push(heap.insert(payload.as_bytes()).unwrap().unwrap());
+        }
+        assert!(heap.num_pages() >= 1);
+        heap.flush().unwrap();
+        drop(heap);
+
+        let mut heap = HeapFile::open(&path).unwrap();
+        for (i, rid) in rids.iter().enumerate() {
+            let got = heap.record(*rid).unwrap().unwrap();
+            assert_eq!(got, format!("row-{i:04}").into_bytes());
+        }
+    }
+
+    #[test]
+    fn discard_rolls_back_uncommitted_pages() {
+        let dir = TempDir::new();
+        let path = dir.file("t.heap");
+        let mut heap = HeapFile::open(&path).unwrap();
+        heap.insert(b"committed").unwrap().unwrap();
+        heap.flush().unwrap();
+        let rid = heap.insert(b"pending").unwrap().unwrap();
+        assert_eq!(heap.record(rid).unwrap().unwrap(), b"pending");
+        heap.discard_changes();
+        assert_eq!(heap.record(rid).unwrap(), None);
+        drop(heap);
+
+        let mut heap = HeapFile::open(&path).unwrap();
+        assert!(heap
+            .for_each_live(|_, _, r| {
+                assert_eq!(r, b"committed");
+                Ok(())
+            })
+            .is_ok());
+    }
+
+    #[test]
+    fn compaction_drops_tombstones() {
+        let dir = TempDir::new();
+        let path = dir.file("t.heap");
+        let mut heap = HeapFile::open(&path).unwrap();
+        let mut rids = Vec::new();
+        for i in 0..500u32 {
+            let payload = format!("row-{i:04}");
+            rids.push(heap.insert(payload.as_bytes()).unwrap().unwrap());
+        }
+        for rid in &rids[..400] {
+            assert!(heap.tombstone(*rid).unwrap());
+        }
+        heap.compact(|_, _, _| Ok(true)).unwrap();
+        let mut live = 0u32;
+        heap.for_each_live(|_, _, _| {
+            live += 1;
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(live, 100);
+    }
+}

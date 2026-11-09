@@ -1,0 +1,6 @@
+target/
+.git/
+*.heap
+*.wal
+tests/cases/*.out
+docs/protocol.md.bak

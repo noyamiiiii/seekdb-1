@@ -1,0 +1,5 @@
+/target/
+*.heap
+*.wal
+catalog.bin
+data/
