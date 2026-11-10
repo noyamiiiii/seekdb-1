@@ -1,6 +1,6 @@
 //! stdio protocol front end.
 //!
-//! The evaluation driver talks to the server over stdin/stdout only:
+//! Optional `--text` debug console. The official transport is in `jsonl.rs`:
 //!
 //! * the server prints a single ready line (`READY`) after the data directory
 //!   has been recovered and the vector indexes have been rebuilt;

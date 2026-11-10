@@ -6,10 +6,10 @@ rust-version = "1.75"
 description = "MiniVectorDB: a lightweight vector database with SQL, transactions and crash recovery"
 license = "Apache-2.0"
 
-# Deliberately dependency-free: the whole engine (SQL front end, page store,
-# WAL, transactions, vector index) is implemented on top of std only, so the
-# evaluation image can be built offline and reproducibly.
+# Database algorithms use std only; serde_json is solely the JSON transport codec.
 [dependencies]
+serde = "=1.0.229"
+serde_json = { version = "=1.0.145", features = ["arbitrary_precision"] }
 
 [[bin]]
 name = "minivectordb"

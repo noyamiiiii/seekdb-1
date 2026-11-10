@@ -5,6 +5,8 @@ ARG RUNTIME_IMAGE=debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca
 FROM ${RUST_IMAGE} AS build
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
+COPY .cargo ./.cargo
+COPY vendor ./vendor
 COPY src ./src
 COPY examples ./examples
 COPY tests ./tests

@@ -1,0 +1,3 @@
+
+# Keep upstream vendored bytes identical to Cargo package checksums.
+vendor/** -text

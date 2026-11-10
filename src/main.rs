@@ -17,8 +17,10 @@ const DEFAULT_DATA_DIR: &str = "/data";
 
 fn main() -> ExitCode {
     let mut data_dir = DEFAULT_DATA_DIR.to_string();
+    let mut text_protocol = false;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
+        if arg == "--text" { text_protocol = true; continue; }
         if let Some(value) = flag_value(&arg, "--data", "-d").or_else(|| flag_value(&arg, "--data-dir", "-d")) {
             data_dir = value.unwrap_or_else(|| args.next().unwrap_or_default());
             if data_dir.is_empty() {
@@ -28,8 +30,8 @@ fn main() -> ExitCode {
             continue;
         }
         if arg == "--help" || arg == "-h" {
-            println!("minivectordb [--data DIR] [--mode exact|ann]");
-            println!("Reads SQL from stdin, writes results to stdout.");
+            println!("minivectordb [--data DIR] [--mode exact|ann] [--text]");
+            println!("Reads execute/shutdown JSON Lines from stdin, writes JSON Lines to stdout.");
             return ExitCode::SUCCESS;
         }
         if flag_value(&arg, "--mode", "-m").is_some() {
@@ -53,7 +55,7 @@ fn main() -> ExitCode {
         }
     }
 
-    match run(&data_dir) {
+    match run(&data_dir, text_protocol) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
             eprintln!("minivectordb: {err}");
@@ -73,11 +75,11 @@ fn flag_value(arg: &str, long: &str, short: &str) -> Option<Option<String>> {
         .map(|value| Some(value.to_string()))
 }
 
-fn run(data_dir: &str) -> io::Result<()> {
+fn run(data_dir: &str, text_protocol: bool) -> io::Result<()> {
     eprintln!("minivectordb: data directory {data_dir}");
 
     // Opening the engine performs recovery (log replay, index rebuild) before
-    // the first statement is read; `serve` then writes the READY line.
+    // the first statement is read; `serve` then writes the official JSON ready object.
     let session = Session::open(data_dir).map_err(|err| io::Error::other(err.to_string()))?;
     let mut handler = Engine { session };
 
@@ -85,7 +87,8 @@ fn run(data_dir: &str) -> io::Result<()> {
     let stdout = io::stdout();
     let mut out = BufWriter::with_capacity(1 << 16, stdout.lock());
     let mut input = BufReader::with_capacity(1 << 16, stdin.lock());
-    runner::serve(&mut handler, &mut input, &mut out)
+    if text_protocol { runner::serve(&mut handler, &mut input, &mut out) }
+    else { minivectordb::jsonl::serve(&mut handler, &mut input, &mut out) }
 }
 
 struct Engine {
@@ -93,6 +96,10 @@ struct Engine {
 }
 
 impl Handler for Engine {
+    fn shutdown_result(&mut self) -> io::Result<()> {
+        self.session.shutdown().map_err(|e| io::Error::other(e.to_string()))
+    }
+
     fn execute(&mut self, statement: &str) -> Response {
         self.session.execute(statement)
     }

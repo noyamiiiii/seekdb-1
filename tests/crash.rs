@@ -34,7 +34,7 @@ struct Server {
 
 impl Server {
     fn spawn(dir: &Path) -> Self {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_minivectordb"))
+        let mut child = Command::new(env!("CARGO_BIN_EXE_minivectordb")).arg("--text")
             .arg("--data")
             .arg(dir)
             .stdin(Stdio::piped())

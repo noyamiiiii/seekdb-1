@@ -5,7 +5,8 @@
 //! protocol, engine and storage layers can be tested without spawning a
 //! process. Layers, bottom-up:
 //!
-//! * [`proto`] — statement framing over stdin (comments, literals, `;`);
+//! * [`jsonl`] — official JSON Lines wire protocol;
+//! * [`proto`] — optional text console statement framing;
 //! * [`error`] — error codes and the `ERROR <code>: <message>` block;
 //! * [`response`] — result-set / status rendering;
 //! * [`runner`] — the read-execute-write loop and its [`runner::Handler`] seam;
@@ -16,6 +17,7 @@ pub mod distance;
 pub mod error;
 pub mod executor;
 pub mod lexer;
+pub mod jsonl;
 pub mod parser;
 pub mod proto;
 pub mod response;

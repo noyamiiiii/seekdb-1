@@ -41,7 +41,7 @@ switch ($Action) {
     "fmt" { Invoke-Cargo "$ensureRustfmt && cargo fmt --check" }
     "clippy" { Invoke-Cargo "$ensureClippy && cargo clippy --release --all-targets -- -D warnings" }
     "sql" {
-        Invoke-Cargo "cargo build --release >/dev/null 2>&1 && printf '%s\n' '$Sql' | ./target/release/minivectordb --data /tmp/mvdb"
+        Invoke-Cargo "cargo build --release >/dev/null 2>&1 && printf '%s\n' '$Sql' | ./target/release/minivectordb --text --data /tmp/mvdb"
     }
     "shell" { docker run --rm -it -v "${src}:/src" -w /src $image sh }
     default { Write-Error "unknown action: $Action (build|test|fmt|clippy|sql|shell)" }

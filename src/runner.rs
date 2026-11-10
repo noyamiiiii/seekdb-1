@@ -24,6 +24,8 @@ pub trait Handler {
     /// Flushes pending state before the process exits. Called exactly once, on
     /// `exit;`/`quit;` and at end of input.
     fn shutdown(&mut self) {}
+
+    fn shutdown_result(&mut self) -> io::Result<()> { self.shutdown(); Ok(()) }
 }
 
 /// Serves statements from `input` to `handler`, writing blocks to `output`.

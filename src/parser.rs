@@ -11,11 +11,12 @@ use crate::ast::{
 use crate::error::{DbError, DbResult, ErrorCode};
 use crate::lexer::{tokenize, Kind, Token};
 
-/// Parses one statement (already stripped of its terminating `;`).
+/// Parses one complete statement with an optional terminating semicolon.
 pub fn parse(statement: &str) -> DbResult<Statement> {
     let tokens = tokenize(statement)?;
     let mut parser = Parser { tokens, pos: 0 };
     let stmt = parser.parse_statement()?;
+    if parser.peek().kind == Kind::Semi { parser.bump(); }
     parser.expect_end()?;
     Ok(stmt)
 }

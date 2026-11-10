@@ -15,7 +15,7 @@ fn data_dir(name: &str) -> PathBuf {
 /// Starts the server with `input` on stdin and returns `(stdout, exit code)`.
 fn run(name: &str, input: &str) -> (String, i32) {
     let dir = data_dir(name);
-    let mut child: Child = Command::new(env!("CARGO_BIN_EXE_minivectordb"))
+    let mut child: Child = Command::new(env!("CARGO_BIN_EXE_minivectordb")).arg("--text")
         .arg("--data")
         .arg(&dir)
         .stdin(Stdio::piped())
@@ -84,7 +84,7 @@ fn a_constant_select_is_one_row() {
 
 #[test]
 fn unknown_options_are_ignored() {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_minivectordb"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_minivectordb")).arg("--text")
         .args(["--nonsense", "--mode=ann", "--data"])
         .arg(data_dir("unknown-options"))
         .stdin(Stdio::piped())
@@ -112,7 +112,7 @@ fn line_exit_commands_complete_without_stdin_eof_and_rollback() {
     use minivectordb::{executor::Session, response::{Response, Cell}};
     for (index, command) in ["\\q", "quit", "EXIT"].iter().enumerate() {
         let dir = data_dir(&format!("line-quit-{index}"));
-        let mut child = Command::new(env!("CARGO_BIN_EXE_minivectordb"))
+        let mut child = Command::new(env!("CARGO_BIN_EXE_minivectordb")).arg("--text")
             .arg("--data-dir").arg(&dir).stdin(Stdio::piped())
             .stdout(Stdio::piped()).stderr(Stdio::null()).spawn().unwrap();
         let mut stdout = child.stdout.take().unwrap();

@@ -1,6 +1,6 @@
 # MiniVectorDB
 
-赛题一“轻量向量数据库”的 Rust 实现。只使用标准库，自行实现 SQL 执行、堆页、事务日志及精确向量检索，不依赖外部数据库或向量索引引擎。
+赛题一“轻量向量数据库”的 Rust 实现。数据库核心使用标准库，自行实现 SQL 执行、堆页、事务日志及精确向量检索，不依赖外部数据库或向量索引引擎。
 
 ## 构建与运行
 
@@ -9,9 +9,15 @@ docker build -t minivectordb .
 docker run --rm -i --network none --mount type=bind,source="$PWD/data",target=/data minivectordb
 ```
 
-提前创建主机 `data` 目录。镜像在 Linux x86_64 上从源码编译，固定 Rust 1.88、Debian bookworm 的基础镜像摘要，并执行 `cargo test --release --locked --offline`。项目无第三方 crate。首次获取基础镜像需要网络，运行无需网络，不监听端口。构建网络无法访问 Docker Hub 时，可通过 `RUST_IMAGE` 和 `RUNTIME_IMAGE` 构建参数使用提供相同摘要的镜像站。
+提前创建主机 `data` 目录。镜像在 Linux x86_64 上从源码编译，固定 Rust 1.88、Debian bookworm 的基础镜像摘要，并执行 `cargo test --release --locked --offline`。JSON 通信仅使用允许的通用序列化库 serde_json，锁定依赖并随仓库 vendor 源码提供，构建无需下载 crate。首次获取基础镜像需要网络，运行无需网络，不监听端口。构建网络无法访问 Docker Hub 时，可通过 `RUST_IMAGE` 和 `RUNTIME_IMAGE` 构建参数使用提供相同摘要的镜像站。
 
-本地运行：`cargo run --release --locked --offline -- --data-dir ./data`。兼容 `--data` / `-d`。使用标准输入输出交互，启动输出 `READY`；不要加 `-t`。协议详见 [docs/protocol.md](docs/protocol.md)。公开题包尚未提供冻结版驱动，因此仍需以该驱动的最终协议检查为准。
+本地运行：`cargo run --release --locked --offline -- --data-dir ./data`。兼容 `--data` / `-d`。默认协议严格遵循官方 [STDIO_PROTOCOL.md](STDIO_PROTOCOL.md)：主动输出 `{"type":"ready"}`，接收逐行 execute/shutdown JSON，逐请求响应并 flush；不要加 `-t`。仅手工调试可显式传入 `--text` 使用 SQL 文本终端，正式镜像默认使用 JSONL。
+
+官方新增的交互检查工具原样保存在 `protocol_check/`，每次收到 ready 后才发送请求，包含全部公开样例、正常关闭和同目录重启：
+
+```sh
+python3 protocol_check/run.py --image minivectordb --output /tmp/minivectordb-public-check
+```
 
 ## SQL 与事务
 

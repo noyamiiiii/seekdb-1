@@ -5,28 +5,25 @@ class Client:
  def __init__(self,binary,data,args=()):
   self.p=subprocess.Popen([str(binary),'--data-dir',str(data),*args],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,encoding='utf-8',bufsize=1)
   self.sel=None
-  assert self.line()=='READY','missing readiness'
+  self.seq=0;assert json.loads(self.line())=={'type':'ready'},'missing readiness'
  def line(self):
   # The driver reads a bounded response synchronously; CI applies an outer timeout.
   s=self.p.stdout.readline()
   if not s:raise RuntimeError(f'engine exited {self.p.poll()}')
   return s.rstrip('\r\n')
  def sql(self,sql):
-  self.p.stdin.write(sql+'\n');self.p.stdin.flush();s=self.line()
-  if s.startswith('ERROR '):return {'error':s}
-  if s.startswith('Query OK,'):return {'affected_rows':int(s.split(',')[1].strip().split()[0])}
-  if not s.startswith('+'):raise AssertionError(('unexpected response',s,sql))
-  columns=[v.strip() for v in self.line()[1:-1].split('|')];self.line();rows=[]
-  while True:
-   s=self.line()
-   if s.startswith('+'):break
-   rows.append([v.strip() for v in s[1:-1].split('|')])
-  summary=self.line();assert re.fullmatch(r'\d+ rows? in set',summary),summary
-  return {'columns':columns,'rows':rows}
+  self.seq+=1
+  self.p.stdin.write(json.dumps({'id':self.seq,'op':'execute','sql':sql,'search_mode':'exact'},ensure_ascii=False)+'\n');self.p.stdin.flush()
+  response=json.loads(self.line());assert response.get('id')==self.seq,response
+  assert type(response.get('ok')) is bool,response
+  return response
  def close(self,kill=False):
   if self.p.poll() is None:
    if kill:self.p.kill()
-   else:self.p.stdin.close()
+   else:
+    self.seq+=1;self.p.stdin.write(json.dumps({'id':self.seq,'op':'shutdown'})+'\n');self.p.stdin.flush()
+    assert json.loads(self.line())=={'id':self.seq,'ok':True}
+    self.p.stdin.close()
    self.p.wait(timeout=15)
  def __del__(self):
   if hasattr(self,'p') and self.p.poll() is None:self.p.kill()
@@ -38,7 +35,7 @@ def same(a,b):
   try:return math.isclose(float(a),b,rel_tol=1e-5,abs_tol=1e-5)
   except ValueError:return False
  if isinstance(b,list):
-  try:return all(same(x,y) for x,y in zip(json.loads(a),b)) and len(json.loads(a))==len(b)
+  try:return all(same(x,y) for x,y in zip(a if isinstance(a,list) else json.loads(a),b)) and len(a if isinstance(a,list) else json.loads(a))==len(b)
   except (ValueError,TypeError):return False
  return a==b
 def check(actual,expected):
