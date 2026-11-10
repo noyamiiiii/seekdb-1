@@ -749,6 +749,25 @@ impl Parser {
 /// both bare (`[1,2,3]`) and quoted (`'[1,2,3]'`), and the quoted form reaches
 /// the storage layer as a text value that has to be recognised.
 pub(crate) fn parse_vector_string(text: &str) -> DbResult<Vec<f32>> {
+    // The usual quoted vector needs one numeric parse per component, without
+    // allocating two SQL tokens and owned text for every comma/number pair.
+    let trimmed=text.trim_matches([' ','\t','\r','\n']);
+    if let Some(body)=trimmed.strip_prefix('[').and_then(|v|v.strip_suffix(']')) {
+        if body.bytes().all(|c| c.is_ascii_digit() || matches!(c,b'+'|b'-'|b'.'|b'e'|b'E'|b','|b' '|b'\t'|b'\r'|b'\n')) {
+            let error=||DbError::new(ErrorCode::WrongValue,"invalid finite float32 vector literal");
+            let mut values=Vec::with_capacity(body.bytes().filter(|&c|c==b',').count()+1);
+            for part in body.split(',') {
+                let number=part.trim_matches([' ','\t','\r','\n']);
+                let bytes=number.as_bytes();
+                let first=if bytes.first()==Some(&b'-'){1}else{0};
+                if !bytes.get(first).is_some_and(u8::is_ascii_digit) || crate::lexer::number_end(bytes,0)!=bytes.len() {return Err(error());}
+                let value=number.parse::<f32>().map_err(|_|error())?;
+                if !value.is_finite(){return Err(error());}
+                values.push(value);
+            }
+            return Ok(values);
+        }
+    }
     let tokens = tokenize(text).map_err(|_| {
         DbError::new(
             ErrorCode::WrongValue,

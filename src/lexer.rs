@@ -162,7 +162,12 @@ fn push(tokens: &mut Vec<Token>, kind: Kind, pos: usize, i: &mut usize) {
 }
 
 fn read_number(input: &str, start: usize) -> DbResult<(String, usize)> {
-    let bytes = input.as_bytes();
+    let end = number_end(input.as_bytes(),start);
+    Ok((input[start..end].to_string(),end))
+}
+
+/// End of an already identified numeric token, without allocating its text.
+pub(crate) fn number_end(bytes:&[u8], start:usize)->usize {
     let mut i = start;
     if bytes[i] == b'-' {
         i += 1;
@@ -190,7 +195,7 @@ fn read_number(input: &str, start: usize) -> DbResult<(String, usize)> {
             }
         }
     }
-    Ok((input[start..i].to_string(), i))
+    i
 }
 
 fn read_string(input: &str, start: usize) -> DbResult<(String, usize)> {

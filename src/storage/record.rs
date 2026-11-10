@@ -28,7 +28,11 @@ pub fn encode_row(schema: &TableSchema, row: &[Value]) -> DbResult<Vec<u8>> {
             ),
         ));
     }
-    let mut out = Vec::with_capacity(8 + row.len() * 16);
+    let capacity=row.iter().try_fold(8usize,|size,value| {
+        let n=match value {Value::Int(_)=>8,Value::Text(s)=>4usize.saturating_add(s.len()),Value::Vector(v)=>v.len().saturating_mul(4)};
+        size.checked_add(n).ok_or_else(||DbError::new(ErrorCode::OutOfRange,"encoded row is too large"))
+    })?;
+    let mut out = Vec::with_capacity(capacity);
     out.extend_from_slice(&schema.primary_key_value(row).to_le_bytes());
     for (value, def) in row.iter().zip(&schema.columns) {
         match (value, def.ty) {

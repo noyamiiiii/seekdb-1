@@ -79,3 +79,42 @@ fn direct_execution_understands_comments_without_joining_keywords() {
  assert_eq!(rows(&mut s,"SELECT id-- gap\nFROM t WHERE id/*gap*/=1"),vec![vec![Cell::Int(1)]]);
  assert!(matches!(s.execute("SELECT 1 /* never closed"),Response::Err(_)));
 }
+
+#[test]
+fn repeated_filter_selections_keep_ties_and_variable_offsets_correct() {
+ let d=Db::new();let mut s=Session::open(&d.0).unwrap();
+ ok(&mut s,"CREATE TABLE t(label VARCHAR(300),g BIGINT,v VECTOR(3),id BIGINT PRIMARY KEY)");
+ let mut model=Vec::new();
+ for batch in 0..5 {
+  let mut inserts=Vec::new();
+  for i in batch*50..(batch+1)*50 {
+   let label="测".repeat(i as usize%71);let v=[(i%13-6) as f64,(i%7-3) as f64,(i%5-2) as f64];
+   inserts.push(format!("('{label}',{},'[{}, {}, {}]',{i})",i%40,v[0],v[1],v[2]));model.push((i,i%40,label,v));
+  }
+  ok(&mut s,&format!("INSERT INTO t VALUES {}",inserts.join(",")));
+ }
+ for round in 0..3 {
+  for group in 0..45 {
+   let asc=round%2==0;
+   let mut expected:Vec<_>=model.iter().filter(|(_,g,_,_)|*g==group).collect();
+   expected.sort_by(|a,b|{let da=a.3.iter().map(|v|v*v).sum::<f64>();let db=b.3.iter().map(|v|v*v).sum::<f64>();(if asc {da.total_cmp(&db)}else{db.total_cmp(&da)}).then_with(||a.0.cmp(&b.0))});
+   let want:Vec<_>=expected.into_iter().take(5).map(|(id,_,label,v)|vec![Cell::Int(*id),Cell::Text(label.clone()),Cell::Vector(v.iter().map(|x|*x as f32).collect())]).collect();
+   let got=rows(&mut s,&format!("SELECT id,label,v FROM t WHERE g={group} ORDER BY L2_DISTANCE(v,'[0,0,0]') {} LIMIT 5",if asc{"ASC"}else{"DESC"}));
+   assert_eq!(got,want,"round {round} group {group}");
+  }
+ }
+}
+
+#[test]
+fn vector_text_fast_path_matches_numeric_grammar_and_rejects_partial_insert() {
+ let d=Db::new();let mut s=Session::open(&d.0).unwrap();ok(&mut s,"CREATE TABLE t(id BIGINT PRIMARY KEY,v VECTOR(3))");
+ ok(&mut s,"INSERT INTO t VALUES(1,'[1e-3, -2E+1, 3.141592653589793]')");
+ assert_eq!(rows(&mut s,"SELECT v FROM t"),vec![vec![Cell::Vector(vec![0.001,-20.,std::f32::consts::PI])]]);
+ for bad in ["[]","[1,,2]","[1,2,]","[1,2,NaN]","[1,2,1e50]","[1,2,1.]","[1,2,1e]","[1,2,1 2]","[1,2,1.e2]","[1,2,3]extra"] {
+  assert!(matches!(s.execute(&format!("INSERT INTO t VALUES(2,'[0,0,0]'),(3,'{bad}')")),Response::Err(_)),"{bad}");
+  assert_eq!(rows(&mut s,"SELECT id FROM t ORDER BY id"),vec![vec![Cell::Int(1)]]);
+ }
+ // Comments still use the full lexer path rather than being mistaken for numbers.
+ ok(&mut s,"INSERT INTO t VALUES(2,'[1,/* gap */2,3]')");
+ assert_eq!(rows(&mut s,"SELECT v FROM t WHERE id=2"),vec![vec![Cell::Vector(vec![1.,2.,3.])]]);
+}

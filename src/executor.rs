@@ -22,10 +22,29 @@ use crate::schema::TableSchema;
 use crate::storage::Storage;
 
 /// One connected client: parsed statements in, rendered responses out.
+const SCAN_CACHE_BUDGET: usize = 8 * 1024 * 1024;
+const FILTER_CACHE_BUDGET: usize = 1024 * 1024;
+
+#[derive(Clone, Copy)]
+struct CachedRow {
+    start: u32,
+    end: u32,
+    vector_start: u32,
+    pk: i64,
+}
+
+struct CachedFilter {
+    filter: RawFilter,
+    indices: Vec<usize>,
+    bytes: usize,
+}
+
 struct RawScanCache {
     table: String,
     bytes: Option<Vec<u8>>,
-    ranges: Vec<(usize, usize)>,
+    ranges: Vec<CachedRow>,
+    filters: Vec<CachedFilter>,
+    filter_bytes: usize,
 }
 
 pub struct Session {
@@ -204,6 +223,9 @@ impl Session {
     // ----- DML ----------------------------------------------------------
 
     fn insert(&mut self, insert: &Insert) -> DbResult<u64> {
+        // Natural column order can go directly through storage validation;
+        // avoid cloning quoted vectors before parsing them into float32.
+        if insert.columns.is_none() { return self.storage.insert(&insert.table,&insert.rows); }
         let schema = self.storage.schema(&insert.table)?.clone();
         let order = column_order(&schema, insert.columns.as_deref())?;
 
@@ -532,21 +554,43 @@ impl Session {
     }
 
     fn prepare_scan_cache(&mut self, table: &str) -> DbResult<()> {
-        const BUDGET: usize = 8 * 1024 * 1024;
         let key = table.to_ascii_lowercase();
         if self.scan_cache.as_ref().is_some_and(|cache| cache.table == key) { return Ok(()); }
+        let schema = self.storage.schema(table)?.clone();
+        let count = self.storage.table(table)?.rows as usize;
+        let metadata = count.checked_mul(std::mem::size_of::<CachedRow>());
         let mut bytes = Vec::new();
         let mut ranges = Vec::new();
-        let mut fits = true;
-        self.storage.for_each_raw(table, |row| {
-            if bytes.len().saturating_add(row.len()).saturating_add((ranges.len()+1)*16) > BUDGET {
-                fits = false;return Ok(false);
-            }
-            let start = bytes.len();bytes.extend_from_slice(row);ranges.push((start,bytes.len()));
-            Ok(true)
-        })?;
-        self.scan_cache = Some(if fits { RawScanCache { table:key, bytes:Some(bytes), ranges } }
-            else { RawScanCache { table:key, bytes:None, ranges:Vec::new() } });
+        let mut fits = metadata.is_some_and(|m| m < SCAN_CACHE_BUDGET);
+        if fits {
+            ranges.reserve_exact(count);
+            let metadata = ranges.capacity() * std::mem::size_of::<CachedRow>();
+            self.storage.for_each_raw(table, |row| {
+                let needed = bytes.len() + row.len();
+                // Account for allocated capacities, not just initialized lengths.
+                if needed.saturating_add(metadata) > SCAN_CACHE_BUDGET {
+                    fits = false; return Ok(false);
+                }
+                if needed > bytes.capacity() {
+                    let target = needed.div_ceil(65536).saturating_mul(65536)
+                        .min(SCAN_CACHE_BUDGET - metadata);
+                    bytes.reserve_exact(target - bytes.len());
+                }
+                let pk = crate::storage::record::prefix_pk(row).ok_or_else(|| DbError::new(ErrorCode::Unknown,"invalid cached primary key"))?;
+                let vector_start = match schema.vector_column {
+                    Some(column) => {
+                        let raw = crate::storage::column_bytes(&schema,row,column).ok_or_else(|| DbError::new(ErrorCode::Unknown,"invalid cached vector"))?;
+                        bytes.len() + (raw.as_ptr() as usize - row.as_ptr() as usize)
+                    }
+                    None => 0,
+                };
+                let start = bytes.len(); bytes.extend_from_slice(row);
+                ranges.push(CachedRow {start:start as u32,end:bytes.len() as u32,vector_start:vector_start as u32,pk});
+                Ok(true)
+            })?;
+        }
+        if !fits { bytes = Vec::new(); ranges = Vec::new(); }
+        self.scan_cache = Some(RawScanCache {table:key,bytes:fits.then_some(bytes),ranges,filters:Vec::new(),filter_bytes:0});
         Ok(())
     }
 
@@ -570,6 +614,9 @@ impl Session {
         keep: usize,
     ) -> DbResult<ResultSet> {
         self.prepare_scan_cache(table)?;
+        if self.scan_cache.as_ref().unwrap().bytes.is_some() {
+            return select_cached_distance(self.scan_cache.as_mut().unwrap(),schema,outs,columns,filter,query,ascending,keep);
+        }
         let mut top = TopK::new(Some(keep), ascending);
         let mut failure: Option<DbError> = None;
         let corrupt = || {
@@ -610,7 +657,7 @@ impl Session {
         };
         let cache = self.scan_cache.as_ref().unwrap();
         if let Some(bytes) = &cache.bytes {
-            for &(start,end) in &cache.ranges { if !visit(&bytes[start..end])? { break; } }
+            for row in &cache.ranges { if !visit(&bytes[row.start as usize..row.end as usize])? { break; } }
         } else { self.storage.for_each_raw(table, visit)?; }
         if let Some(err) = failure {
             return Err(err);
@@ -625,18 +672,85 @@ impl Session {
     }
 }
 
+/// Compact ranking entry: no per-candidate allocation and no heap-file rereads.
+#[derive(Clone, Copy)]
+struct DistanceRank { distance:f64, pk:i64, index:usize, ascending:bool }
+impl Ord for DistanceRank {
+    fn cmp(&self,other:&Self)->Ordering {
+        let d=self.distance.total_cmp(&other.distance);
+        (if self.ascending {d} else {d.reverse()}).then_with(||self.pk.cmp(&other.pk))
+    }
+}
+impl PartialOrd for DistanceRank {fn partial_cmp(&self,other:&Self)->Option<Ordering>{Some(self.cmp(other))}}
+impl PartialEq for DistanceRank {fn eq(&self,other:&Self)->bool{self.cmp(other)==Ordering::Equal}}
+impl Eq for DistanceRank {}
+
+#[allow(clippy::too_many_arguments)]
+fn select_cached_distance(cache:&mut RawScanCache,schema:&TableSchema,outs:&[OutColumn],columns:Vec<String>,filter:&RawFilter,query:&[f32],ascending:bool,keep:usize)->DbResult<ResultSet> {
+    // Reuse bounded exact predicate selections; every visibility-changing command
+    // drops this entire cache, including transaction rollback and mutable access.
+    let mut selected = cache.filters.iter().position(|entry|entry.filter==*filter);
+    if selected.is_none() && !filter.terms.is_empty() {
+        let literal_bytes:usize=filter.terms.iter().map(|term|match &term.literal{RawLiteral::Int(_)=>8,RawLiteral::Text(v)=>v.len()}).sum();
+        let max_bytes=cache.ranges.len().saturating_mul(std::mem::size_of::<usize>()).saturating_add(literal_bytes).saturating_add(filter.terms.len()*std::mem::size_of::<RawTerm>());
+        if max_bytes <= FILTER_CACHE_BUDGET {
+            while cache.filters.len()>=32 || cache.filter_bytes.saturating_add(max_bytes)>FILTER_CACHE_BUDGET {
+                if cache.filters.is_empty(){break;}
+                cache.filter_bytes-=cache.filters.remove(0).bytes;
+            }
+            let bytes=cache.bytes.as_ref().unwrap();
+            let mut indices=Vec::with_capacity(cache.ranges.len());
+            for (i,row) in cache.ranges.iter().enumerate() {
+                if filter.matches(schema,&bytes[row.start as usize..row.end as usize]) {indices.push(i);}
+            }
+            indices.shrink_to_fit();
+            let allocated=indices.capacity()*std::mem::size_of::<usize>()+literal_bytes+filter.terms.len()*std::mem::size_of::<RawTerm>();
+            cache.filters.push(CachedFilter {filter:filter.clone(),indices,bytes:allocated});
+            cache.filter_bytes+=allocated;selected=Some(cache.filters.len()-1);
+        }
+    }
+    let bytes=cache.bytes.as_ref().unwrap();
+    let mut top:BinaryHeap<DistanceRank>=BinaryHeap::with_capacity(keep.min(cache.ranges.len()).min(16384));
+    let mut offer=|index:usize|->DbResult<()> {
+        let row=&cache.ranges[index];
+        if selected.is_none() && !filter.matches(schema,&bytes[row.start as usize..row.end as usize]) {return Ok(());}
+        let start=row.vector_start as usize;
+        let vector=bytes.get(start..start+query.len()*4).ok_or_else(||DbError::new(ErrorCode::Unknown,"invalid cached vector bounds"))?;
+        let distance=distance::squared_stored(query,vector).ok_or_else(||DbError::new(ErrorCode::WrongValue,"invalid cached vector dimension"))?;
+        let ranked=DistanceRank{distance,pk:row.pk,index,ascending};
+        if top.len()<keep {top.push(ranked);}
+        else if top.peek().is_some_and(|worst|ranked.cmp(worst)==Ordering::Less){*top.peek_mut().unwrap()=ranked;}
+        Ok(())
+    };
+    if let Some(selection)=selected {
+        for &index in &cache.filters[selection].indices {offer(index)?;}
+    } else {
+        for index in 0..cache.ranges.len(){offer(index)?;}
+    }
+    let mut rows=Vec::with_capacity(top.len());
+    for ranked in top.into_sorted_vec() {
+        let row=&cache.ranges[ranked.index];
+        let values=crate::storage::record::decode_row(schema,&bytes[row.start as usize..row.end as usize])?;
+        rows.push(project(outs,&values)?);
+    }
+    Ok(ResultSet {columns,rows})
+}
+
 /// A `WHERE` clause that only compares a plain column with a literal, so it can
 /// be evaluated on encoded row bytes.
+#[derive(Clone, PartialEq)]
 struct RawFilter {
     terms: Vec<RawTerm>,
 }
 
+#[derive(Clone, PartialEq)]
 struct RawTerm {
     column: usize,
     op: CmpOp,
     literal: RawLiteral,
 }
 
+#[derive(Clone, PartialEq)]
 enum RawLiteral {
     Int(i64),
     Text(Vec<u8>),
@@ -1198,4 +1312,32 @@ fn eval_order(key: &OrderKey, outs: &[OutColumn], row: &[Value]) -> DbResult<Eva
             Ok(EvalValue::Real(d))
         }
     }
+}
+
+#[cfg(test)]
+mod cache_budget_tests {
+ use super::*;
+ #[test]
+ fn oversized_rows_stream_and_allocated_cache_capacities_stay_bounded(){
+  let dir=std::env::temp_dir().join(format!("mvdb-cache-budget-{}",std::process::id()));
+  let _=std::fs::remove_dir_all(&dir);let mut s=Session::open(&dir).unwrap();
+  assert!(matches!(s.execute("CREATE TABLE t(id BIGINT PRIMARY KEY,g BIGINT,txt VARCHAR(4000),v VECTOR(2))"),Response::Ok{..}));
+  for batch in 0..30 {
+   let values=(batch*100..(batch+1)*100).map(|i|format!("({i},{},'{}','[{},0]')",i%40,"x".repeat(3000),i%7)).collect::<Vec<_>>().join(",");
+   assert!(matches!(s.execute(&format!("INSERT INTO t VALUES {values}")),Response::Ok{..}));
+  }
+  for group in [0,1,39,44] {
+   let response=s.execute(&format!("SELECT id FROM t WHERE g={group} ORDER BY L2_DISTANCE(v,'[0,0]') LIMIT 3"));
+   let Response::Rows(rs)=response else {panic!("{response:?}")};
+   let mut expected:Vec<i64>=(0..3000).filter(|i|i%40==group).collect();expected.sort_by_key(|i|(i%7,*i));expected.truncate(3);
+   assert_eq!(rs.rows,expected.into_iter().map(|i|vec![Cell::Int(i)]).collect::<Vec<_>>());
+  }
+  let cache=s.scan_cache.as_ref().unwrap();assert!(cache.bytes.is_none());assert_eq!(cache.ranges.capacity(),0);
+  s.execute("DELETE FROM t WHERE id>=1000");
+  for group in 0..40 {s.execute(&format!("SELECT id FROM t WHERE g={group} ORDER BY L2_DISTANCE(v,'[0,0]') LIMIT 3"));}
+  let cache=s.scan_cache.as_ref().unwrap();
+  assert!(cache.bytes.as_ref().unwrap().capacity()+cache.ranges.capacity()*std::mem::size_of::<CachedRow>()<=SCAN_CACHE_BUDGET);
+  assert!(cache.filter_bytes<=FILTER_CACHE_BUDGET);assert!(cache.filters.len()<=32);
+  drop(s);std::fs::remove_dir_all(dir).unwrap();
+ }
 }

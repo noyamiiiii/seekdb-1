@@ -139,5 +139,6 @@
     "单客户端、无 JOIN/聚合/NULL、主键不可更新，这些是题面允许的简化。",
     "DDL 在显式事务内按 MySQL 隐式提交处理，没有 DDL 的事务原子性。",
     "驱动契约（就绪标识、语句边界、结果集渲染格式）未在公开物料中给出；实现按 MySQL 客户端表格样式输出并以 READY 表示就绪，若正式驱动要求其它形态需按题包校准。"
-  ]
+  ],
+  "summary": "MiniVectorDB 开发材料索引：student_prompts 包含任务需求；decisions 与 conversations 记录早期选型和交互；experiments 包含写入、查询、崩溃、事务回滚及用例测试记录；retrospective 记录取舍和复盘；limitations 记录当时的实现边界。各条历史记录保留其发生时的上下文。"
 }
