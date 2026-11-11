@@ -45,6 +45,11 @@ struct RawScanCache {
     ranges: Vec<CachedRow>,
     filters: Vec<CachedFilter>,
     filter_bytes: usize,
+    /// Reused `f32` prefilter scores for a large cached table.
+    distances: Vec<f32>,
+    /// Scratch copy used to find the prefilter cutoff without disturbing the
+    /// row-order mapping in `distances`.
+    distance_scratch: Vec<f32>,
 }
 
 pub struct Session {
@@ -590,7 +595,7 @@ impl Session {
             })?;
         }
         if !fits { bytes = Vec::new(); ranges = Vec::new(); }
-        self.scan_cache = Some(RawScanCache {table:key,bytes:fits.then_some(bytes),ranges,filters:Vec::new(),filter_bytes:0});
+        self.scan_cache = Some(RawScanCache {table:key,bytes:fits.then_some(bytes),ranges,filters:Vec::new(),filter_bytes:0,distances:Vec::new(),distance_scratch:Vec::new()});
         Ok(())
     }
 
@@ -710,6 +715,99 @@ fn select_cached_distance(cache:&mut RawScanCache,schema:&TableSchema,outs:&[Out
         }
     }
     let bytes=cache.bytes.as_ref().unwrap();
+
+    // For a large cached table, rank with a SIMD f32 pass first and recompute
+    // only the rows near the cutoff in f64. Small tables and tie-heavy cases
+    // keep the direct exact path, so the output distances and primary-key
+    // tie-break remain the reference f64 result.
+    if ascending && keep > 0 && selected.is_none() && cache.ranges.len() > 2048 && query.len() >= 16 {
+        let count = cache.ranges.len();
+        let coarse_cap = keep.saturating_mul(8).max(64).min(count).min(4096);
+        if coarse_cap < count {
+            cache.distances.clear();
+            cache.distances.resize(count, f32::INFINITY);
+            let mut finite = true;
+            {
+                let scores = &mut cache.distances;
+                let mut score = |index: usize| -> DbResult<()> {
+                    let row = &cache.ranges[index];
+                    let start = row.vector_start as usize;
+                    let vector = bytes
+                        .get(start..start + query.len() * 4)
+                        .ok_or_else(|| DbError::new(ErrorCode::Unknown, "invalid cached vector bounds"))?;
+                    let value = distance::squared_stored_f32(query, vector)
+                        .ok_or_else(|| DbError::new(ErrorCode::WrongValue, "invalid cached vector dimension"))?;
+                    if value.is_finite() {
+                        scores[index] = value;
+                    } else {
+                        finite = false;
+                    }
+                    Ok(())
+                };
+                if let Some(selection) = selected {
+                    for &index in &cache.filters[selection].indices {
+                        score(index)?;
+                    }
+                } else {
+                    for index in 0..count {
+                        score(index)?;
+                    }
+                }
+            }
+            if finite {
+                let boundary = {
+                    cache.distance_scratch.clear();
+                    cache.distance_scratch.extend_from_slice(&cache.distances);
+                    let (_, nth, _) = cache
+                        .distance_scratch
+                        .select_nth_unstable_by(coarse_cap - 1, |a, b| a.total_cmp(b));
+                    *nth
+                };
+                if boundary.is_finite() {
+                    let limit = boundary + boundary.abs() * 1e-4 + 1e-6;
+                    let mut candidates = Vec::with_capacity(coarse_cap + 16);
+                    for (index, &value) in cache.distances.iter().enumerate() {
+                        if value <= limit {
+                            candidates.push(index);
+                            if candidates.len() > 4096 {
+                                break;
+                            }
+                        }
+                    }
+                    if !candidates.is_empty() && candidates.len() <= 4096 {
+                        let mut top: BinaryHeap<DistanceRank> =
+                            BinaryHeap::with_capacity(keep.min(candidates.len()));
+                        for index in candidates {
+                            let row = &cache.ranges[index];
+                            let start = row.vector_start as usize;
+                            let vector = bytes
+                                .get(start..start + query.len() * 4)
+                                .ok_or_else(|| DbError::new(ErrorCode::Unknown, "invalid cached vector bounds"))?;
+                            let value = distance::squared_stored(query, vector)
+                                .ok_or_else(|| DbError::new(ErrorCode::WrongValue, "invalid cached vector dimension"))?;
+                            let ranked = DistanceRank { distance: value, pk: row.pk, index, ascending };
+                            if top.len() < keep {
+                                top.push(ranked);
+                            } else if top.peek().is_some_and(|worst| ranked.cmp(worst) == Ordering::Less) {
+                                *top.peek_mut().unwrap() = ranked;
+                            }
+                        }
+                        let mut rows = Vec::with_capacity(top.len());
+                        for ranked in top.into_sorted_vec() {
+                            let row = &cache.ranges[ranked.index];
+                            let values = crate::storage::record::decode_row(
+                                schema,
+                                &bytes[row.start as usize..row.end as usize],
+                            )?;
+                            rows.push(project(outs, &values)?);
+                        }
+                        return Ok(ResultSet { columns, rows });
+                    }
+                }
+            }
+        }
+    }
+
     let mut top:BinaryHeap<DistanceRank>=BinaryHeap::with_capacity(keep.min(cache.ranges.len()).min(16384));
     let mut offer=|index:usize|->DbResult<()> {
         let row=&cache.ranges[index];

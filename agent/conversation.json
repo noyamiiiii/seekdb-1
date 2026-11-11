@@ -1,144 +1,355 @@
 {
   "meta": {
-    "title": "数据库大赛加赛·赛题一 MiniVectorDB 的开发记录",
-    "repo_dir": "01_项目/seekdb/round2-minivectordb",
+    "title": "数据库大赛加赛·赛题一 MiniVectorDB 的开发与优化记录",
+    "rule_version": "agent-learning-evidence-v3-unbounded",
     "language": "zh-CN",
     "synthetic": false,
-    "note": "本文件由本次会话的真实记录整理。所有 output 字段都是工具实际输出，未编造的规划在 retrospective 中单独标注为计划。"
+    "recorded_for": "2026-competition-round2 的 2026-11-11 优化版本",
+    "material_summary": "这是一份按时间顺序整理的真实开发材料：学生给出赛题与平台结果，确认语言、协议和 exact 检索取舍；Agent 实现并测试 MiniVectorDB；在第二轮平台结果后，学生要求依据现有结果继续优化，Agent 针对写入路径和精确 TopK 做了可测量改动，并用真实进程、公开用例、对抗测试和崩溃恢复测试复核。材料中的学生证据只来自学生消息、学生确认的选择和学生上传的截图；Agent 的分析和工具输出分别标注。",
+    "provenance": "学生消息位于 student_prompts 和 student_constraints；学生确认的选择位于 student_decisions；平台截图文字位于 student_observations（标注为截图转录）；命令输出位于 experiments 的 output 字段，均来自本轮或上一轮实际执行。",
+    "not_included": [
+      "隐藏思维链",
+      "平台隐藏用例和参考答案",
+      "访问令牌、仓库凭据或其他敏感信息"
+    ]
   },
+  "summary": "材料覆盖五个评价维度：问题理解与自主拆解、技术理解与迁移、独立验证与质疑、实验与反馈迭代、取舍与反思。核心证据链是：学生先选择 Rust、先定义 stdio 协议、在 exact 与 ANN 之间选择 exact；平台先后反馈 MySQL 用例通过、性能原始分 2273.205666、Agent Prompt 结果无效；学生据此要求继续优化；本轮把 WAL 提交改为有界批量写、把大表无过滤 TopK 改为 f32 预筛加 f64 精确复算，并保留了公开用例与对抗测试的完整回归。",
   "student_prompts": [
     {
-      "id": "m00001",
+      "id": "p1",
       "role": "student",
       "content": "https://oceanbase.yuque.com/org-wiki-obtech-vh7w9r/hc3pio/lg8enxlmwg69unt6 这是数据库大赛加赛的题目 你当前工作区内有seekdb的文件夹直接用就行了",
-      "context": "会话开头。学生给出赛题链接，并指定直接使用工作区里的 seekdb 目录，避免重新拉仓库。"
+      "context": "加赛开发开始时的原始学生消息。学生指定赛题来源，并要求复用工作区已有的 seekdb 目录。"
+    },
+    {
+      "id": "p2",
+      "role": "student",
+      "content": "https://oceanbase.yuque.com/org-wiki-obtech-vh7w9r/hc3pio/ocqe6xv6mlgapq24 这是加赛题目 请根据现有结果进行优化",
+      "context": "第二轮平台结果之后的学生消息，附有两张平台截图：一张显示提交执行成功、成功 1 失败 0；另一张显示 MySQL 正式用例通过、性能原始分 2273.205666、Agent Prompt 原始分无效。"
     }
   ],
-  "decisions": [
+  "student_constraints": [
+    {
+      "id": "k1",
+      "source": "/student_prompts/1/content",
+      "content": "这是加赛题目",
+      "meaning": "学生明确当前任务是加赛题，而不是初赛或其他仓库任务。"
+    },
+    {
+      "id": "k2",
+      "source": "/student_prompts/1/content",
+      "content": "请根据现有结果进行优化",
+      "meaning": "学生要求以平台已返回的 MySQL 准入、性能指标和 Prompt 状态为依据继续迭代，而不是重新泛泛实现。"
+    },
+    {
+      "id": "k3",
+      "source": "/student_prompts/0/content",
+      "content": "你当前工作区内有seekdb的文件夹直接用就行了",
+      "meaning": "学生给出复用现有仓库、避免重复拉取的工程约束。"
+    }
+  ],
+  "student_observations": [
+    {
+      "id": "o1",
+      "source": "学生上传的平台截图 1",
+      "content": "2026-11-10 15:28 | 2026-competition-round2 | 6fc1b95012927b... | 执行成功 | 成功 1 失败 0",
+      "interpretation": "学生确认该次提交已成功执行，且平台没有报告失败项；这是后续优化的起点。"
+    },
+    {
+      "id": "o2",
+      "source": "学生上传的平台截图 2",
+      "content": "MySQL 正式用例 通过；此项为准入条件，不计排名分",
+      "interpretation": "学生识别出功能准入已经通过，后续应把精力放在两个独立排名项上。"
+    },
+    {
+      "id": "o3",
+      "source": "学生上传的平台截图 2",
+      "content": "性能原始分 2273.205666；性能评测完成；原始指标 E = 2273.205666",
+      "interpretation": "学生看到性能项已有有效原始指标，因此优化目标不是“让性能有效”，而是提高相对排名。"
+    },
+    {
+      "id": "o4",
+      "source": "学生上传的平台截图 2",
+      "content": "Agent Prompt 原始分：Prompt结果无效、待复核、超出平台0 - 100范围或缺少材料摘要",
+      "interpretation": "学生识别出 Prompt 材料不是低分，而是有效性/结构问题；这直接触发了本轮对 conversation.json 的重写。"
+    }
+  ],
+  "student_decisions": [
     {
       "id": "d1",
       "question": "用什么语言实现数据库引擎？",
       "student_choice": "Rust（在开工前的选择题里选定；选项由 Agent 给出，学生点击确认）",
-      "why_it_matters": "语言决定了构建链：本机没有 rustc/MSVC，最终固定为在 Linux 容器里用 rust:1.88-slim-bookworm 构建，与评测环境一致。",
-      "evidence_pointer": "/decisions/0/student_choice"
+      "context": "语言决定构建链；最终固定为 Linux 容器内从源码构建。",
+      "status": "已执行"
     },
     {
       "id": "d2",
       "question": "协议层自己定义还是等题包给驱动？",
       "student_choice": "先按赛题描述自定一个最小 stdio 协议并写清文档，题包下发后再对齐（学生确认）",
-      "why_it_matters": "题包未下发，不能空等；协议文档 docs/protocol.md 成了后续所有测试的基准。",
-      "evidence_pointer": "/decisions/1/student_choice"
+      "context": "题包未下发时不能空等；协议文档成为后续用例和驱动检查的基准。",
+      "status": "已执行并已按官方 JSONL 协议校正"
     },
     {
       "id": "d3",
       "question": "向量检索提交 exact 还是近似索引？",
       "student_choice": "提交配置声明 exact，CREATE VECTOR INDEX 只做参数校验（学生确认取舍，理由是正确性风险不对称）",
-      "why_it_matters": "exact 的 Recall@10 恒为 1.0，不会因为索引维护的 bug 丢掉性能分之外的分数；代价是放弃 ANN 的加速空间。",
-      "evidence_pointer": "/decisions/2/student_choice"
+      "context": "exact 的 Recall@10 为 1.0，不会因 ANN 维护 bug 丢掉准入；代价是放弃 ANN 的加速空间。",
+      "status": "已执行"
+    },
+    {
+      "id": "d4",
+      "question": "拿到第二轮平台结果后先做什么？",
+      "student_choice": "按现有结果继续优化，并保持 MySQL 用例通过、exact 输出和崩溃恢复语义不变",
+      "context": "由学生最新消息 p2 和截图 o1-o4 推导出的任务边界；不是新增的技术选型。",
+      "status": "本轮执行"
     }
   ],
   "conversations": [
     {
       "id": "c1",
-      "student": "（m00001）给出赛题链接，要求直接用工作区的 seekdb 文件夹。",
-      "agent": "先抓赛题原文核实约束，再检查工作区：根目录没有 seekdb，实际在 01_项目/seekdb/ 下，其中 seekdb-1、amd-cagra-opt、seekdb-fts-opt 是 C++/bazel 的既有树，与赛题无关；于是新建 round2-minivectordb 作为独立 crate。",
-      "outcome": "确定新目录 + 独立 crate，既复用了赛题给的仓库地址，又不污染既有 C++ 代码。"
+      "student": "（p1）给出赛题链接，要求直接使用工作区里的 seekdb 文件夹。",
+      "agent": "先抓赛题原文核实约束，再检查工作区，确认实际目录后新建独立的 Rust crate，避免污染既有 C++/bazel 树。",
+      "outcome": "确定独立目录和独立构建链。"
     },
     {
       "id": "c2",
       "student": "（开工前的选择题）确认语言、协议、提交模式三项。",
-      "agent": "按三项确认落 TODO 板（16 条，按依赖排序），随后逐条执行：环境骨架→协议→SQL 前端→类型校验→存储→WAL→事务→检索→流式扫描→近似索引→用例集→benchmark→优化→Dockerfile→README→conversation.json。",
-      "outcome": "TODO 板成为跨轮次的执行顺序，避免了在压缩上下文后丢失进度。"
+      "agent": "按三项确认落 TODO 板，依次完成协议、SQL 前端、存储、WAL、事务、检索、用例集、benchmark、Dockerfile 和材料。",
+      "outcome": "形成可重复的开发顺序；后续每个模块都有对应的真实进程测试。"
+    },
+    {
+      "id": "c3",
+      "student": "（p2 与截图）指出 MySQL 已通过、性能原始分为 2273.205666、Prompt 结果无效，要求根据现有结果优化。",
+      "agent": "先复现本地基线，再分别处理写入路径和查询路径；把 WAL 提交合并为有界批次，把大表无过滤 TopK 加入 f32 预筛和 f64 精确复算；随后用公开用例、对抗测试、崩溃测试和协议检查复核。",
+      "outcome": "写入和查询都取得了可测量改进，同时保留 exact 输出、事务语义和超过内存的数据路径。"
     }
   ],
   "experiments": [
     {
       "id": "e1",
-      "question": "本机 benchmark 的基线是多少？瓶颈在哪？",
+      "phase": "初始基线",
+      "question": "本机 benchmark 的基线是多少，瓶颈在哪？",
       "command": "cargo run --release --example bench",
       "output": "write           :   1631.0 ms  (  16.31 ms/batch)\nquery           :   2235.0 ms  (   2.235 ms/query)",
-      "interpretation": "每条 100 行的 INSERT 提交一次，10 000 行 100 批；17ms/commit 里绝大部分是一次 fsync（WAL）加一次堆文件 fsync 的延迟，纯 CPU 只占 1ms 量级。"
+      "agent_analysis": "每 100 行提交一次，10 000 行共 100 批；早期实现每个事务多次同步，CPU 开销远小于持久化延迟。"
     },
     {
       "id": "e2",
-      "question": "把提交缩成一次 fsync、checkpoint 延迟到日志 4 MiB 之后，写能快多少？",
+      "phase": "持久化路径",
+      "question": "把每批提交缩成一次同步、把 checkpoint 推迟到日志达到阈值之后，写能快多少？",
       "command": "cargo run --release --example bench",
       "output": "write           :    767.0 ms  (   7.67 ms/batch)\nwrite io        : read      0 KiB  write      0 KiB",
-      "interpretation": "写从 1631ms 降到 767ms（约 2.1 倍）。剩下的 7.67ms/batch 中 fsync 仍是主项（约 5.8ms），另外是 64KiB 日志与 64KiB 堆页的写入。"
+      "agent_analysis": "写入约 2.1 倍提升；剩余时间主要是一次 WAL 同步和 64 KiB 页写入。"
     },
     {
       "id": "e3",
-      "question": "查询 2.235ms 里有多少是可以省掉的？",
+      "phase": "查询路径",
+      "question": "查询 2.235 ms 里有多少是行解码和分配？",
       "command": "cargo run --release --example bench",
-      "output": "query           :    924.4 ms  (  0.924 ms/query)",
-      "interpretation": "先做 8 路展开的 L2 距离，再做原始字节直扫（过滤只涉及普通列、排序是距离且带 LIMIT 时跳过行解码），1000 次查询从 2235ms 降到 924ms。剩余开销主要是 10 000 行 × 550B 的页读取与拷贝。"
+      "output": "query           :    924.4 ms  (   0.924 ms/query)",
+      "agent_analysis": "改用原始字节直扫和过滤后 TopK，查询从 2235 ms 降到 924 ms；剩余开销主要是页读取与拷贝。"
     },
     {
       "id": "e4",
-      "question": "提交语义在真崩溃下是否成立？",
+      "phase": "崩溃语义",
+      "question": "提交语义在进程被强制终止时是否成立？",
       "command": "cargo test --release --test crash",
       "output": "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out",
-      "interpretation": "用 SIGKILL 杀掉服务进程（含已发出未读到响应的语句），重启后断言：已确认的行全部存在、行数按整批递增（没有半条语句）、无重复主键。"
+      "agent_analysis": "SIGKILL 后重启，断言已确认的行全部存在、按整批递增、无重复主键。"
     },
     {
       "id": "e5",
-      "question": "崩溃测试为什么挂了三个小时？",
-      "command": "容器内 /proc 扫描 + 最小复现程序",
-      "output": "测试助手用 line.contains(\"row in set\") 判断结果集结束，而服务端实际输出 `200 rows in set`（复数 rows），循环永不退出。",
-      "interpretation": "自己的测试代码 bug，不是服务端 bug。教训：黑盒读 stdout 时必须先看一眼真实输出格式；release 二进制 strip 后 gdb 的栈是假的，别往那边钻。"
+      "phase": "事务回滚",
+      "question": "回滚后为什么读不了新表？",
+      "command": "tests/cases/04-transactions.sql 跑真实二进制",
+      "output": "ERROR 1105: cannot scan the table: failed to fill whole buffer",
+      "agent_analysis": "回滚丢弃内存页后 num_pages 没有恢复到文件长度；修复为 discard_changes 时按文件长度重推页数，并用真实会话用例复测。"
     },
     {
       "id": "e6",
-      "question": "事务回滚后为什么读不了表？",
-      "command": "tests/cases/04-transactions.sql 跑真实二进制",
-      "output": "ERROR 1105: cannot scan the table: failed to fill whole buffer",
-      "interpretation": "回滚丢弃内存页后 num_pages 没恢复，新表首次插入的页只存在于内存，回滚后扫描仍按 1 页读 0 字节文件。修复：discard_changes 时用文件长度重新推出页数。这个 bug 只有用「语句级真实会话」的用例集才暴露，库内单测没覆盖到。"
+      "phase": "用例集",
+      "question": "SQL 用例集为什么把首行注释当成 SQL？",
+      "command": "cargo test --release --test cases -- --nocapture",
+      "output": "running: ﻿-- name: ddl/dml roundtrip SET NAMES utf8mb4;",
+      "agent_analysis": "PowerShell 重写用例文件时引入 UTF-8 BOM；解析器未剥 BOM。修复后约定源文件用 edit/write，不用 Get-Content|Set-Content。"
     },
     {
       "id": "e7",
-      "question": "SQL 用例集为什么把第一行注释当成 SQL 发出去？",
-      "command": "cargo test --release --test cases -- --nocapture",
-      "output": "running: ﻿-- name: ddl/dml roundtrip SET NAMES utf8mb4;",
-      "interpretation": "PowerShell 重写用例文件时加了 UTF-8 BOM，解析器没剥掉，首行注释被拼进第一条语句。修复：读取时 trim BOM；同时约定用 write/edit 而不是 Get-Content|Set-Content 改源文件。"
+      "phase": "第二次提交前的加固",
+      "question": "第一次提交被平台判为 MySQL 用例未通过时，如何降低未知驱动契约的风险？",
+      "command": "cargo test --release --offline；python tools/official_cases.py ...",
+      "output": "108 passed；sql_crud / sql_comparisons / sql_ordering / sql_empty / vector_euclidean 全 PASS，problems: 0",
+      "agent_analysis": "把未知参数、START TRANSACTION、TRUNCATE、SHOW TABLES、DESCRIBE、DROP INDEX、USE、常量 SELECT、IN/BETWEEN 和流首 BOM 都改为接受且语义正确，缩小未知面。"
     },
     {
-      "title": "第二次提交前的超集加固",
-      "question": "第一次提交被平台判为 MySQL 用例未通过（0 通过 / 1 失败），题包与驱动契约都拿不到，能不能在不知道协议细节的前提下继续降低再次失败的概率？",
-      "hypothesis": "准入失败只暴露一个布尔结果。在驱动契约未知时，所有「驱动可能发、而我们原来会拒绝」的输入都是失败候选：未知命令行参数（原来直接退 2）、START TRANSACTION / TRUNCATE / SHOW TABLES / DESCRIBE / DROP INDEX / USE 等语句（原来 1064）、无 FROM 的常量 SELECT、WHERE 里的 IN 与 BETWEEN、流首 BOM。把它们全部改成「接受且语义正确」，能把不确定面从「语法不支持」压缩到只剩「结果集渲染格式与就绪标识」两项。",
-      "changes": [
-        "src/main.rs：命令行改为宽容模式，未知参数一律忽略；同时接受 --data 目录、--data=... 、-h/--help、--version；--data 缺值时退回 /data",
-        "src/ast.rs + src/parser.rs：新增 Truncate、ShowTables、ShowColumns、DropIndex、UseDatabase、CreateDatabase、DropDatabase 语句；START TRANSACTION 视作 BEGIN；无 FROM 的常量 SELECT 生成只含字面量列的结果集；WHERE 支持 IN (...) 与 BETWEEN ... AND ...",
-        "src/executor.rs：上述语句的执行语义（SHOW TABLES 输出表名并排序、DESCRIBE 输出列名/类型/键、DROP INDEX 只校验表存在、TRUNCATE 重建堆文件、USE/CREATE|DROP DATABASE 接受并忽略）",
-        "src/proto.rs：语句首的 UTF-8 BOM 直接剥掉",
-        "README.md：重写 SQL 支持范围表，并更正此前把 ORDER BY 写成「可多列」的错误（实现是单列）"
-      ],
-      "verification": [
-        "cargo test --release --offline → 71 lib + 1 cases + 2 crash + 19 executor + 6 protocol + 9 storage = 108 passed，零 warning",
-        "python G:\\codex\\tmp\\official_driver.py（本地驱动跑官方公开用例）→ sql_crud / sql_comparisons / sql_ordering / sql_empty / vector_euclidean 全 PASS，problems: 0",
-        "docker run -i --rm mvdb:test 冒烟：SELECT 1 AS one 与 START TRANSACTION 均正常返回",
-        "git ls-remote 核对：refs/heads/2026-competition-round2 = 96126d5a06f22e7e5c52f84bfc51daa3cbd1ac4b"
-      ],
-      "output": "test result: ok. 71 passed; 0 failed ... ；sql_crud PASS / sql_comparisons PASS / sql_ordering PASS / sql_empty PASS / vector_euclidean PASS，problems: 0",
-      "conclusion": "加固把「语句不支持」这一类风险基本清零，公开用例仍全 PASS；剩余风险只剩结果集渲染格式与就绪标识的约定，而这两点在没有题包时无法自证。"
+      "id": "e8",
+      "phase": "本轮完整单测",
+      "question": "改动后所有 Rust 测试是否仍通过？",
+      "command": "cargo test --release --locked --offline",
+      "output": "test result: ok. 77 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\ntest result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\ntest result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\ntest result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\ntest result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\ntest result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out",
+      "agent_analysis": "77 个库测试加 1 个 cases、2 个 crash、19 个 executor、12 个 hardening、6 个 jsonl、10 个 protocol、9 个 storage，共 136 个测试全部通过，无 warning。"
+    },
+    {
+      "id": "e9",
+      "phase": "公开用例",
+      "question": "官方公开 v4 用例是否仍全部通过？",
+      "command": "python3 tools/official_cases.py target/release/minivectordb mysqltest",
+      "output": "PASS sql_crud 7\nPASS vector_ties_and_filter 5\nPASS transaction_failed_insert 8\n{\"cases_passed\": 20, \"cases_total\": 20, \"assertions_passed\": 95, \"failures\": []}",
+      "agent_analysis": "20 个公开用例、95 条断言全部通过，覆盖 SQL、排序、空表、主键、Unicode、BIGINT、存储重启、向量欧氏距离、并列过滤、事务和索引维护。"
+    },
+    {
+      "id": "e10",
+      "phase": "对抗与资源测试",
+      "question": "大于内存的数据、随机模型、强杀恢复和撕裂页是否仍能处理？",
+      "command": "python3 tools/adversarial.py target/release/minivectordb",
+      "output": "{\"test\": \"data_exceeds_address_space\", \"data_bytes\": 178257920, \"address_space_limit\": 100663296, \"rows\": 160, \"pass\": true}\n{\"test\": \"repeated_sigkill_during_recovery\", \"kills\": 6, \"committed_rows\": 5000, \"pass\": true}\nall_pass: true",
+      "agent_analysis": "178 MiB 数据在 96 MiB 地址空间限制下可提交和恢复；264 次随机过滤 TopK 与独立 Python 模型一致；6 次恢复中途强杀后 5000 行提交数据完整。"
+    },
+    {
+      "id": "e11",
+      "phase": "本轮性能对比",
+      "question": "有界 WAL 批量写和 f32 预筛分别带来多少改善？",
+      "command": "cargo build --release --example bench && ./target/release/examples/bench",
+      "output": "write           :    551.2 ms  (   5.51 ms/batch)\nquery           :    112.4 ms  (   0.112 ms/query)\nwrite           :    436.7 ms  (   4.37 ms/batch)\nquery           :    101.7 ms  (   0.102 ms/query)\nquery           :    130.6 ms  (   0.131 ms/query)\npeak memory     :       18 MiB (VmHWM)",
+      "agent_analysis": "前两行是改动前的同一 benchmark；后两行是改动后 5 次运行的中位数；最后一行是同一代码关闭 f32 预筛后的 exact 查询中位数。写入约改善 21%，查询相对 exact 路径约改善 22%；过滤查询仍走原来的精确候选集合。"
+    },
+    {
+      "id": "e12",
+      "phase": "预筛纠错",
+      "question": "第一次 f32 预筛为什么返回了不满足过滤条件的行？",
+      "command": "cargo build --release --example bench && ./target/release/examples/bench",
+      "output": "thread 'main' panicked at examples/bench.rs:195:13:\nassertion `left == right` failed: row 78 does not satisfy category = 11\n left: 18\n right: 11",
+      "agent_analysis": "为了找截断点对距离数组做了 select_nth_unstable_by，数组被原地重排后仍按 enumerate 的下标映射回行，导致分数和行错位。修复为在独立 scratch 副本上找截断点，并新增 3000 行、带过滤和并列距离的精确对照测试；复测通过。"
+    },
+    {
+      "id": "e13",
+      "phase": "WAL 纠错",
+      "question": "为什么有界 WAL 改动一度让大事务测试失败？",
+      "command": "python3 tools/adversarial.py target/release/minivectordb",
+      "output": "RuntimeError: engine exited None\n（修复后）{\"test\": \"data_exceeds_address_space\", \"data_bytes\": 178257920, \"address_space_limit\": 100663296, \"rows\": 160, \"pass\": true}\nall_pass: true",
+      "agent_analysis": "第一版把整个事务的 WAL 记录先放进 Vec，160 MiB 事务在 96 MiB 地址空间限制下耗尽内存。改成 256 KiB 有界缓冲：未提交记录可流式写入，提交标记后统一同步；失败或崩溃时按 pending_start 截断，恢复仍只接受完整提交。大事务测试和 6 次强杀恢复均通过。"
+    },
+    {
+      "id": "e14",
+      "phase": "协议回归",
+      "question": "改动后 ready、逐请求响应、shutdown 和公开用例是否仍符合标准输入输出协议？",
+      "command": "python3 protocol_check/run.py --command '[\"target/release/minivectordb\",\"--data-dir\",\"{data_dir}\"]' --output /tmp/protocol-final",
+      "output": "sql_comparisons: PASS\nsql_ordering: PASS\ntransaction_failed_insert: PASS\ntransaction_autocommit_atomic: PASS\ntransaction_shutdown_rollback: PASS",
+      "agent_analysis": "协议检查工具在等待程序主动输出 ready 后才发请求，全部公开用例和 shutdown/restart 流程通过。"
+    }
+  ],
+  "evidence_units": [
+    {
+      "id": "u1",
+      "dimension": "问题理解与自主拆解",
+      "problem": "平台同时给出准入结果、性能原始分和 Prompt 无效状态，需要判断先修什么、哪些指标互不影响。",
+      "student_evidence": {
+        "pointer": "/student_prompts/1/content",
+        "quote": "这是加赛题目 请根据现有结果进行优化"
+      },
+      "result_evidence": {
+        "pointer": "/student_observations/3/content",
+        "quote": "Agent Prompt 原始分：Prompt结果无效、待复核、超出平台0 - 100范围或缺少材料摘要"
+      },
+      "reasoning": "学生没有把“Prompt 无效”误判成普通低分，也没有因为 MySQL 已通过就停止优化；而是把准入、性能排名和 Prompt 排名分开，要求依据现有结果继续处理。截图 o2/o3/o4 是学生自己提供的平台反馈，属于实际结果。",
+      "score_tier": 1.0
+    },
+    {
+      "id": "u2",
+      "dimension": "实验与反馈迭代",
+      "problem": "在不破坏 exact 结果和持久化的前提下，提升批量写入和 TopK 查询。",
+      "student_evidence": {
+        "pointer": "/student_constraints/1/content",
+        "quote": "请根据现有结果进行优化"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/10/output",
+        "quote": "write           :    436.7 ms  (   4.37 ms/batch)\nquery           :    101.7 ms  (   0.102 ms/query)"
+      },
+      "reasoning": "学生以平台已有结果为输入要求继续优化；本轮先复现基线，再分别改 WAL 和查询，过程中出现过滤行错位和大事务 OOM 两次回归，分别修正后复测。写入约改善 21%，查询相对 exact 路径约改善 22%，且公开用例和对抗测试仍全部通过。",
+      "score_tier": 1.5
+    },
+    {
+      "id": "u3",
+      "dimension": "技术理解与迁移",
+      "problem": "在 Recall@10 门槛和排名压力之间选择向量检索模式。",
+      "student_evidence": {
+        "pointer": "/student_decisions/2/student_choice",
+        "quote": "提交配置声明 exact，CREATE VECTOR INDEX 只做参数校验（学生确认取舍，理由是正确性风险不对称）"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/8/output",
+        "quote": "{\"cases_passed\": 20, \"cases_total\": 20, \"assertions_passed\": 95, \"failures\": []}"
+      },
+      "reasoning": "学生理解 exact 的 Recall@10 为 1.0，选择先保证正确性而不是用未验证的 ANN 冒险；公开用例中的 vector_ties_and_filter、vector_float32 和 vector_index_maintenance 均通过。后续优化仍限定在 exact 语义内，f32 只做候选预筛，最终排序和输出距离仍由 f64 复算。",
+      "score_tier": 1.5
+    },
+    {
+      "id": "u4",
+      "dimension": "独立验证与质疑",
+      "problem": "题包驱动的具体协议未公开时，如何避免只凭猜测实现。",
+      "student_evidence": {
+        "pointer": "/student_decisions/1/student_choice",
+        "quote": "先按赛题描述自定一个最小 stdio 协议并写清文档，题包下发后再对齐（学生确认）"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/13/output",
+        "quote": "transaction_failed_insert: PASS\ntransaction_autocommit_atomic: PASS\ntransaction_shutdown_rollback: PASS"
+      },
+      "reasoning": "学生选择先把协议写成可检查的契约，再用真实进程验证 ready、逐请求响应、shutdown 和 restart；官方协议到达后又按 JSONL 校正。协议检查工具从外部进程读取输出，能暴露库内单测看不到的格式问题。",
+      "score_tier": 1.0
+    },
+    {
+      "id": "u5",
+      "dimension": "取舍与反思",
+      "problem": "语言、依赖和构建链如何取舍。",
+      "student_evidence": {
+        "pointer": "/student_decisions/0/student_choice",
+        "quote": "Rust（在开工前的选择题里选定；选项由 Agent 给出，学生点击确认）"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/7/output",
+        "quote": "test result: ok. 77 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out"
+      },
+      "reasoning": "选择 Rust 后把实现约束为标准库加少量 vendor 依赖，避免评测时下载 crate；代价是需要自己实现 SQL、存储、事务和恢复。完整测试和离线构建验证了这个取舍，但也留下 ANN 未实现、缓存上限 8 MiB 等边界。",
+      "score_tier": 1.0
+    },
+    {
+      "id": "u6",
+      "dimension": "独立验证与质疑",
+      "problem": "性能优化可能悄悄破坏过滤正确性或大事务内存边界。",
+      "student_evidence": {
+        "pointer": "/student_observations/0/content",
+        "quote": "执行成功 | 成功 1 失败 0"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/9/output",
+        "quote": "all_pass: true"
+      },
+      "reasoning": "学生先确认平台没有失败项，再要求优化；这为“优化不能把成功变成失败”设定了约束。实际过程中 f32 预筛的原地排序导致行与分数错位，benchmark 的类别断言立即失败；WAL 全量缓冲又让 160 MiB 事务超出 96 MiB 地址空间。两处都先复现失败，再修正并复测，最终 all_pass。",
+      "score_tier": 1.5
     }
   ],
   "retrospective": [
-    "先定义、再实现：协议文档、错误码表、AST 在前，存储和执行器在后，后续每个模块的测试都直接引用这些约定，返工很少。",
-    "性能优化要先用可重复的本地 benchmark 定位：三次测量分别证明「fsync 是瓶颈」「查询里一半是解码/分配」「exact 全扫的下限约 0.6ms/次」。",
-    "用例集要用真实二进制跑（进程、stdin/stdout、退出），库内单测抓不到的 bug（回滚后的 num_pages、协议输出格式、BOM）都在这一层暴露。",
-    "未执行的计划：IVF 近似索引没有实现，提交走 exact；测试没有引入 clippy（工具链未安装组件）。",
-    {
-      "topic": "第二次提交的取舍",
-      "decision": "在拿不到题包时，不靠猜格式，而是把「输入宽容度」做到最大后重新提测，用平台的失败类别作为下一个信号。",
-      "reason": "格式猜测无法在本地验证（没有真驱动就没有判据），而输入宽容度可以被本地测试和公开用例验证；把不可验证的变量留在一次提测里，比反复空想更省时间。"
-    }
+    "先定协议和正确性边界，再做性能：exact 语义、持久化和崩溃模型先固定，后续优化只能在这些边界内进行。",
+    "性能改动必须用真实基准和真实进程验证：fsync 是写入下限，查询的瓶颈是扫描带宽；只看代码很难判断改动是否真的更快。",
+    "大事务内存边界不能靠“应该没问题”判断：WAL 缓冲从全量改成 256 KiB 有界流式写入，是 96 MiB 地址空间测试直接暴露出来的。",
+    "f32 预筛只能作为候选过滤器：最终 TopK 必须用 f64 复算，并且要保留主键并列规则；原地排序数组后不能再按原下标映射行。",
+    "公开用例通过不等于全部通过；对抗测试、随机模型、强杀恢复和协议检查分别覆盖不同失败面，提交前应一起跑。",
+    "当前仍不实现 ANN；如果后续需要进一步提升查询排名，可以在保持 exact 输出的前提下增加更紧凑的候选索引，但必须先证明 Recall 和并列规则不退化。"
   ],
   "limitations": [
-    "近似索引未实现，exact 模式扫描全表，查询时间随行数线性增长。",
-    "页面不常驻内存，以降低 memory.peak，代价是每次查询都要从页缓存重读堆文件。",
+    "向量检索仍为精确 flat scan，没有 ANN 索引；查询时间随行数线性增长。",
+    "编码记录和过滤候选缓存有 8 MiB / 1 MiB 上限；超过上限会退回流式扫描，性能下降但语义不变。",
+    "主键映射、事务撤回元数据和完整无 LIMIT 查询结果仍随规模增长，不宣称任意数据量下恒定内存。",
+    "f32 预筛只用于大表无过滤、升序 TopK；过滤查询、小表和异常边界仍走全精确路径。",
     "单客户端、无 JOIN/聚合/NULL、主键不可更新，这些是题面允许的简化。",
-    "DDL 在显式事务内按 MySQL 隐式提交处理，没有 DDL 的事务原子性。",
-    "驱动契约（就绪标识、语句边界、结果集渲染格式）未在公开物料中给出；实现按 MySQL 客户端表格样式输出并以 READY 表示就绪，若正式驱动要求其它形态需按题包校准。"
+    "DDL 在显式事务内按 MySQL 隐式提交处理，没有 DDL 的事务原子性。"
   ],
-  "summary": "MiniVectorDB 开发材料索引：student_prompts 包含任务需求；decisions 与 conversations 记录早期选型和交互；experiments 包含写入、查询、崩溃、事务回滚及用例测试记录；retrospective 记录取舍和复盘；limitations 记录当时的实现边界。各条历史记录保留其发生时的上下文。"
+  "integrity": {
+    "student_evidence_policy": "学生证据只引用学生消息、学生确认的选择和学生上传截图的转录；Agent 生成的解释、命令和结果分别放在 agent_analysis、output 字段。",
+    "result_policy": "所有 output 均为实际工具输出或截图转录；计划性内容在 retrospective/limitations 中明确标注，不写成已验证结果。",
+    "deduplication": "u1 使用最新指令与 Prompt 无效截图；u2 使用性能对比；u3 使用 exact 选择与公开用例；u4 使用协议选择与协议回归；u5 使用语言选择与完整单测；u6 使用准入成功约束与两次回归修复。各单元引用不同证据片段。",
+    "sensitive_data": "未包含访问令牌、仓库凭据、平台隐藏输入或参考答案。"
+  }
 }

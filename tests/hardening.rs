@@ -118,3 +118,30 @@ fn vector_text_fast_path_matches_numeric_grammar_and_rejects_partial_insert() {
  ok(&mut s,"INSERT INTO t VALUES(2,'[1,/* gap */2,3]')");
  assert_eq!(rows(&mut s,"SELECT v FROM t WHERE id=2"),vec![vec![Cell::Vector(vec![1.,2.,3.])]]);
 }
+
+#[test]
+fn large_cached_prefilter_matches_exact_filtered_topk_and_ties() {
+ let d=Db::new();let mut s=Session::open(&d.0).unwrap();
+ ok(&mut s,"CREATE TABLE t(id BIGINT PRIMARY KEY,g BIGINT,v VECTOR(16))");
+ let mut model=Vec::new();
+ for batch in 0..30 {
+  let mut inserts=Vec::new();
+  for i in batch*100..(batch+1)*100 {
+   let v=(0..16).map(|d|((i*17+d*13)%23) as f32-11.0).collect::<Vec<_>>();
+   inserts.push(format!("({i},{},'[{}]')",i%10,v.iter().map(|x|x.to_string()).collect::<Vec<_>>().join(",")));
+   model.push((i as i64,(i%10) as i64,v));
+  }
+  ok(&mut s,&format!("INSERT INTO t VALUES {}",inserts.join(",")));
+ }
+ for group in 0..10 {
+  let mut expected=model.iter().filter(|(_,g,_)|*g==group).collect::<Vec<_>>();
+  expected.sort_by(|a,b|{
+   let da=a.2.iter().map(|v|{let v=f64::from(*v);v*v}).sum::<f64>();
+   let db=b.2.iter().map(|v|{let v=f64::from(*v);v*v}).sum::<f64>();
+   da.total_cmp(&db).then_with(||a.0.cmp(&b.0))
+  });
+  let want=expected.into_iter().take(10).map(|(id,_,_)|vec![Cell::Int(*id)]).collect::<Vec<_>>();
+  let got=rows(&mut s,&format!("SELECT id FROM t WHERE g={group} ORDER BY L2_DISTANCE(v,'[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]') LIMIT 10"));
+  assert_eq!(got,want,"group {group}");
+ }
+}

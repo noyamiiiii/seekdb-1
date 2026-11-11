@@ -17,10 +17,16 @@ const MAGIC: &[u8; 8] = b"MVWAL01\n";
 const KIND_BEGIN: u8 = 1;
 const KIND_PAGE: u8 = 2;
 const KIND_COMMIT: u8 = 3;
+const MAX_PENDING: usize = 256 * 1024;
 
 pub struct Wal {
     path: PathBuf,
     file: File,
+    /// Records of the transaction being committed. The buffer is bounded so a
+    /// transaction larger than memory streams instead of growing without limit.
+    pending: Vec<u8>,
+    /// File offset where the current uncommitted transaction starts.
+    pending_start: Option<u64>,
 }
 
 impl Wal {
@@ -50,34 +56,78 @@ impl Wal {
             }
         }
         file.seek(SeekFrom::End(0))?;
-        Ok(Self { path, file })
+        Ok(Self { path, file, pending: Vec::new(), pending_start: None })
     }
 
-    fn write_record(&mut self, kind: u8, payload: &[u8]) -> io::Result<()> {
+    fn encode_record(&mut self, kind: u8, payload: &[u8]) {
         let mut header = [0u8; 5];
         header[0] = kind;
         header[1..].copy_from_slice(&(payload.len() as u32).to_le_bytes());
-        self.file.write_all(&header)?;
-        self.file.write_all(payload)
+        self.pending.extend_from_slice(&header);
+        self.pending.extend_from_slice(payload);
     }
 
     pub(crate) fn begin(&mut self, txn: u64) -> io::Result<()> {
-        self.write_record(KIND_BEGIN, &txn.to_le_bytes())
+        // A begin discards a previous transaction that was never committed.
+        self.discard_pending();
+        self.encode_record(KIND_BEGIN, &txn.to_le_bytes());
+        Ok(())
     }
 
     pub(crate) fn page(&mut self, txn: u64, table: &str, page_id: u32, image: &[u8]) -> io::Result<()> {
         let name = table.as_bytes();
-        let mut payload = Vec::with_capacity(14 + name.len() + image.len());
-        payload.extend_from_slice(&txn.to_le_bytes());
-        payload.extend_from_slice(&(name.len() as u16).to_le_bytes());
-        payload.extend_from_slice(name);
-        payload.extend_from_slice(&page_id.to_le_bytes());
-        payload.extend_from_slice(image);
-        self.write_record(KIND_PAGE, &payload)
+        let start = self.pending.len();
+        self.pending.reserve(14 + name.len() + image.len());
+        self.pending.resize(start + 5, 0);
+        self.pending.extend_from_slice(&txn.to_le_bytes());
+        self.pending.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        self.pending.extend_from_slice(name);
+        self.pending.extend_from_slice(&page_id.to_le_bytes());
+        self.pending.extend_from_slice(image);
+        let len = (self.pending.len() - start - 5) as u32;
+        self.pending[start] = KIND_PAGE;
+        self.pending[start + 1..start + 5].copy_from_slice(&len.to_le_bytes());
+        if self.pending.len() >= MAX_PENDING {
+            self.write_pending()?;
+        }
+        Ok(())
     }
 
     fn commit(&mut self, txn: u64) -> io::Result<()> {
-        self.write_record(KIND_COMMIT, &txn.to_le_bytes())
+        self.encode_record(KIND_COMMIT, &txn.to_le_bytes());
+        Ok(())
+    }
+
+    fn flush_pending(&mut self) -> io::Result<()> {
+        if self.pending.is_empty() {
+            return Ok(());
+        }
+        // Appended bytes and the size needed to read them are covered by
+        // fdatasync; the directory entry was made durable when the log was
+        // created.
+        let result = self.write_pending().and_then(|_| self.file.sync_data());
+        if result.is_err() {
+            self.discard_pending();
+        }
+        self.pending_start = None;
+        result
+    }
+
+    fn write_pending(&mut self) -> io::Result<()> {
+        if self.pending_start.is_none() {
+            self.pending_start = Some(self.file.seek(SeekFrom::End(0))?);
+        }
+        self.file.write_all(&self.pending)?;
+        self.pending.clear();
+        Ok(())
+    }
+
+    fn discard_pending(&mut self) {
+        if let Some(start) = self.pending_start.take() {
+            let _ = self.file.set_len(start);
+            let _ = self.file.seek(SeekFrom::End(0));
+        }
+        self.pending.clear();
     }
 
     /// Durably records a transaction's page images followed by its commit mark.
@@ -91,16 +141,17 @@ impl Wal {
             self.page(txn, table, page_id, image)?;
         }
         self.commit(txn)?;
-        self.file.sync_all()
+        self.flush_pending()
     }
 
     pub(crate) fn finish_commit(&mut self, txn: u64) -> io::Result<()> {
         self.commit(txn)?;
-        self.file.sync_all()
+        self.flush_pending()
     }
 
     /// Empties the log; called once the heaps are durable.
     pub fn reset(&mut self) -> io::Result<()> {
+        self.discard_pending();
         self.file.set_len(0)?;
         self.file.seek(SeekFrom::Start(0))?;
         self.file.write_all(MAGIC)?;
@@ -317,5 +368,23 @@ mod tests {
             .unwrap();
         wal.reset().unwrap();
         assert!(recover(&path).unwrap().is_empty());
+    }
+
+    #[test]
+    fn large_commit_streams_with_a_bounded_buffer() {
+        let dir = TempDir::new();
+        let path = dir.0.join("wal.log");
+        let mut wal = Wal::open(&path).unwrap();
+        let image = vec![7u8; PAGE_SIZE];
+        wal.begin(11).unwrap();
+        for id in 0..100u32 {
+            wal.page(11, "docs", id, &image).unwrap();
+            assert!(wal.pending.len() < MAX_PENDING);
+        }
+        wal.finish_commit(11).unwrap();
+        assert!(wal.pending.is_empty());
+        let images = recover(&path).unwrap();
+        assert_eq!(images.len(), 100);
+        assert_eq!(images[99].1, 99);
     }
 }

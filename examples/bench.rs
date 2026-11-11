@@ -125,8 +125,11 @@ fn main() {
     // ---- query phase ---------------------------------------------------
     let query_io_start = process_io();
     let query_start = Instant::now();
+    let mut filtered = std::time::Duration::ZERO;
+    let mut unfiltered = std::time::Duration::ZERO;
     let mut seen = 0usize;
     for (category, vector) in &queries {
+        let one_start = Instant::now();
         let sql = match category {
             Some(category) => format!(
                 "SELECT id, L2_DISTANCE(emb, '{vector}') AS d FROM docs WHERE category = {category} ORDER BY d LIMIT {K}"
@@ -140,6 +143,11 @@ fn main() {
         };
         check_topk(&rows.rows, *category);
         seen += rows.rows.len();
+        if category.is_some() {
+            filtered += one_start.elapsed();
+        } else {
+            unfiltered += one_start.elapsed();
+        }
     }
     let query_time = query_start.elapsed();
     let query_io = process_io().since(query_io_start);
@@ -157,6 +165,8 @@ fn main() {
     println!("write           : {:>8.1} ms  ({:>7.2} ms/batch)", ms(write_time), ms(write_time) / (ROWS / BATCH) as f64);
     println!("write io        : read {:>6} KiB  write {:>6} KiB", write_io.read / 1024, write_io.write / 1024);
     println!("query           : {:>8.1} ms  ({:>7.3} ms/query)", ms(query_time), ms(query_time) / QUERIES as f64);
+    println!("query filtered  : {:>8.1} ms  ({:>7.3} ms/query)", ms(filtered), ms(filtered) / (QUERIES / 2) as f64);
+    println!("query unfiltered: {:>8.1} ms  ({:>7.3} ms/query)", ms(unfiltered), ms(unfiltered) / (QUERIES / 2) as f64);
     println!("query io        : read {:>6} KiB  write {:>6} KiB", query_io.read / 1024, query_io.write / 1024);
     println!("rows returned   : {seen}");
     println!("scan + decode   : {:>8.1} ms ({decoded_values} values)", ms(decode_scan));

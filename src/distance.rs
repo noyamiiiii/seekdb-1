@@ -60,6 +60,42 @@ pub fn squared_stored(query: &[f32], stored: &[u8]) -> Option<f64> {
     Some(sum)
 }
 
+/// A fast `f32` prefilter for the bounded cached scan. The caller must
+/// recompute the surviving candidates in `f64`; this value is only used to
+/// discard rows that cannot enter the TopK.
+pub fn squared_stored_f32(query: &[f32], stored: &[u8]) -> Option<f32> {
+    if stored.len() != query.len() * 4 {
+        return None;
+    }
+    #[cfg(target_arch = "x86_64")]
+    if std::is_x86_feature_detected!("avx2") && std::is_x86_feature_detected!("fma") {
+        // SAFETY: the feature check above guards the call and the dimensions
+        // were checked against the encoded byte length.
+        return Some(unsafe { squared_stored_f32_avx2(query, stored) });
+    }
+    let mut acc = [0.0f32; 8];
+    let body = query.len() - query.len() % 8;
+    let mut i = 0;
+    while i < body {
+        for (lane, slot) in acc.iter_mut().enumerate() {
+            let raw = stored[(i + lane) * 4..(i + lane) * 4 + 4]
+                .try_into()
+                .unwrap();
+            let d = query[i + lane] - f32::from_le_bytes(raw);
+            *slot += d * d;
+        }
+        i += 8;
+    }
+    let mut sum = (acc[0] + acc[4]) + (acc[1] + acc[5]) + (acc[2] + acc[6]) + (acc[3] + acc[7]);
+    while i < query.len() {
+        let raw = stored[i * 4..i * 4 + 4].try_into().unwrap();
+        let d = query[i] - f32::from_le_bytes(raw);
+        sum += d * d;
+        i += 1;
+    }
+    Some(sum)
+}
+
 /// The portable version: eight independent `f64` accumulators keep the
 /// additions from forming one long dependency chain.
 fn squared_scalar(a: &[f32], b: &[f32]) -> f64 {
@@ -160,6 +196,54 @@ unsafe fn squared_stored_avx2(a: &[f32], b: &[u8]) -> f64 {
     total
 }
 
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
+unsafe fn squared_stored_f32_avx2(a: &[f32], b: &[u8]) -> f32 {
+    use std::arch::x86_64::*;
+
+    let n = a.len();
+    let pa = a.as_ptr();
+    let pb = b.as_ptr().cast::<f32>();
+    let mut acc0 = _mm256_setzero_ps();
+    let mut acc1 = _mm256_setzero_ps();
+    let body = n - n % 16;
+    let mut i = 0;
+    while i < body {
+        let d0 = _mm256_sub_ps(
+            _mm256_loadu_ps(pa.add(i)),
+            _mm256_loadu_ps(pb.add(i)),
+        );
+        let d1 = _mm256_sub_ps(
+            _mm256_loadu_ps(pa.add(i + 8)),
+            _mm256_loadu_ps(pb.add(i + 8)),
+        );
+        acc0 = _mm256_fmadd_ps(d0, d0, acc0);
+        acc1 = _mm256_fmadd_ps(d1, d1, acc1);
+        i += 16;
+    }
+    while i + 8 <= n {
+        let d = _mm256_sub_ps(
+            _mm256_loadu_ps(pa.add(i)),
+            _mm256_loadu_ps(pb.add(i)),
+        );
+        acc0 = _mm256_fmadd_ps(d, d, acc0);
+        i += 8;
+    }
+    let sum = _mm256_add_ps(acc0, acc1);
+    let lo = _mm256_castps256_ps128(sum);
+    let hi = _mm256_extractf128_ps(sum, 1);
+    let pair = _mm_add_ps(lo, hi);
+    let pair = _mm_hadd_ps(pair, pair);
+    let pair = _mm_hadd_ps(pair, pair);
+    let mut total = _mm_cvtss_f32(pair);
+    while i < n {
+        let d = *pa.add(i) - *pb.add(i);
+        total += d * d;
+        i += 1;
+    }
+    total
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -240,5 +324,24 @@ mod tests {
             Some(squared_scalar(&a, &b))
         );
         assert_eq!(squared_stored(&a, &stored[..4]), None);
+    }
+
+    #[test]
+    fn f32_prefilter_stays_close_to_the_f64_reference() {
+        for dim in 1..=257 {
+            let a: Vec<f32> = (0..dim)
+                .map(|i| ((i * 37 + dim * 11) % 401) as f32 / 13.0 - 15.0)
+                .collect();
+            let b: Vec<f32> = (0..dim)
+                .map(|i| ((i * 53 + dim * 17) % 397) as f32 / 17.0 - 11.0)
+                .collect();
+            let bytes: Vec<u8> = b.iter().flat_map(|x| x.to_le_bytes()).collect();
+            let exact = squared_stored(&a, &bytes).unwrap();
+            let coarse = squared_stored_f32(&a, &bytes).unwrap();
+            assert!(
+                (f64::from(coarse) - exact).abs() <= exact.abs().max(1.0) * 1e-4,
+                "dim = {dim}: {coarse} vs {exact}"
+            );
+        }
     }
 }
