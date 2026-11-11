@@ -45,9 +45,11 @@ struct RawScanCache {
     ranges: Vec<CachedRow>,
     filters: Vec<CachedFilter>,
     filter_bytes: usize,
-    /// Reused `f32` prefilter scores for a large cached table; the cutoff is
-    /// selected in place, so one buffer serves both ranking and candidate scan.
+    /// Reused `f32` prefilter scores for a large cached table.
     distances: Vec<f32>,
+    /// Scratch copy used to find the prefilter cutoff without disturbing the
+    /// row-order mapping in `distances`.
+    distance_scratch: Vec<f32>,
 }
 
 pub struct Session {
@@ -593,7 +595,7 @@ impl Session {
             })?;
         }
         if !fits { bytes = Vec::new(); ranges = Vec::new(); }
-        self.scan_cache = Some(RawScanCache {table:key,bytes:fits.then_some(bytes),ranges,filters:Vec::new(),filter_bytes:0,distances:Vec::new()});
+        self.scan_cache = Some(RawScanCache {table:key,bytes:fits.then_some(bytes),ranges,filters:Vec::new(),filter_bytes:0,distances:Vec::new(),distance_scratch:Vec::new()});
         Ok(())
     }
 
@@ -722,9 +724,8 @@ fn select_cached_distance(cache:&mut RawScanCache,schema:&TableSchema,outs:&[Out
         let count = cache.ranges.len();
         let coarse_cap = keep.saturating_mul(8).max(64).min(count).min(4096);
         if coarse_cap < count {
-            if cache.distances.len() != count {
-                cache.distances.resize(count, f32::INFINITY);
-            }
+            cache.distances.clear();
+            cache.distances.resize(count, f32::INFINITY);
             let mut finite = true;
             {
                 let scores = &mut cache.distances;
@@ -754,12 +755,11 @@ fn select_cached_distance(cache:&mut RawScanCache,schema:&TableSchema,outs:&[Out
                 }
             }
             if finite {
-                // `select_nth_unstable_by` partitions in place: every scored row
-                // stays in the array, so the boundary and the candidate scan can
-                // share one buffer instead of copying the scores per query.
                 let boundary = {
+                    cache.distance_scratch.clear();
+                    cache.distance_scratch.extend_from_slice(&cache.distances);
                     let (_, nth, _) = cache
-                        .distances
+                        .distance_scratch
                         .select_nth_unstable_by(coarse_cap - 1, |a, b| a.total_cmp(b));
                     *nth
                 };

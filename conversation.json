@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "数据库大赛加赛·赛题一 MiniVectorDB 的开发记录",
-    "repo_dir": "seekdb-1 (2026-competition-round2)",
+    "repo_dir": "01_项目/seekdb/round2-minivectordb",
     "language": "zh-CN",
     "synthetic": false,
     "note": "本文件是本次会话的真实记录整理。output 字段都是工具实际输出粘贴；risky 的判断（例如为什么要加固）在 retrospective 中区分「已执行」与「计划」。"
@@ -354,6 +354,14 @@
       "command": "查看平台提测记录详情（2026-11-11 09:13 等两次）",
       "output": "MySQL 正式用例 通过；性能原始分 2800.036530 / 2273.205666；Agent Prompt 原始分 —",
       "interpretation": "准入已过，说明协议层与 SQL 语义都对上了；性能 E 出现了约 20% 的环境抖动（同一版本两次 2800 vs 2273）。剩下的唯一堵点是 prompt 材料。"
+    },
+    {
+      "id": "e12",
+      "question": "把精确 TopK 的两段打分缓冲合并成一次原地 select_nth 分区，能带来多少收益？",
+      "command": "python fuzz_topk.py mvdb:final 3000 32 120",
+      "output": "wrong ids for SELECT id, L2_DISTANCE(emb, '[...]') AS d FROM fz ORDER BY d ASC LIMIT 1\n  got: [(46, 2.9606180161437945)]\n  exp: [(1184, 2.79490242039342)]",
+      "interpretation": "本机 benchmark 显示快约 4%（1,000 次查询 93.9 → 90.5 ms），但原地分区会打乱分数数组与行下标的对应关系：候选择优时拿到的 index 已经不是行号，于是返回了错误的 Top1。20 个公开用例的行数都远小于快路径的 2048 行门槛，所以它们全过；换一个 3,000 行 × 32 维的混合过滤压测立刻暴露。整段改动已回退。",
+      "conclusion": "同一条优化：微基准 +3.6%，正确性 -100%。教训是「快路径的门槛边界必须有超过门槛的用例」，以及性能改动必须用与公开用例形状不同的数据自测。"
     }
   ],
   "retrospective": [
