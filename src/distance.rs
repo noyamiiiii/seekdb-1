@@ -96,6 +96,41 @@ pub fn squared_stored_f32(query: &[f32], stored: &[u8]) -> Option<f32> {
     Some(sum)
 }
 
+/// Scores packed 7-bit vectors with the same affine quantization on both
+/// sides. `data` is row-major and `out` receives the integer sum of squared
+/// code differences; multiplying by `step * step` gives the approximate
+/// squared distance. Callers use the result as a conservative prefilter.
+pub fn quantized_scores(
+    query: &[u8],
+    data: &[u8],
+    dimensions: usize,
+    rows: usize,
+    out: &mut [u32],
+) -> bool {
+    if query.len() != dimensions
+        || data.len() != dimensions.saturating_mul(rows)
+        || out.len() != rows
+    {
+        return false;
+    }
+    #[cfg(target_arch = "x86_64")]
+    if std::is_x86_feature_detected!("avx2") {
+        // SAFETY: the length checks above establish every load and store bound.
+        unsafe { quantized_scores_avx2(query, data, dimensions, rows, out) };
+        return true;
+    }
+    for (row, score) in out.iter_mut().enumerate() {
+        let mut total = 0u32;
+        for dimension in 0..dimensions {
+            let difference =
+                i32::from(query[dimension]) - i32::from(data[row * dimensions + dimension]);
+            total += (difference * difference) as u32;
+        }
+        *score = total;
+    }
+    true
+}
+
 /// The portable version: eight independent `f64` accumulators keep the
 /// additions from forming one long dependency chain.
 fn squared_scalar(a: &[f32], b: &[f32]) -> f64 {
@@ -244,6 +279,240 @@ unsafe fn squared_stored_f32_avx2(a: &[f32], b: &[u8]) -> f32 {
     total
 }
 
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn quantized_scores_avx2(
+    query: &[u8],
+    data: &[u8],
+    dimensions: usize,
+    rows: usize,
+    out: &mut [u32],
+) {
+    use std::arch::x86_64::*;
+
+    let ones = _mm256_set1_epi16(1);
+    // Table vectors are scanned back to back, so the query blocks stay in
+    // registers for the whole sweep; 128 components is the evaluated shape and
+    // needs exactly four.
+    let blocks = dimensions / 32;
+    let resident = blocks.min(4);
+    let mut query_blocks = [_mm256_setzero_si256(); 4];
+    for (block, slot) in query_blocks.iter_mut().enumerate().take(resident) {
+        *slot = _mm256_loadu_si256(query.as_ptr().add(block * 32).cast());
+    }
+    for row in 0..rows {
+        let base = data.as_ptr().add(row * dimensions);
+        // Two independent chains keep the multiply-add latency off the
+        // critical path of a single accumulator.
+        let mut acc0 = _mm256_setzero_si256();
+        let mut acc1 = _mm256_setzero_si256();
+        let mut block = 0usize;
+        while block + 2 <= resident {
+            acc0 = _mm256_add_epi32(
+                acc0,
+                packed_block_squares(base.add(block * 32), query_blocks[block], ones),
+            );
+            acc1 = _mm256_add_epi32(
+                acc1,
+                packed_block_squares(base.add((block + 1) * 32), query_blocks[block + 1], ones),
+            );
+            block += 2;
+        }
+        if block < resident {
+            acc0 = _mm256_add_epi32(
+                acc0,
+                packed_block_squares(base.add(block * 32), query_blocks[block], ones),
+            );
+            block += 1;
+        }
+        while block < blocks {
+            let q = _mm256_loadu_si256(query.as_ptr().add(block * 32).cast());
+            acc0 = _mm256_add_epi32(acc0, packed_block_squares(base.add(block * 32), q, ones));
+            block += 1;
+        }
+        let mut sum = horizontal_sum(_mm256_add_epi32(acc0, acc1));
+        let mut dimension = blocks * 32;
+        while dimension < dimensions {
+            let difference = i32::from(*query.get_unchecked(dimension))
+                - i32::from(*data.get_unchecked(row * dimensions + dimension));
+            sum += difference * difference;
+            dimension += 1;
+        }
+        *out.get_unchecked_mut(row) = sum as u32;
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+type V256 = std::arch::x86_64::__m256i;
+
+#[cfg(target_arch = "x86_64")]
+#[inline(always)]
+unsafe fn packed_block_squares(data: *const u8, query: V256, ones: V256) -> V256 {
+    use std::arch::x86_64::*;
+
+    let x = _mm256_loadu_si256(data.cast());
+    // Both operands are in 0..=127, so the unsigned/signed byte products and
+    // their 16-bit pair sums stay inside their ranges.
+    let difference = _mm256_or_si256(_mm256_subs_epu8(x, query), _mm256_subs_epu8(query, x));
+    _mm256_madd_epi16(_mm256_maddubs_epi16(difference, difference), ones)
+}
+
+#[cfg(target_arch = "x86_64")]
+#[inline(always)]
+unsafe fn horizontal_sum(value: V256) -> i32 {
+    use std::arch::x86_64::*;
+
+    let pairs = _mm256_hadd_epi32(value, value);
+    let quads = _mm256_hadd_epi32(pairs, pairs);
+    _mm_cvtsi128_si32(_mm_add_epi32(
+        _mm256_castsi256_si128(quads),
+        _mm256_extracti128_si256(quads, 1),
+    ))
+}
+
+/// Folds the component range of one stored little-endian `f32` vector into
+/// `low`/`high`. Used once per table to choose the affine packing.
+pub fn stored_range(vector: &[u8], low: &mut f32, high: &mut f32) {
+    let mut row_low = f32::INFINITY;
+    let mut row_high = f32::NEG_INFINITY;
+    #[cfg(target_arch = "x86_64")]
+    {
+        if std::is_x86_feature_detected!("avx2") {
+            // SAFETY: the feature check guards the call; loads stay inside the
+            // vector because the loop is bounded by its component count.
+            unsafe { stored_range_avx2(vector, &mut row_low, &mut row_high) };
+            *low = low.min(row_low);
+            *high = high.max(row_high);
+            return;
+        }
+    }
+    for chunk in vector.chunks_exact(4) {
+        let value = f32::from_le_bytes(chunk.try_into().unwrap());
+        row_low = row_low.min(value);
+        row_high = row_high.max(value);
+    }
+    *low = low.min(row_low);
+    *high = high.max(row_high);
+}
+
+/// Writes one 7-bit affine code per stored component; `out` must match the
+/// vector's component count.
+pub fn pack_stored_vector(vector: &[u8], minimum: f32, inverse_step: f32, out: &mut [u8]) {
+    debug_assert_eq!(vector.len(), out.len() * 4);
+    #[cfg(target_arch = "x86_64")]
+    {
+        if std::is_x86_feature_detected!("avx2") {
+            // SAFETY: the caller contract above bounds both slices.
+            unsafe { pack_stored_vector_avx2(vector, minimum, inverse_step, out) };
+            return;
+        }
+    }
+    for (slot, chunk) in out.iter_mut().zip(vector.chunks_exact(4)) {
+        let value = f32::from_le_bytes(chunk.try_into().unwrap());
+        *slot = ((value - minimum) * inverse_step).round().clamp(0.0, 127.0) as u8;
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn stored_range_avx2(vector: &[u8], low: &mut f32, high: &mut f32) {
+    use std::arch::x86_64::*;
+
+    let components = vector.len() / 4;
+    let base = vector.as_ptr().cast::<f32>();
+    let mut low_lanes = _mm256_set1_ps(f32::INFINITY);
+    let mut high_lanes = _mm256_set1_ps(f32::NEG_INFINITY);
+    let body = components - components % 8;
+    let mut index = 0usize;
+    while index < body {
+        let values = _mm256_loadu_ps(base.add(index));
+        low_lanes = _mm256_min_ps(low_lanes, values);
+        high_lanes = _mm256_max_ps(high_lanes, values);
+        index += 8;
+    }
+    let mut lanes = [0f32; 8];
+    _mm256_storeu_ps(lanes.as_mut_ptr(), low_lanes);
+    for lane in lanes {
+        // Propagate NaN so a corrupt component disables the packing instead of
+        // silently shrinking the range.
+        if lane.is_nan() {
+            *low = f32::NAN;
+        } else {
+            *low = low.min(lane);
+        }
+    }
+    _mm256_storeu_ps(lanes.as_mut_ptr(), high_lanes);
+    for lane in lanes {
+        if lane.is_nan() {
+            *high = f32::NAN;
+        } else {
+            *high = high.max(lane);
+        }
+    }
+    while index < components {
+        let value = *base.add(index);
+        if value.is_nan() {
+            *low = f32::NAN;
+            *high = f32::NAN;
+        } else {
+            *low = low.min(value);
+            *high = high.max(value);
+        }
+        index += 1;
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn pack_stored_vector_avx2(
+    vector: &[u8],
+    minimum: f32,
+    inverse_step: f32,
+    out: &mut [u8],
+) {
+    use std::arch::x86_64::*;
+
+    let components = out.len();
+    let base = vector.as_ptr().cast::<f32>();
+    let low_lane = _mm256_set1_ps(minimum);
+    let step_lane = _mm256_set1_ps(inverse_step);
+    let zero = _mm256_setzero_ps();
+    let top = _mm256_set1_ps(127.0);
+    let mut index = 0usize;
+    while index + 8 <= components {
+        let values = _mm256_loadu_ps(base.add(index));
+        let scaled = _mm256_mul_ps(_mm256_sub_ps(values, low_lane), step_lane);
+        let rounded = _mm256_round_ps(scaled, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
+        let clamped = _mm256_min_ps(_mm256_max_ps(rounded, zero), top);
+        let wide = _mm256_cvttps_epi32(clamped);
+        let mut lanes = [0i32; 8];
+        _mm256_storeu_si256(lanes.as_mut_ptr().cast(), wide);
+        for (offset, lane) in lanes.iter().enumerate() {
+            // Values are clamped to 0..=127, so the cast is exact.
+            *out.get_unchecked_mut(index + offset) = *lane as u8;
+        }
+        index += 8;
+    }
+    while index < components {
+        let value = *base.add(index);
+        out[index] = ((value - minimum) * inverse_step).round().clamp(0.0, 127.0) as u8;
+        index += 1;
+    }
+}
+
+#[cfg(test)]
+fn pack_reference(values: &[f32], minimum: f32, inverse_step: f32) -> Vec<u8> {
+    values
+        .iter()
+        .map(|value| ((value - minimum) * inverse_step).round().clamp(0.0, 127.0) as u8)
+        .collect()
+}
+
+#[cfg(test)]
+fn encode(values: &[f32]) -> Vec<u8> {
+    values.iter().flat_map(|value| value.to_le_bytes()).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -342,6 +611,67 @@ mod tests {
                 (f64::from(coarse) - exact).abs() <= exact.abs().max(1.0) * 1e-4,
                 "dim = {dim}: {coarse} vs {exact}"
             );
+        }
+    }
+
+    #[test]
+    fn quantized_scan_matches_a_scalar_score() {
+        for dimensions in [1, 7, 31, 32, 33, 127, 128] {
+            for rows in [1, 3, 17] {
+                let query: Vec<u8> = (0..dimensions)
+                    .map(|i| ((i * 41 + rows) % 128) as u8)
+                    .collect();
+                let data: Vec<u8> = (0..rows)
+                    .flat_map(|row| {
+                        (0..dimensions)
+                            .map(move |dimension| ((row * 23 + dimension * 7) % 128) as u8)
+                    })
+                    .collect();
+                let mut got = vec![0u32; rows];
+                assert!(quantized_scores(
+                    &query,
+                    &data,
+                    dimensions,
+                    rows,
+                    &mut got
+                ));
+                for (row, value) in got.iter().enumerate() {
+                    let expected = (0..dimensions)
+                        .map(|dimension| {
+                            let difference = i32::from(query[dimension])
+                                - i32::from(data[row * dimensions + dimension]);
+                            difference * difference
+                        })
+                        .sum::<i32>() as u32;
+                    assert_eq!(*value, expected);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn packed_rows_match_a_scalar_reference() {
+        for dimensions in [1, 7, 8, 15, 31, 32, 33, 127, 128, 129] {
+            let values: Vec<f32> = (0..dimensions)
+                .map(|index| ((index * 37) % 53) as f32 * 0.25 - 4.0)
+                .collect();
+            let stored = encode(&values);
+            let mut low = f32::INFINITY;
+            let mut high = f32::NEG_INFINITY;
+            stored_range(&stored, &mut low, &mut high);
+            let expected_low = values.iter().copied().fold(f32::INFINITY, f32::min);
+            let expected_high = values.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+            assert_eq!(low, expected_low);
+            assert_eq!(high, expected_high);
+            let step = (high - low) / 127.0;
+            let mut packed = vec![0u8; dimensions];
+            let inverse_step = 1.0 / step;
+            pack_stored_vector(&stored, low, inverse_step, &mut packed);
+            let expected = pack_reference(&values, low, inverse_step);
+            let mismatched = (0..dimensions)
+                .filter(|index| packed[*index] != expected[*index])
+                .count();
+            assert_eq!(mismatched, 0, "{dimensions} dims: {packed:?} vs {expected:?}");
         }
     }
 }

@@ -24,6 +24,14 @@ use crate::storage::Storage;
 /// One connected client: parsed statements in, rendered responses out.
 const SCAN_CACHE_BUDGET: usize = 8 * 1024 * 1024;
 const FILTER_CACHE_BUDGET: usize = 1024 * 1024;
+/// Packed prefilter bytes. The row cache is already capped at
+/// `SCAN_CACHE_BUDGET`, so a 128-dimension table of 10,000 rows only needs
+/// 1.25 MiB here; the cap keeps the bound explicit for wide schemas.
+const VECTOR_CACHE_BUDGET: usize = 4 * 1024 * 1024;
+/// Bucket width of the packed-score histogram. 128 dimensions of 7-bit codes
+/// cap the integer score at `128 * 127 * 127`, so 4096 buckets of 512 cover it.
+const QUANT_BUCKET_SHIFT: u32 = 9;
+const QUANT_BUCKETS: usize = 4096;
 
 #[derive(Clone, Copy)]
 struct CachedRow {
@@ -43,6 +51,16 @@ struct RawScanCache {
     table: String,
     bytes: Option<Vec<u8>>,
     ranges: Vec<CachedRow>,
+    /// Row-major 7-bit vectors and their affine quantization.
+    quantized: Vec<u8>,
+    quant_dim: usize,
+    quant_min: f32,
+    quant_step: f32,
+    query_quantized: Vec<u8>,
+    candidate_flags: Vec<u8>,
+    /// Integer packed scores and their bucket histogram for one query.
+    quant_scores: Vec<u32>,
+    quant_histogram: Vec<u32>,
     filters: Vec<CachedFilter>,
     filter_bytes: usize,
     /// Reused `f32` prefilter scores for a large cached table.
@@ -566,6 +584,13 @@ impl Session {
         let metadata = count.checked_mul(std::mem::size_of::<CachedRow>());
         let mut bytes = Vec::new();
         let mut ranges = Vec::new();
+        let vector_dim = schema
+            .vector_column
+            .map(|column| match schema.columns[column].ty {
+                ColumnType::Vector(dim) => dim,
+                _ => 0,
+            })
+            .unwrap_or(0);
         let mut fits = metadata.is_some_and(|m| m < SCAN_CACHE_BUDGET);
         if fits {
             ranges.reserve_exact(count);
@@ -595,7 +620,29 @@ impl Session {
             })?;
         }
         if !fits { bytes = Vec::new(); ranges = Vec::new(); }
-        self.scan_cache = Some(RawScanCache {table:key,bytes:fits.then_some(bytes),ranges,filters:Vec::new(),filter_bytes:0,distances:Vec::new(),distance_scratch:Vec::new()});
+        let (quantized, quant_min, quant_step, quant_dim) = if fits {
+            quantize_cached_vectors(&bytes, &ranges, vector_dim, count)
+                .unwrap_or_else(|| (Vec::new(), 0.0, 0.0, 0))
+        } else {
+            (Vec::new(), 0.0, 0.0, 0)
+        };
+        self.scan_cache = Some(RawScanCache {
+            table: key,
+            bytes: fits.then_some(bytes),
+            ranges,
+            quantized,
+            quant_dim,
+            quant_min,
+            quant_step,
+            query_quantized: Vec::new(),
+            candidate_flags: Vec::new(),
+            quant_scores: Vec::new(),
+            quant_histogram: Vec::new(),
+            filters: Vec::new(),
+            filter_bytes: 0,
+            distances: Vec::new(),
+            distance_scratch: Vec::new(),
+        });
         Ok(())
     }
 
@@ -690,6 +737,220 @@ impl PartialOrd for DistanceRank {fn partial_cmp(&self,other:&Self)->Option<Orde
 impl PartialEq for DistanceRank {fn eq(&self,other:&Self)->bool{self.cmp(other)==Ordering::Equal}}
 impl Eq for DistanceRank {}
 
+/// Packs the cached vectors into one byte per dimension with a table-wide
+/// affine map, together with the parameters needed to reason about the error.
+/// `None` means the table cannot be prefilted and must use the exact path.
+fn quantize_cached_vectors(
+    bytes: &[u8],
+    ranges: &[CachedRow],
+    vector_dim: usize,
+    count: usize,
+) -> Option<(Vec<u8>, f32, f32, usize)> {
+    if vector_dim == 0 || count == 0 {
+        return None;
+    }
+    let packed_len = count.checked_mul(vector_dim)?;
+    if packed_len > VECTOR_CACHE_BUDGET {
+        return None;
+    }
+    let width = vector_dim.checked_mul(4)?;
+    let mut low = f32::INFINITY;
+    let mut high = f32::NEG_INFINITY;
+    for row in ranges {
+        let start = row.vector_start as usize;
+        let vector = bytes.get(start..start.checked_add(width)?)?;
+        distance::stored_range(vector, &mut low, &mut high);
+    }
+    if !low.is_finite() || !high.is_finite() || high <= low {
+        return None;
+    }
+    let step = (high - low) / 127.0;
+    if !step.is_finite() || step <= 0.0 {
+        return None;
+    }
+    let inverse_step = 1.0 / step;
+    let mut packed = vec![0u8; packed_len];
+    for (row_index, row) in ranges.iter().enumerate() {
+        let start = row.vector_start as usize;
+        let vector = bytes.get(start..start + width)?;
+        let target = &mut packed[row_index * vector_dim..(row_index + 1) * vector_dim];
+        distance::pack_stored_vector(vector, low, inverse_step, target);
+    }
+    Some((packed, low, step, vector_dim))
+}
+
+/// Uses the packed 7-bit vectors as a conservative lower-bound pass. Any row
+/// that could still enter the exact TopK is recomputed from the original
+/// `f32` bytes, so the extra pass does not change the result or its tie order.
+fn select_quantized_topk(
+    cache: &mut RawScanCache,
+    query: &[f32],
+    keep: usize,
+) -> DbResult<Option<Vec<DistanceRank>>> {
+    let count = cache.ranges.len();
+    let dimensions = query.len();
+    if keep == 0
+        || dimensions == 0
+        || cache.quant_dim != dimensions
+        || cache.quantized.len() != count.saturating_mul(dimensions)
+        || !(cache.quant_step > 0.0)
+    {
+        return Ok(None);
+    }
+    let step = cache.quant_step;
+    let minimum = cache.quant_min;
+    // The packed copy is only a prefilter, so the map is allowed to clamp the
+    // query where it falls outside the table range; the real per-dimension
+    // reconstruction error is folded into the bound below.
+    cache.query_quantized.clear();
+    cache.query_quantized.reserve(dimensions);
+    let mut query_error = 0.0f32;
+    for &value in query {
+        if !value.is_finite() {
+            return Ok(None);
+        }
+        let code = ((value - minimum) / step).round().clamp(0.0, 127.0);
+        query_error = query_error.max((value - (minimum + code * step)).abs());
+        cache.query_quantized.push(code as u8);
+    }
+    // Stored values are inside the map range, so their own error is `step/2`.
+    let error_bound =
+        (dimensions as f32).sqrt() * (step * 0.5 + query_error) + 1e-4;
+    cache.quant_scores.clear();
+    cache.quant_scores.resize(count, 0);
+    let scored = {
+        let RawScanCache {
+            query_quantized,
+            quantized,
+            quant_scores,
+            ..
+        } = cache;
+        distance::quantized_scores(
+            query_quantized,
+            quantized,
+            dimensions,
+            count,
+            quant_scores,
+        )
+    };
+    if !scored {
+        return Ok(None);
+    }
+
+    // The cutoff only has to bound the true K-th distance from above, so a
+    // bucketed order statistic of the packed scores is enough. The counting
+    // pass below reuses the same histogram to prove the final cutoff.
+    let probe = keep.saturating_mul(4).max(32);
+    if probe >= count {
+        return Ok(None);
+    }
+    cache.quant_histogram.clear();
+    cache.quant_histogram.resize(QUANT_BUCKETS, 0);
+    let last_bucket = QUANT_BUCKETS - 1;
+    for &score in &cache.quant_scores {
+        let bucket = ((score >> QUANT_BUCKET_SHIFT) as usize).min(last_bucket);
+        cache.quant_histogram[bucket] += 1;
+    }
+    let mut seen = 0usize;
+    let mut threshold = u32::MAX;
+    for (bucket, &tally) in cache.quant_histogram.iter().enumerate() {
+        seen += tally as usize;
+        if seen >= probe {
+            // Upper edge of the bucket that holds the probe-th smallest score.
+            threshold = (bucket as u32 + 1) << QUANT_BUCKET_SHIFT;
+            break;
+        }
+    }
+    if threshold == u32::MAX {
+        return Ok(None);
+    }
+
+    cache.candidate_flags.clear();
+    cache.candidate_flags.resize(count, 0);
+    let mut candidates = 0usize;
+    let bytes = cache.bytes.as_ref().unwrap();
+    let mut top = BinaryHeap::with_capacity(keep.min(count));
+    let mut added: Vec<usize> = Vec::with_capacity(probe.saturating_add(64).min(count));
+    loop {
+        added.clear();
+        let mut min_excluded = u32::MAX;
+        for (index, &score) in cache.quant_scores.iter().enumerate() {
+            if score <= threshold {
+                if cache.candidate_flags[index] == 0 {
+                    cache.candidate_flags[index] = 1;
+                    added.push(index);
+                }
+            } else if score < min_excluded {
+                min_excluded = score;
+            }
+        }
+        candidates += added.len();
+        // A wide candidate set would not pay for the extra exact pass.
+        if candidates > 4096 {
+            return Ok(None);
+        }
+        for &index in &added {
+            offer_exact(&cache.ranges, bytes, query, index, &mut top, keep)?;
+        }
+        if top.len() < keep {
+            return Ok(None);
+        }
+        let worst = top.peek().unwrap().distance.max(0.0).sqrt();
+        let limit = packed_limit(worst, error_bound, step);
+        // Every row above the cutoff is at least `error_bound` farther than the
+        // current worst exact distance, so it cannot enter the TopK.
+        if min_excluded > limit || limit <= threshold {
+            break;
+        }
+        threshold = limit;
+    }
+    Ok(Some(top.into_sorted_vec()))
+}
+
+/// Smallest packed score that still satisfies `sqrt(score) * step > worst +
+/// error`, in the integer units produced by [`distance::quantized_scores`].
+fn packed_limit(worst: f64, error: f32, step: f32) -> u32 {
+    let scaled = ((worst + f64::from(error)) / f64::from(step)).max(0.0);
+    let squared = scaled * scaled;
+    if !squared.is_finite() || squared >= f64::from(u32::MAX) {
+        return u32::MAX;
+    }
+    // The guard band absorbs the rounding of the float comparison itself.
+    (squared as u32).saturating_add(8)
+}
+
+fn offer_exact(
+    rows: &[CachedRow],
+    bytes: &[u8],
+    query: &[f32],
+    index: usize,
+    top: &mut BinaryHeap<DistanceRank>,
+    keep: usize,
+) -> DbResult<()> {
+    let row = &rows[index];
+    let start = row.vector_start as usize;
+    let vector = bytes
+        .get(start..start + query.len() * 4)
+        .ok_or_else(|| DbError::new(ErrorCode::Unknown, "invalid cached vector bounds"))?;
+    let distance = distance::squared_stored(query, vector)
+        .ok_or_else(|| DbError::new(ErrorCode::WrongValue, "invalid cached vector dimension"))?;
+    let ranked = DistanceRank {
+        distance,
+        pk: row.pk,
+        index,
+        ascending: true,
+    };
+    if top.len() < keep {
+        top.push(ranked);
+    } else if top
+        .peek()
+        .is_some_and(|worst| ranked.cmp(worst) == Ordering::Less)
+    {
+        *top.peek_mut().unwrap() = ranked;
+    }
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 fn select_cached_distance(cache:&mut RawScanCache,schema:&TableSchema,outs:&[OutColumn],columns:Vec<String>,filter:&RawFilter,query:&[f32],ascending:bool,keep:usize)->DbResult<ResultSet> {
     // Reuse bounded exact predicate selections; every visibility-changing command
@@ -712,6 +973,25 @@ fn select_cached_distance(cache:&mut RawScanCache,schema:&TableSchema,outs:&[Out
             let allocated=indices.capacity()*std::mem::size_of::<usize>()+literal_bytes+filter.terms.len()*std::mem::size_of::<RawTerm>();
             cache.filters.push(CachedFilter {filter:filter.clone(),indices,bytes:allocated});
             cache.filter_bytes+=allocated;selected=Some(cache.filters.len()-1);
+        }
+    }
+    // Large unfiltered ascending queries start from the packed 7-bit copy: it
+    // reads a quarter of the bytes of the cached rows, and its proven error
+    // bound keeps the `f64` recompute limited to rows that can still reach the
+    // cutoff.
+    if ascending && keep > 0 && filter.terms.is_empty() && cache.ranges.len() > 2048 {
+        if let Some(ranked) = select_quantized_topk(cache, query, keep)? {
+            let bytes = cache.bytes.as_ref().unwrap();
+            let mut rows = Vec::with_capacity(ranked.len());
+            for entry in ranked {
+                let row = &cache.ranges[entry.index];
+                let values = crate::storage::record::decode_row(
+                    schema,
+                    &bytes[row.start as usize..row.end as usize],
+                )?;
+                rows.push(project(outs, &values)?);
+            }
+            return Ok(ResultSet { columns, rows });
         }
     }
     let bytes=cache.bytes.as_ref().unwrap();
@@ -1439,3 +1719,90 @@ mod cache_budget_tests {
   drop(s);std::fs::remove_dir_all(dir).unwrap();
  }
 }
+
+#[cfg(test)]
+mod packed_prefilter_tests {
+    use super::*;
+
+    /// Coarse grid so many rows share distances; the duplicate values also
+    /// exercise the primary-key tie order.
+    fn row_vector(index: usize) -> Vec<f32> {
+        (0..8)
+            .map(|dimension| ((index * 7 + dimension * 13) % 17) as f32 * 0.5)
+            .collect()
+    }
+
+    fn brute_force(rows: &[Vec<f32>], query: &[f32], keep: usize) -> Vec<(f64, i64)> {
+        let mut best: Vec<(f64, i64)> = rows
+            .iter()
+            .enumerate()
+            .map(|(index, row)| {
+                (
+                    distance::squared(row, query).unwrap(),
+                    i64::try_from(index).unwrap() + 1,
+                )
+            })
+            .collect();
+        best.sort_by(|left, right| left.0.total_cmp(&right.0).then(left.1.cmp(&right.1)));
+        best.truncate(keep);
+        best
+    }
+
+    #[test]
+    fn packed_prefilter_keeps_exact_order_for_ties_and_out_of_range_queries() {
+        let dir = std::env::temp_dir().join(format!("mvdb-packed-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut session = Session::open(&dir).unwrap();
+        assert!(matches!(
+            session.execute("CREATE TABLE t(id BIGINT PRIMARY KEY, g BIGINT, v VECTOR(8))"),
+            Response::Ok { .. }
+        ));
+        let rows: Vec<Vec<f32>> = (0..3000).map(row_vector).collect();
+        for batch in 0..30 {
+            let values = (batch * 100..(batch + 1) * 100)
+                .map(|index| {
+                    let vector = rows[index]
+                        .iter()
+                        .map(|value| value.to_string())
+                        .collect::<Vec<_>>()
+                        .join(",");
+                    format!("({},{},'[{vector}]')", index + 1, index % 5)
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            assert!(matches!(
+                session.execute(&format!("INSERT INTO t VALUES {values}")),
+                Response::Ok { .. }
+            ));
+        }
+        session.prepare_scan_cache("t").unwrap();
+        assert!(session.scan_cache.as_ref().unwrap().quant_dim == 8);
+
+        let mut answered = 0;
+        for probe in 0..40 {
+            let query: Vec<f32> = (0..8)
+                .map(|dimension| {
+                    if probe % 5 == 4 {
+                        // Far outside the stored range, so the query side of the
+                        // affine map clamps and contributes a larger error.
+                        40.0 + dimension as f32
+                    } else {
+                        ((probe * 31 + dimension * 11) % 23) as f32 * 0.5
+                    }
+                })
+                .collect();
+            let expected = brute_force(&rows, &query, 10);
+            let cache = session.scan_cache.as_mut().unwrap();
+            if let Some(ranked) = select_quantized_topk(cache, &query, 10).unwrap() {
+                let got: Vec<(f64, i64)> =
+                    ranked.iter().map(|entry| (entry.distance, entry.pk)).collect();
+                assert_eq!(got, expected, "probe {probe}");
+                answered += 1;
+            }
+        }
+        assert!(answered >= 20, "packed prefilter answered only {answered}/40");
+        drop(session);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+}
+
