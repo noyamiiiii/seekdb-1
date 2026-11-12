@@ -4,9 +4,12 @@
     "repo_dir": "01_项目/seekdb/round2-minivectordb",
     "language": "zh-CN",
     "synthetic": false,
-    "note": "本文件是本次会话的真实记录整理。output 字段都是工具实际输出粘贴；risky 的判断（例如为什么要加固）在 retrospective 中区分「已执行」与「计划」。"
+    "note": "保留仓库已有的学生回答原文与历史输出；本次仅整理来源、去重和引用，不新增技术回答，不预测分数。历史材料为整理记录，当前未重新导出全部原始会话。",
+    "code_commit": "b041b6998c48e427aaeab79ee8c46e4fafa36987",
+    "material_revision_date": "2026-11-12",
+    "record_scope": "学生原文主要位于 student_answers、student_prompts 和 user_prompts；Agent 的解释及工具结果不能自动归为学生贡献。未发生的 ANN 迁移试验或学生自主复测不写成已完成。"
   },
-  "summary": "MiniVectorDB（Rust，零第三方依赖）在一次比赛中迭代出来的完整记录：从零实现基于 JSON Lines 协议的单机向量数据库，包含分页堆存储、WAL 崩溃恢复、显式事务、精确 TopK 与大表扫描缓存，最终 MySQL 正式用例准入通过、性能原始分 E≈2235–2800。材料保留了学生的原始指令（/user_prompts）、15 条口头回答（/student_answers）、16 次实验的原始输出（/experiments）与 15 条可定位的评分证据（/evaluation_instances），重点记录了三次真实失败及其修正：协议缺失导致两次 0/1、原地 select_nth 导致的执行失败、以及性能结论被打脸后的回退。",
+  "summary": "MiniVectorDB 学习材料：保留 15 条学生回答及历史用户提问，按 11 条去重后的问题链建立原文与结果索引。学生涉及协议定位、WAL 机制、exact/ANN 条件、验证方案及失败复盘；Agent 负责代码和工具执行。本次纠正重复实例、计划无结果、错误引用和过强因果描述，保留尚未完成的验证与缺失说明。平台此前已给 Prompt 原始分 4.0，但本材料不自行指定档位，不保证新的官方分数。源码版本 b041b699；本次材料改进不修改源码。",
   "student_prompts": [
     {
       "id": "m00001",
@@ -73,7 +76,6 @@
     {
       "id": "i1",
       "dimension": "问题理解与自主拆解",
-      "level": 1.5,
       "student_evidence": {
         "pointer": "/student_answers/0/answer",
         "quote": "通信协议 因为在本地的的mysql所有用例和功能全部通过，只能是通信协议的问题。"
@@ -82,12 +84,13 @@
         "pointer": "/experiments/8/output",
         "quote": "官方 2026-competition-round2 分支从 a3dba559 更新到 9f6df2b，新增 protocol_check/、mysqltest/STDIO_PROTOCOL.md 与十余个公开用例"
       },
-      "rationale": "学生在没有任何驱动契约的情况下，靠自己本地跑通的 MySQL 用例反推「失败只可能出在通信层」，并据此判断官方会补协议说明；随后这次判断被官方仓库更新（protocol_check + STDIO_PROTOCOL.md）证实，方案也从自定义 ASCII 协议整体改成 JSON-lines 并重新验证。这是「解释结果 → 修正方案 → 复测」的完整链条。"
+      "rationale": "本地样例全部通过不能排除隐藏功能错误，因此学生原话中的“只能”是当时的推测，而非排他性证明。随后发现官方协议并对齐，相关结果用于呈现这条修正链；重复的 i15 合并在此。",
+      "topic": "协议定位与公开规范核对",
+      "analysis_source": "Agent 对已有材料的整理；不是学生原话，也不是官方评分结论"
     },
     {
       "id": "i2",
       "dimension": "技术理解与迁移",
-      "level": 1,
       "student_evidence": {
         "pointer": "/student_answers/3/answer",
         "quote": "因为WAL的核心规则是，先写日志，再写数据页，只要WAL日志已经持久化，就算服务崩溃，重启时可以回放WAL日志，把所有已经提交的日志恢复出来。"
@@ -96,40 +99,37 @@
         "pointer": "/experiments/3/output",
         "quote": "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out"
       },
-      "rationale": "学生用自己的话解释了「先写日志再写数据页、只要日志持久化就能回放」这条机制；随后用 SIGKILL 杀进程的方式验证了它：已确认的行全部存在、没有半条语句。解释与结果一致，按「参与验证且有实际结果」计 1 分。"
+      "rationale": "学生回答说明先日志后数据页以及恢复已提交事务的机制。崩溃用例是 Agent 执行的验证结果；现有记录不足以证明学生亲自设计或执行该测试。",
+      "topic": "WAL 持久化机制",
+      "analysis_source": "Agent 对已有材料的整理；不是学生原话，也不是官方评分结论"
     },
     {
       "id": "i3",
       "dimension": "技术理解与迁移",
-      "level": 2,
       "student_evidence": {
         "pointer": "/student_answers/4/answer",
         "quote": "要求召回 100% 就继续选 exact；业务能接受召回损失、延迟不达标，且 ANN 召回达标，才换 ANN。"
       },
-      "result_evidence": {
-        "pointer": "/experiments/9/output",
-        "quote": "官方 protocol_check 的 20 个公开用例全 PASS；本地全量测试 124 个全绿"
-      },
-      "rationale": "学生给出可迁移的判据：召回必须 100% 就用 exact；只有业务接受召回损失、延迟不达标、且 ANN 召回达标时才换。随后用公开用例与协议检查器验证 exact 路径（20/20），并在 e13 的榜单数据上分析了 exact 的局限（E 与榜首差一个数量级），符合「迁移到新场景并分析局限」。"
+      "result_evidence": [],
+      "rationale": "回答给出召回、延迟和内存等选择条件。当前只有 exact 实现及其公开检查，没有实施 ANN 对照实验，也没有学生对实际十万行场景的验证结果。",
+      "topic": "exact 与 ANN 的迁移条件",
+      "analysis_source": "Agent 对已有材料的整理；不是学生原话，也不是官方评分结论"
     },
     {
       "id": "i4",
       "dimension": "技术理解与迁移",
-      "level": 1,
       "student_evidence": {
         "pointer": "/student_answers/5/answer",
         "quote": "结构性改进：改变数据结构 / 算法，复杂度下降，提速随数据量放大；常数优化：减少拷贝、调用等开销，复杂度不变。"
       },
-      "result_evidence": {
-        "pointer": "/experiments/2/output",
-        "quote": "query           :    924.4 ms  (  0.924 ms/query)"
-      },
-      "rationale": "学生把「结构性改进」与「常数优化」区分为复杂度是否下降、收益是否随数据量放大，这个区分正好对应两次实测：写路径去掉重复 fsync（结构性）与查询去掉逐行解码（常数级）。"
+      "result_evidence": [],
+      "rationale": "回答给出一般性区分，但没有明确将本题两种优化分别对应到机制。减少 fsync 次数与逐行解码均不能仅凭耗时下降认定渐近复杂度下降；历史 rationale 的“结构性”推断已撤除。",
+      "topic": "复杂度与常数开销",
+      "analysis_source": "Agent 对已有材料的整理；不是学生原话，也不是官方评分结论"
     },
     {
       "id": "i5",
       "dimension": "独立验证与质疑",
-      "level": 1.5,
       "student_evidence": {
         "pointer": "/student_answers/6/answer",
         "quote": "有备选怀疑，但优先排查服务；后续要更早校验测试用例，隔离问题。"
@@ -138,96 +138,52 @@
         "pointer": "/experiments/4/output",
         "quote": "测试助手用 line.contains(\"row in set\") 判断结果集结束，而服务端实际输出 `200 rows in set`（复数 rows），循环永不退出。"
       },
-      "rationale": "学生在 Agent 认定「服务端卡死」时提出应先怀疑测试本身（有备选怀疑），并要求以后更早校验测试用例、隔离问题；复盘结果证明问题确实在测试助手：单复数写错导致死循环。"
-    },
-    {
-      "id": "i6",
-      "dimension": "独立验证与质疑",
-      "level": 1.5,
-      "student_evidence": {
-        "pointer": "/student_answers/7/answer",
-        "quote": "怀疑不只是格式问题，而是 AI 生成的 SQL 本身语义、语法有错，改格式也跑不通。"
-      },
-      "result_evidence": {
-        "pointer": "/experiments/10/output",
-        "quote": "Prompt结果无效、待复核、超出平台0–100范围或缺少材料摘要"
-      },
-      "rationale": "学生不接受 Agent「只是格式问题」的结论，提出替代假设（材料里的 SQL/语义本身有问题），并要求本人补判断性内容；这条质疑直接导致材料按平台校验规则重写（summary、根目录副本、可定位 evidence）。"
+      "rationale": "这是对历史测试挂起的事后回答。实际结果证明测试助手存在单复数匹配错误；无法据现有记录认定学生在发现错误前就提出并验证了这个假设。",
+      "topic": "测试工具也可能有错误",
+      "analysis_source": "Agent 对已有材料的整理；不是学生原话，也不是官方评分结论"
     },
     {
       "id": "i7",
       "dimension": "独立验证与质疑",
-      "level": 0.5,
       "student_evidence": {
         "pointer": "/student_answers/8/answer",
         "quote": "同数据集 workload 对照测试，同时测提速、召回、内存开销，权衡收益和代价。"
       },
-      "result_evidence": {
-        "pointer": "/student_answers/8/answer",
-        "quote": ""
-      },
-      "rationale": "学生对「IVF 能快 30%」这类没有测量的建议给出了验证方案（同 workload 对照、同时测提速与召回与内存），但该方案尚未执行，按 0.5 档计。"
+      "result_evidence": [],
+      "rationale": "只提出同数据集 workload 同时测速度、召回与内存的方案。未实施 IVF 实验，没有实际结果；result_evidence 置为空，避免将问题回答本身重复当成结果。",
+      "topic": "IVF 对照验证方案",
+      "analysis_source": "Agent 对已有材料的整理；不是学生原话，也不是官方评分结论"
     },
     {
       "id": "i8",
       "dimension": "实验与反馈迭代",
-      "level": 1.5,
       "student_evidence": {
         "pointer": "/student_answers/9/answer",
         "quote": "根因匹配、最小 case 本地验证通过、改动可控、明确本次验证目标。"
       },
       "result_evidence": {
-        "pointer": "/experiments/7/output",
-        "quote": "test result: ok. 71 passed; 0 failed ... ；sql_crud PASS / sql_comparisons PASS / sql_ordering PASS / sql_empty PASS / vector_euclidean PASS，problems: 0"
+        "pointer": "/experiments/9/output",
+        "quote": "官方 protocol_check 的 20 个公开用例全 PASS；本地全量测试 124 个全绿"
       },
-      "rationale": "学生给出了可执行的提交判据（根因匹配、最小 case 验证、可控改动、明确目标），并在协议对齐后按这个判据提交：官方 20 个公开用例全 PASS、本地 124 个测试全绿，随后准入结果变为「通过」。"
+      "rationale": "学生回答给出提交判据。相关工具结果反映本地验证通过，但不证明此前所有修复均由学生自主定位。",
+      "topic": "提测前的判断条件",
+      "analysis_source": "Agent 对已有材料的整理；不是学生原话，也不是官方评分结论"
     },
     {
       "id": "i9",
       "dimension": "取舍与反思",
-      "level": 1.5,
       "student_evidence": {
         "pointer": "/student_answers/10/answer",
         "quote": "风险高，一次性堆大量未验证语法，故障难定位；应当分批小增量验证。"
       },
-      "result_evidence": {
-        "pointer": "/experiments/11/output",
-        "quote": "MySQL 正式用例 通过；性能原始分 2800.036530 / 2273.205666；Agent Prompt 原始分 —"
-      },
-      "rationale": "学生事后否定自己当时同意的「一揽子超集加固」，指出一次性堆未验证语法的定位成本，并提出分批小增量的替代方案；平台结果（准入通过但 prompt 无效）也说明当时的方向补错了层。"
-    },
-    {
-      "id": "i10",
-      "dimension": "取舍与反思",
-      "level": 1.5,
-      "student_evidence": {
-        "pointer": "/student_answers/11/answer",
-        "quote": "暂停连续提交，先定位根因；一次只改一个点，本地充分验证后再提交"
-      },
-      "result_evidence": {
-        "pointer": "/experiments/12/output",
-        "quote": "wrong ids for SELECT id, L2_DISTANCE(emb, '[...]') AS d FROM fz ORDER BY d ASC LIMIT 1\n  got: [(46, 2.9606180161437945)]\n  exp: [(1184, 2.79490242039342)]"
-      },
-      "rationale": "学生主张「暂停连续提交、先定位根因、一次只改一个点」；而这一轮恰恰违反了它——为 4% 的查询收益改了 TopK 候选路径，结果压测返回错误行、平台判执行失败。这条反例本身支持了学生的策略，也是 e12 回退的直接原因。"
-    },
-    {
-      "id": "i11",
-      "dimension": "取舍与反思",
-      "level": 1,
-      "student_evidence": {
-        "pointer": "/student_prompts/9/content",
-        "quote": "现在第一已经5000多分了继续优化并修改prompt吧"
-      },
-      "result_evidence": {
-        "pointer": "/experiments/13/output",
-        "quote": "No.1 立方虫 5536.788323（40 分）；No.2 Axiom Collective 5214.002443；No.3 恰同学少年 4850.276667"
-      },
-      "rationale": "学生看到榜首 E = 5536.788323，主动把「性能上限」和「材料」并列成两条必须推进的线；榜单数据（我们 2235 对榜首 5536）也量化了 exact 全扫的代价。"
+      "result_evidence": [],
+      "rationale": "学生事后指出一次堆叠改动会增加定位成本。平台准入与 Prompt 无效不能证明“语法加固补错了层”，所以原先的因果推断不再使用。",
+      "topic": "回顾大批量语法加固的代价",
+      "analysis_source": "Agent 对已有材料的整理；不是学生原话，也不是官方评分结论"
     },
     {
       "id": "i12",
       "dimension": "独立验证与质疑",
-      "level": 1.5,
       "student_evidence": {
         "pointer": "/student_prompts/6/content",
         "quote": "成功的两次都无效 难道是ai生成的不行吗 必须得让我本人来做吗"
@@ -236,12 +192,13 @@
         "pointer": "/experiments/15/output",
         "quote": "Agent Prompt 评测完成；原始分 = 4.000000（此前为「—」，提示 Prompt结果无效）"
       },
-      "rationale": "学生不接受 Agent 给出的「只是格式问题」的解释，把无效重新归因到材料本身；据此重写材料（补 summary、根目录副本、可定位证据），下一次提交的 prompt 原始分从「无效」变成有效的 4.000000。"
+      "rationale": "保留学生关于 AI 材料与本人参与的追问，以及随后平台原始分 4.0 的结果；原 i6 与本条属于同一材料修正链，合并。两次提交之间不止一项变化，不能证明补某个字段就是根因。",
+      "topic": "Prompt 材料有效性反馈闭环",
+      "analysis_source": "Agent 对已有材料的整理；不是学生原话，也不是官方评分结论"
     },
     {
       "id": "i13",
       "dimension": "独立验证与质疑",
-      "level": 1.5,
       "student_evidence": {
         "pointer": "/student_prompts/8/content",
         "quote": "怎么性能指标比上一次有分的还低了"
@@ -250,12 +207,13 @@
         "pointer": "/experiments/14/output",
         "quote": "性能原始分 E = 2800.036530 / 2273.205666 / 2235.443969；三次提交的 src/ 逐字节相同（c5a29a82 与 c410ff45c 的 src/ 相同）"
       },
-      "rationale": "学生对「分数下降 = 代码变差」的默认解释提出质疑，要求先解释指标口径；核对后确认是同一份 src 的三次读数（波动 25%），并据此改变了后续的性能判据（只在同一轮内 A/B，改动要超过噪声带）。"
+      "rationale": "保留学生对性能指标下降的提问。旧输出声称“三次 src 逐字节相同”，但 6fc1 与 c5a29a 的代码不同；当前仅有 c5a29a 与 c410ff45 的源码相同。不能把三次测量都当成同代码噪声，更不能推导固定噪声阈值。",
+      "topic": "官方性能指标波动",
+      "analysis_source": "Agent 对已有材料的整理；不是学生原话，也不是官方评分结论"
     },
     {
       "id": "i14",
       "dimension": "独立验证与质疑",
-      "level": 2.0,
       "student_evidence": {
         "pointer": "/user_prompts/4/content",
         "quote": "这怎么执行失败了直接"
@@ -264,21 +222,9 @@
         "pointer": "/experiments/16/output",
         "quote": "78aa9236f: wrong ids for LIMIT 1 / got: [(46, 2.9606180161437945)]"
       },
-      "rationale": "学生没有接受「平台失败」，而是先怀疑自己的提交并推动定位。过程是复现（fuzz 触发）→ 最小化（单条 LIMIT 1）→ 版本对照（c5a29a82 全对）→ 定位到原地 select_nth 打乱行映射 → 回退 → 双规模复测 → 重新提测通过。这是完整的「解释→修正→复测」闭环，并且修正后主动承认原提交的 4% 提速结论被推翻。"
-    },
-    {
-      "id": "i15",
-      "dimension": "问题理解与自主拆解",
-      "level": 1.5,
-      "student_evidence": {
-        "pointer": "/user_prompts/2/content",
-        "quote": "现在已经有队伍有分了 再看看有没有更新东西"
-      },
-      "result_evidence": {
-        "pointer": "/experiments/8/output",
-        "quote": "官方 2026-competition-round2 分支从 a3dba559 更新到 9f6df2b"
-      },
-      "rationale": "学生从「别人有分」这一条外部信号推断出「官方一定补了驱动/协议」，并直接指挥去查官方仓库，而不是继续在本地猜格式。查到 9f6df2b 的 STDIO_PROTOCOL.md 与 protocol_check 后，协议层从空想改成按官方 JSON Lines 重写，准入随之通过——这是学生自己拆解问题边界、而不是接受 Agent 结论的关键一步。"
+      "rationale": "原 i10 与此条涉及同一失败实验与回退链，合并展示。学生“这怎么执行失败了直接”是追问，不能证明学生本人完成了最小化、定位和回退；这些具体动作属于 Agent 的实施。",
+      "topic": "错误 TopK 实验与回退",
+      "analysis_source": "Agent 对已有材料的整理；不是学生原话，也不是官方评分结论"
     }
   ],
   "decisions": [
@@ -445,7 +391,8 @@
       "command": "对比三次提测记录（2026-11-11 09:13 与之后两次）",
       "output": "性能原始分 E = 2800.036530 / 2273.205666 / 2235.443969；三次提交的 src/ 逐字节相同（c5a29a82 与 c410ff45c 的 src/ 相同）",
       "interpretation": "同一份代码在平台上的 E 波动达 25%（2800 → 2235）。E 由墙钟 T、物理读写字节 B、峰值内存 M 折算，受宿主机负载、页缓存状态与 fsync 延迟影响，单次读数不能当作代码改动的效果，这是之前把 -4% 的微基准当成收益、误判的原因之一。",
-      "conclusion": "性能判据要用「同一轮内 A/B」而不是跨轮对比；对外提交前只接受超过噪声带的改动。"
+      "conclusion": "性能判据要用「同一轮内 A/B」而不是跨轮对比；对外提交前只接受超过噪声带的改动。",
+      "correction": "旧输出“三次提交 src 逐字节相同”不准确：已核对 c5a29a 与 c410ff45 源码相同，6fc1 与 c5a29a 有源码变更。三次 E 不能都用作同代码噪声依据。"
     },
     {
       "id": "e15",
