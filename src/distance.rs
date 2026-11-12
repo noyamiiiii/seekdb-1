@@ -131,6 +131,25 @@ pub fn quantized_scores(
     true
 }
 
+/// Scores one packed 7-bit vector. Filtered TopK visits scattered rows, so it
+/// needs the same integer kernel one row at a time instead of a full sweep.
+pub fn quantized_score_row(query: &[u8], row: &[u8]) -> Option<u32> {
+    if query.len() != row.len() || query.is_empty() {
+        return None;
+    }
+    #[cfg(target_arch = "x86_64")]
+    if std::is_x86_feature_detected!("avx2") {
+        // SAFETY: the length check above covers every load below.
+        return Some(unsafe { quantized_score_row_avx2(query, row) });
+    }
+    let mut total = 0u32;
+    for (&query_code, &row_code) in query.iter().zip(row) {
+        let difference = i32::from(query_code) - i32::from(row_code);
+        total += (difference * difference) as u32;
+    }
+    Some(total)
+}
+
 /// The portable version: eight independent `f64` accumulators keep the
 /// additions from forming one long dependency chain.
 fn squared_scalar(a: &[f32], b: &[f32]) -> f64 {
@@ -344,6 +363,45 @@ unsafe fn quantized_scores_avx2(
 
 #[cfg(target_arch = "x86_64")]
 type V256 = std::arch::x86_64::__m256i;
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn quantized_score_row_avx2(query: &[u8], row: &[u8]) -> u32 {
+    use std::arch::x86_64::*;
+
+    let dimensions = query.len();
+    let ones = _mm256_set1_epi16(1);
+    let blocks = dimensions / 32;
+    let mut acc0 = _mm256_setzero_si256();
+    let mut acc1 = _mm256_setzero_si256();
+    let mut block = 0usize;
+    while block + 2 <= blocks {
+        let q0 = _mm256_loadu_si256(query.as_ptr().add(block * 32).cast());
+        let q1 = _mm256_loadu_si256(query.as_ptr().add((block + 1) * 32).cast());
+        acc0 = _mm256_add_epi32(
+            acc0,
+            packed_block_squares(row.as_ptr().add(block * 32), q0, ones),
+        );
+        acc1 = _mm256_add_epi32(
+            acc1,
+            packed_block_squares(row.as_ptr().add((block + 1) * 32), q1, ones),
+        );
+        block += 2;
+    }
+    if block < blocks {
+        let q = _mm256_loadu_si256(query.as_ptr().add(block * 32).cast());
+        acc0 = _mm256_add_epi32(acc0, packed_block_squares(row.as_ptr().add(block * 32), q, ones));
+    }
+    let mut sum = horizontal_sum(_mm256_add_epi32(acc0, acc1));
+    let mut dimension = blocks * 32;
+    while dimension < dimensions {
+        let difference = i32::from(*query.get_unchecked(dimension))
+            - i32::from(*row.get_unchecked(dimension));
+        sum += difference * difference;
+        dimension += 1;
+    }
+    sum as u32
+}
 
 #[cfg(target_arch = "x86_64")]
 #[inline(always)]

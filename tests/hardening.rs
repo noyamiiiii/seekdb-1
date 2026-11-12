@@ -145,3 +145,34 @@ fn large_cached_prefilter_matches_exact_filtered_topk_and_ties() {
   assert_eq!(got,want,"group {group}");
  }
 }
+
+#[test]
+fn wide_filtered_subset_keeps_exact_topk_order() {
+ let d=Db::new();let mut s=Session::open(&d.0).unwrap();
+ ok(&mut s,"CREATE TABLE t(id BIGINT PRIMARY KEY,g BIGINT,v VECTOR(8))");
+ let mut model=Vec::new();
+ for batch in 0..60 {
+  let mut inserts=Vec::new();
+  for i in batch*100..(batch+1)*100 {
+   // Only 24 distinct vectors, so the top 50 is full of distance ties that
+   // must come back in primary-key order.
+   let v=(0..8).map(|d|((i*7+d*5)%24) as f32-11.5).collect::<Vec<_>>();
+   inserts.push(format!("({i},{},'[{}]')",i%4,v.iter().map(|x|x.to_string()).collect::<Vec<_>>().join(",")));
+   model.push((i as i64,(i%4) as i64,v));
+  }
+  ok(&mut s,&format!("INSERT INTO t VALUES {}",inserts.join(",")));
+ }
+ for (probe,group) in [(0usize,1i64),(1,3),(2,0)] {
+  let mut expected=model.iter().filter(|(_,g,_)|*g==group).collect::<Vec<_>>();
+  let query=(0..8).map(|d|((probe*13+d*3)%17) as f32*0.75).collect::<Vec<_>>();
+  let q=query.iter().map(|x|x.to_string()).collect::<Vec<_>>().join(",");
+  expected.sort_by(|a,b|{
+   let da=a.2.iter().zip(&query).map(|(v,q)|{let d=f64::from(*v)-f64::from(*q);d*d}).sum::<f64>();
+   let db=b.2.iter().zip(&query).map(|(v,q)|{let d=f64::from(*v)-f64::from(*q);d*d}).sum::<f64>();
+   da.total_cmp(&db).then_with(||a.0.cmp(&b.0))
+  });
+  let want=expected.into_iter().take(50).map(|(id,_,_)|vec![Cell::Int(*id)]).collect::<Vec<_>>();
+  let got=rows(&mut s,&format!("SELECT id FROM t WHERE g={group} ORDER BY L2_DISTANCE(v,'[{q}]') LIMIT 50"));
+  assert_eq!(got,want,"probe {probe} group {group}");
+ }
+}

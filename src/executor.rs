@@ -786,6 +786,7 @@ fn select_quantized_topk(
     cache: &mut RawScanCache,
     query: &[f32],
     keep: usize,
+    subset: Option<&[usize]>,
 ) -> DbResult<Option<Vec<DistanceRank>>> {
     let count = cache.ranges.len();
     let dimensions = query.len();
@@ -799,6 +800,10 @@ fn select_quantized_topk(
     }
     let step = cache.quant_step;
     let minimum = cache.quant_min;
+    let matched = subset.map_or(count, <[usize]>::len);
+    if subset.is_some_and(|list| list.is_empty()) {
+        return Ok(None);
+    }
     // The packed copy is only a prefilter, so the map is allowed to clamp the
     // query where it falls outside the table range; the real per-dimension
     // reconstruction error is folded into the bound below.
@@ -816,40 +821,80 @@ fn select_quantized_topk(
     // Stored values are inside the map range, so their own error is `step/2`.
     let error_bound =
         (dimensions as f32).sqrt() * (step * 0.5 + query_error) + 1e-4;
-    cache.quant_scores.clear();
-    cache.quant_scores.resize(count, 0);
-    let scored = {
-        let RawScanCache {
-            query_quantized,
-            quantized,
-            quant_scores,
-            ..
-        } = cache;
-        distance::quantized_scores(
-            query_quantized,
-            quantized,
-            dimensions,
-            count,
-            quant_scores,
-        )
-    };
-    if !scored {
-        return Ok(None);
+    // Both arrays are sized once per cache; a filtered query only touches the
+    // rows its filter selected, so it must not clear the whole table per query.
+    if cache.quant_scores.len() != count {
+        cache.quant_scores.clear();
+        cache.quant_scores.resize(count, 0);
+    }
+    match subset {
+        Some(list) => {
+            let RawScanCache {
+                query_quantized,
+                quantized,
+                quant_scores,
+                ..
+            } = cache;
+            for &index in list {
+                if index >= count {
+                    return Ok(None);
+                }
+                let start = index * dimensions;
+                let row_codes = &quantized[start..start + dimensions];
+                let Some(score) = distance::quantized_score_row(query_quantized, row_codes)
+                else {
+                    return Ok(None);
+                };
+                quant_scores[index] = score;
+            }
+        }
+        None => {
+            let scored = {
+                let RawScanCache {
+                    query_quantized,
+                    quantized,
+                    quant_scores,
+                    ..
+                } = cache;
+                distance::quantized_scores(
+                    query_quantized,
+                    quantized,
+                    dimensions,
+                    count,
+                    quant_scores,
+                )
+            };
+            if !scored {
+                return Ok(None);
+            }
+        }
     }
 
     // The cutoff only has to bound the true K-th distance from above, so a
     // bucketed order statistic of the packed scores is enough. The counting
     // pass below reuses the same histogram to prove the final cutoff.
     let probe = keep.saturating_mul(4).max(32);
-    if probe >= count {
+    // A subset barely wider than the probe cannot pay for the extra pass.
+    if probe >= matched || matched < probe.saturating_mul(2) {
         return Ok(None);
     }
     cache.quant_histogram.clear();
     cache.quant_histogram.resize(QUANT_BUCKETS, 0);
     let last_bucket = QUANT_BUCKETS - 1;
-    for &score in &cache.quant_scores {
-        let bucket = ((score >> QUANT_BUCKET_SHIFT) as usize).min(last_bucket);
-        cache.quant_histogram[bucket] += 1;
+    match subset {
+        Some(list) => {
+            for &index in list {
+                let bucket =
+                    ((cache.quant_scores[index] >> QUANT_BUCKET_SHIFT) as usize).min(last_bucket);
+                cache.quant_histogram[bucket] += 1;
+            }
+        }
+        None => {
+            for &score in &cache.quant_scores {
+                let bucket = ((score >> QUANT_BUCKET_SHIFT) as usize).min(last_bucket);
+                cache.quant_histogram[bucket] += 1;
+            }
+        }
     }
     let mut seen = 0usize;
     let mut threshold = u32::MAX;
@@ -865,8 +910,19 @@ fn select_quantized_topk(
         return Ok(None);
     }
 
-    cache.candidate_flags.clear();
-    cache.candidate_flags.resize(count, 0);
+    if cache.candidate_flags.len() != count {
+        cache.candidate_flags.clear();
+        cache.candidate_flags.resize(count, 0);
+    } else {
+        match subset {
+            Some(list) => {
+                for &index in list {
+                    cache.candidate_flags[index] = 0;
+                }
+            }
+            None => cache.candidate_flags.fill(0),
+        }
+    }
     let mut candidates = 0usize;
     let bytes = cache.bytes.as_ref().unwrap();
     let mut top = BinaryHeap::with_capacity(keep.min(count));
@@ -874,14 +930,31 @@ fn select_quantized_topk(
     loop {
         added.clear();
         let mut min_excluded = u32::MAX;
-        for (index, &score) in cache.quant_scores.iter().enumerate() {
-            if score <= threshold {
-                if cache.candidate_flags[index] == 0 {
-                    cache.candidate_flags[index] = 1;
-                    added.push(index);
+        match subset {
+            Some(list) => {
+                for &index in list {
+                    let score = cache.quant_scores[index];
+                    if score <= threshold {
+                        if cache.candidate_flags[index] == 0 {
+                            cache.candidate_flags[index] = 1;
+                            added.push(index);
+                        }
+                    } else if score < min_excluded {
+                        min_excluded = score;
+                    }
                 }
-            } else if score < min_excluded {
-                min_excluded = score;
+            }
+            None => {
+                for (index, &score) in cache.quant_scores.iter().enumerate() {
+                    if score <= threshold {
+                        if cache.candidate_flags[index] == 0 {
+                            cache.candidate_flags[index] = 1;
+                            added.push(index);
+                        }
+                    } else if score < min_excluded {
+                        min_excluded = score;
+                    }
+                }
             }
         }
         candidates += added.len();
@@ -980,7 +1053,7 @@ fn select_cached_distance(cache:&mut RawScanCache,schema:&TableSchema,outs:&[Out
     // bound keeps the `f64` recompute limited to rows that can still reach the
     // cutoff.
     if ascending && keep > 0 && filter.terms.is_empty() && cache.ranges.len() > 2048 {
-        if let Some(ranked) = select_quantized_topk(cache, query, keep)? {
+        if let Some(ranked) = select_quantized_topk(cache, query, keep, None)? {
             let bytes = cache.bytes.as_ref().unwrap();
             let mut rows = Vec::with_capacity(ranked.len());
             for entry in ranked {
@@ -992,6 +1065,29 @@ fn select_cached_distance(cache:&mut RawScanCache,schema:&TableSchema,outs:&[Out
                 rows.push(project(outs, &values)?);
             }
             return Ok(ResultSet { columns, rows });
+        }
+    }
+    // A cached filter turns the scan into a scattered subset; the packed copy
+    // still applies there, and it reads a quarter of the bytes the f64 path
+    // would touch for the same rows.
+    if ascending && keep > 0 && cache.ranges.len() > 2048 {
+        if let Some(selection) = selected {
+            let entry = cache.filters.remove(selection);
+            let outcome = select_quantized_topk(cache, query, keep, Some(&entry.indices));
+            cache.filters.insert(selection, entry);
+            if let Some(ranked) = outcome? {
+                let bytes = cache.bytes.as_ref().unwrap();
+                let mut rows = Vec::with_capacity(ranked.len());
+                for entry in ranked {
+                    let row = &cache.ranges[entry.index];
+                    let values = crate::storage::record::decode_row(
+                        schema,
+                        &bytes[row.start as usize..row.end as usize],
+                    )?;
+                    rows.push(project(outs, &values)?);
+                }
+                return Ok(ResultSet { columns, rows });
+            }
         }
     }
     let bytes=cache.bytes.as_ref().unwrap();
@@ -1793,7 +1889,7 @@ mod packed_prefilter_tests {
                 .collect();
             let expected = brute_force(&rows, &query, 10);
             let cache = session.scan_cache.as_mut().unwrap();
-            if let Some(ranked) = select_quantized_topk(cache, &query, 10).unwrap() {
+            if let Some(ranked) = select_quantized_topk(cache, &query, 10, None).unwrap() {
                 let got: Vec<(f64, i64)> =
                     ranked.iter().map(|entry| (entry.distance, entry.pk)).collect();
                 assert_eq!(got, expected, "probe {probe}");
