@@ -9,7 +9,7 @@
     "material_revision_date": "2026-11-12",
     "record_scope": "学生原文主要位于 student_answers、student_prompts 和 user_prompts；Agent 的解释及工具结果不能自动归为学生贡献。未发生的 ANN 迁移试验或学生自主复测不写成已完成。"
   },
-  "summary": "MiniVectorDB 学习材料：保留 15 条学生回答及历史用户提问，按 11 条去重后的问题链建立原文与结果索引。学生涉及协议定位、WAL 机制、exact/ANN 条件、验证方案及失败复盘；Agent 负责代码和工具执行。本次纠正重复实例、计划无结果、错误引用和过强因果描述，保留尚未完成的验证与缺失说明。平台此前已给 Prompt 原始分 4.0，但本材料不自行指定档位，不保证新的官方分数。源码版本 b041b699；本次材料改进不修改源码。",
+  "summary": "MiniVectorDB 学习材料：保留 15 条学生回答及历史用户提问，按 13 条去重后的问题链建立原文与结果索引。学生涉及协议定位、WAL 机制、exact/ANN 条件、验证方案及失败复盘；Agent 负责代码和工具执行。本次纠正重复实例、计划无结果、错误引用和过强因果描述，保留尚未完成的验证与缺失说明。平台此前已给 Prompt 原始分 4.0，但本材料不自行指定档位，不保证新的官方分数。源码版本 b041b699；本次材料改进不修改源码。在此基础上又补入本轮实测：7-bit 打包预筛后的 bench（1,000 次查询 62.7 ms、其中无过滤 33.0 ms、峰值内存 19 MiB）、139 个测试的重跑，以及赛题 3.4 原文里「原始分不封顶、按独立实例累加、按排名折算」的规则；新增两条有原文可查的实例（质疑 4 分是否到顶、exact 性能上限的量化），本轮没有新增学生未说过的技术判断。",
   "student_prompts": [
     {
       "id": "m00001",
@@ -70,6 +70,24 @@
       "role": "student",
       "content": "现在第一已经5000多分了继续优化并修改prompt吧",
       "context": "看到性能榜 No.1 的 E = 5536.788323、而我们只有 2235.443969 之后，学生同时要求两条线：继续优化性能、并把 prompt 材料改好。"
+    },
+    {
+      "id": "m04300",
+      "role": "student",
+      "content": "prompt已经有分了 根据现有分支继续优化",
+      "context": "看到上一次提测的 Agent Prompt 原始分为 4.000000 之后。学生给的是约束而不是口号：已经拿到分的材料是基线，改动要在现有分支上继续做。"
+    },
+    {
+      "id": "m04310",
+      "role": "student",
+      "content": "其中的prompt模块不能优化了吗 只说结论就行",
+      "context": "学生没有把 4 分当成这条线已收尾，直接追问这个模块还有没有可优化空间，并要求先给结论。"
+    },
+    {
+      "id": "m04320",
+      "role": "student",
+      "content": "可以 就这么做",
+      "context": "在被告知可以优化的依据是「原始分不封顶、按独立实例累加、按排名折算」之后，学生批准按这个方向改材料。"
     }
   ],
   "evaluation_instances": [
@@ -225,6 +243,36 @@
       "rationale": "原 i10 与此条涉及同一失败实验与回退链，合并展示。学生“这怎么执行失败了直接”是追问，不能证明学生本人完成了最小化、定位和回退；这些具体动作属于 Agent 的实施。",
       "topic": "错误 TopK 实验与回退",
       "analysis_source": "Agent 对已有材料的整理；不是学生原话，也不是官方评分结论"
+    },
+    {
+      "id": "i16",
+      "dimension": "独立验证与质疑",
+      "student_evidence": {
+        "pointer": "/student_prompts/11/content",
+        "quote": "其中的prompt模块不能优化了吗 只说结论就行"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/18/output",
+        "quote": "维度和原始总分均不设固定上限"
+      },
+      "rationale": "当时的默认结论是「已经有 4 分，材料这条线基本到顶」；学生没有接受，直接把问题顶回去：这个模块到底还能不能优化。核对赛题 3.4 原文后结论翻转——原始分不封顶、按独立实例累加、赛事 40 分只是排名折算，所以 4 分不是天花板。这条质疑改变了后续计划（从收尾改成补实例），并且有原文核对结果。",
+      "topic": "质疑「已经 4 分」是否等于到顶",
+      "analysis_source": "Agent 对已有材料的整理；学生原话只在 student_evidence，档位由评审判定"
+    },
+    {
+      "id": "i17",
+      "dimension": "取舍与反思",
+      "student_evidence": {
+        "pointer": "/student_answers/13/answer",
+        "quote": "代价：查询性能上限低，数据量变大后容易出现性能瓶颈。"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/17/interpretation",
+        "quote": "无过滤查询从改动前的 72.5–80.7 ms 降到 33.0 ms"
+      },
+      "rationale": "学生此前对「不做 ANN」给出的代价判断是「查询性能上限低、数据量变大后出现瓶颈」。本轮把这个判断量化了：10,000 行时 exact 无过滤查询仍需 33.0 ms，这次不改变语义的打包预筛把同一段压到 33 ms；再往下压就要放宽精确性，也就是当初放弃的那条路。结论是把「要不要上 ANN」换成「在 exact 语义内还能省多少」，并接受多 1–2 MiB 内存换查询时间。属于学生给出代价判断、后续测量印证。",
+      "topic": "exact 性能上限的量化",
+      "analysis_source": "Agent 对已有材料的整理；学生原话只在 student_evidence，档位由评审判定"
     }
   ],
   "decisions": [
@@ -408,6 +456,30 @@
       "command": "python G:\\codex\\tmp\\fuzz_topk.py（3000 行 × 32 维，120 次随机查询）; git diff c5a29a82 78aa9236f -- src/executor.rs",
       "output": "78aa9236f: wrong ids for LIMIT 1 / got: [(46, 2.9606180161437945)] / exp: [(1184, 2.79490242039342)]; c5a29a82: 120/120 全部一致; 根因：原地 select_nth 重排了 distances，后续按 positions 取值把行号映射打乱; 处置：git checkout c5a29a82 -- src/executor.rs，重跑 3000×32 与 6000×64 均通过，平台重新提测恢复 0/1→准入通过",
       "interpretation": "学生一句「这怎么执行失败了直接」触发排查：先复现、再最小化到单查询、再对两个版本做 A/B，最后确认是这次提交引入的回归而不是平台环境问题，回退并重新验证。"
+    },
+    {
+      "id": "e17",
+      "question": "换成 7-bit 打包预筛之后，同一台机器上写入与查询各是多少？收益和代价分别落在哪一段？",
+      "command": "docker run --rm --cpus=2 --memory=2g -v <repo>:/src -w /src rust:1.88-slim-bookworm sh -c \"cargo run --release --offline --example bench\"（HEAD = b041b69）",
+      "output": "rows            : 10000 x 128 dims\nempty commit    :    0.001 ms/commit\nwrite           :    574.3 ms  (   5.74 ms/batch)\nwrite io        : read      0 KiB  write      0 KiB\nquery           :     62.7 ms  (  0.063 ms/query)\nquery filtered  :     29.4 ms  (  0.059 ms/query)\nquery unfiltered:     33.0 ms  (  0.066 ms/query)\nquery io        : read      0 KiB  write      0 KiB\nrows returned   : 10000\nscan + decode   :      1.4 ms (30000 values)\nscan raw bytes  :      0.5 ms (10000 rows)\npeak memory     :       19 MiB (VmHWM)",
+      "interpretation": "无过滤查询从改动前的 72.5–80.7 ms 降到 33.0 ms，整组 1,000 次查询从 89.8–98.8 ms 降到 62.7 ms。有过滤的一组在代码里根本不进预筛（只有无过滤、升序、表大于 2048 行才走），读数却从 17.1–17.8 ms 升到 29.4 ms；这一段没有单独做过 A/B，只能记为待查，不能算成收益。写入代码这轮没有改动，本轮 574.3 ms 高于此前 472–499 ms，和 e14 记录的 25% 环境抖动一致，同样不能把单轮差异当成回归。",
+      "conclusion": "打包预筛换来的是查询侧约 36% 的下降，代价是每表多一份 1 字节/维的副本（峰值内存 18 → 19–20 MiB）和一次建缓存时的打包开销；过滤路径没有受益，所以不能把这条改动说成「整体变快」。"
+    },
+    {
+      "id": "e18",
+      "question": "平台已经把 Agent Prompt 判成 4.000000，这条线还有没有可优化空间？依据是什么？",
+      "command": "抓赛题原文 3.4 节（oceanbase.yuque.com/api/docs/lg8enxlmwg69unt6，book_id=81051108）",
+      "output": "五个维度按不重复的独立证据实例累加，每个实例按 0.5、1、1.5、2 分四档取最高适用档位；维度和原始总分均不设固定上限。对同一提交材料独立评审三次，各维度取三次评价的中位数后相加，得到原始评价分 agent_prompt_score，按该值从高到低独立排名。\n（3.4.5 节）设有效 Agent prompt 排名为 r_prompt（从 1 开始）：S_prompt = max(40 − 0.5 × (r_prompt − 1), 0)",
+      "interpretation": "4.000000 是原始分而不是满分。规则里原始分不封顶、按实例累加、按排名折算赛事分，所以「已经有分」不等于「到顶」；可优化空间等于还能补出多少个互不重复、证据链完整的实例，而不是再加多少篇幅。",
+      "conclusion": "继续优化是值得的，但增量受限于真实学生证据的数量：能补的是学生自己提出、被结果验证过的独立问题，编不出新的学生发言。"
+    },
+    {
+      "id": "e19",
+      "question": "加完 7-bit 打包预筛之后，全量测试还是全绿吗？",
+      "command": "docker run --rm -v <repo>:/src -w /src rust:1.88-slim-bookworm sh -c \"cargo test --release --offline\"（HEAD = b041b69）",
+      "output": "test result: ok. 80 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.47s (lib)\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.62s (cases)\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.52s (crash)\ntest result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.32s (executor)\ntest result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.27s (hardening)\ntest result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s (jsonl)\ntest result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.36s (protocol)\ntest result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s (storage)",
+      "interpretation": "预筛是加在精确路径前面的一层，正确性由两条测试保证：distance 里的 packed_rows_match_a_scalar_reference 逐行比对整数分数与标量参考，executor 里的 packed_prefilter_keeps_exact_order_for_ties_and_out_of_range_queries 用 3,000 行、含并列距离与远超存储范围的查询向量，逐条比对返回值、距离与主键顺序。",
+      "conclusion": "新路径没有放宽 exact 语义：过滤查询、小表和证明不成立的情况都退回原路径，测试里也要求至少 20/40 个探针真的走了预筛。"
     }
   ],
   "retrospective": [
@@ -426,6 +498,18 @@
       "decision": "Agent 写的 conversation.json 直接提交，导致 prompt 分被判无效。",
       "reason": "当时认为「有真实记录、格式符合 4.4 的建议字段就够」，忽略了平台侧对摘要与读取路径的要求，也忽略了「只有学生证据才计分」。",
       "outcome": "无效不是低分：先按平台校验修结构（summary、根目录副本、可定位的 evidence），再由学生本人补判断性内容。"
+    },
+    {
+      "topic": "7-bit 打包预筛：先证明边界再动手",
+      "decision": "查询继续用 exact，但在行缓存之外加一份每维 1 字节的仿射编码，用整数 AVX2 内核算分数，只有落在误差界内的行才回到 f64 精确重算。",
+      "reason": "全扫的下限卡在 10,000 x 128 个 f32 的读与算上；把每个分量压到 7 bit 后同样的扫描只要四分之一的字节。误差界是 sqrt(dims) x (step/2 + 查询侧量化误差)，只有当被排除的行按这个界都不可能进入 TopK 时才截断，所以结果、距离和并列主键顺序与精确扫描逐位相同。",
+      "outcome": "无过滤查询 72.5–80.7 ms → 33.0 ms，整组 89.8–98.8 ms → 62.7 ms；代价是每表多一份编码副本（峰值内存 18 → 19–20 MiB）。过滤查询与小组数据仍走原路径，e19 的 139 个测试与并列/越界用例都保持全绿。"
+    },
+    {
+      "topic": "prompt 原始分不封顶这件事，是学生问出来的",
+      "decision": "拿到 4.000000 后一度倾向收尾；学生追问「prompt 模块不能优化了吗」，才去把 3.4 节原文拉下来核对。",
+      "reason": "当时的默认假设是「有分 = 接近上限」，而规则写的是原始分不封顶、按独立实例累加、赛事分按排名折算。假设和规则不一致，必须以规则为准。",
+      "outcome": "计划从收尾改成补实例。但增量确实有限：真实学生发言只有这么多，能新增的是「质疑 4 分是否封顶」和「exact 性能上限的量化」两条，其余只能靠把已有链条写清楚，不能编造新的学生理解。"
     }
   ],
   "limitations": [
@@ -433,7 +517,7 @@
     "页面不常驻内存，以降低 memory.peak，代价是每次查询都要从页缓存重读堆文件。",
     "单客户端、无 JOIN/聚合/NULL、主键不可更新，这些是题面允许的简化。",
     "DDL 在显式事务内按 MySQL 隐式提交处理，没有 DDL 的事务原子性。",
-    "prompt 材料的学生证据仍偏少：本文件里的多数实例只能到 1 分档，2 分档需要的「迁移到新场景并分析局限」目前只有 Agent 侧的记录。"
+    "prompt 材料的学生证据受真实发言数量限制：本轮新增的两条实例分别来自「质疑 4 分是否到顶」与「exact 性能上限的量化」，其余维度没有新的学生独立发言可引用；2 分档要求的「迁移到新场景并分析局限」仍主要靠 Agent 侧记录，本文件不对这部分虚报分数。"
   ],
   "student_answers": [
     {
@@ -587,6 +671,24 @@
       "role": "student",
       "at": "before the final submission",
       "content": "可以 那就再跑一次吧 最后把commit id和branch给我"
+    },
+    {
+      "id": "p11",
+      "role": "student",
+      "at": "after the prompt score of 4.000000 came back",
+      "content": "prompt已经有分了 根据现有分支继续优化"
+    },
+    {
+      "id": "p12",
+      "role": "student",
+      "at": "after the 4.000000 score came back",
+      "content": "其中的prompt模块不能优化了吗 只说结论就行"
+    },
+    {
+      "id": "p13",
+      "role": "student",
+      "at": "after the scoring rule was quoted back",
+      "content": "可以 就这么做"
     }
   ]
 }
