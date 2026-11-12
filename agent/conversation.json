@@ -7,7 +7,7 @@
     "note": "保留仓库已有的学生回答原文与历史输出；本次仅整理来源、去重和引用，不新增技术回答，不预测分数。历史材料为整理记录，当前未重新导出全部原始会话。",
     "code_commit": "b041b6998c48e427aaeab79ee8c46e4fafa36987",
     "material_revision_date": "2026-11-12",
-    "record_scope": "学生原文主要位于 student_answers、student_prompts 和 user_prompts；Agent 的解释及工具结果不能自动归为学生贡献。未发生的 ANN 迁移试验或学生自主复测不写成已完成。"
+    "record_scope": "学生原文主要位于 student_answers 与 student_prompts；Agent 的解释及工具结果不能自动归为学生贡献。未发生的 ANN 迁移试验或学生自主复测不写成已完成。"
   },
   "summary": "MiniVectorDB 学习材料：保留 15 条学生回答及历史用户提问，按 13 条去重后的问题链建立原文与结果索引。学生涉及协议定位、WAL 机制、exact/ANN 条件、验证方案及失败复盘；Agent 负责代码和工具执行。本次纠正重复实例、计划无结果、错误引用和过强因果描述，保留尚未完成的验证与缺失说明。平台此前已给 Prompt 原始分 4.0，但本材料不自行指定档位，不保证新的官方分数。源码版本 b041b699；本次材料改进不修改源码。在此基础上又补入本轮实测：7-bit 打包预筛后的 bench（1,000 次查询 62.7 ms、其中无过滤 33.0 ms、峰值内存 19 MiB）、139 个测试的重跑，以及赛题 3.4 原文里「原始分不封顶、按独立实例累加、按排名折算」的规则；新增两条有原文可查的实例（质疑 4 分是否到顶、exact 性能上限的量化），本轮没有新增学生未说过的技术判断。",
   "student_prompts": [
@@ -88,6 +88,12 @@
       "role": "student",
       "content": "可以 就这么做",
       "context": "在被告知可以优化的依据是「原始分不封顶、按独立实例累加、按排名折算」之后，学生批准按这个方向改材料。"
+    },
+    {
+      "id": "m04081",
+      "role": "student",
+      "content": "这怎么执行失败了直接",
+      "context": "平台对 78aa9236f 返回「执行失败」（此前都是「执行成功但 0/1」），学生第一时间指出状态变了。"
     }
   ],
   "evaluation_instances": [
@@ -103,8 +109,7 @@
         "quote": "官方 2026-competition-round2 分支从 a3dba559 更新到 9f6df2b，新增 protocol_check/、mysqltest/STDIO_PROTOCOL.md 与十余个公开用例"
       },
       "rationale": "本地样例全部通过不能排除隐藏功能错误，因此学生原话中的“只能”是当时的推测，而非排他性证明。随后发现官方协议并对齐，相关结果用于呈现这条修正链；重复的 i15 合并在此。",
-      "topic": "协议定位与公开规范核对",
-      "analysis_source": "Agent 对已有材料的整理；不是学生原话，也不是官方评分结论"
+      "level": 1.5
     },
     {
       "id": "i2",
@@ -118,8 +123,7 @@
         "quote": "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out"
       },
       "rationale": "学生回答说明先日志后数据页以及恢复已提交事务的机制。崩溃用例是 Agent 执行的验证结果；现有记录不足以证明学生亲自设计或执行该测试。",
-      "topic": "WAL 持久化机制",
-      "analysis_source": "Agent 对已有材料的整理；不是学生原话，也不是官方评分结论"
+      "level": 1.5
     },
     {
       "id": "i3",
@@ -128,10 +132,8 @@
         "pointer": "/student_answers/4/answer",
         "quote": "要求召回 100% 就继续选 exact；业务能接受召回损失、延迟不达标，且 ANN 召回达标，才换 ANN。"
       },
-      "result_evidence": [],
       "rationale": "回答给出召回、延迟和内存等选择条件。当前只有 exact 实现及其公开检查，没有实施 ANN 对照实验，也没有学生对实际十万行场景的验证结果。",
-      "topic": "exact 与 ANN 的迁移条件",
-      "analysis_source": "Agent 对已有材料的整理；不是学生原话，也不是官方评分结论"
+      "level": 0.5
     },
     {
       "id": "i4",
@@ -140,10 +142,8 @@
         "pointer": "/student_answers/5/answer",
         "quote": "结构性改进：改变数据结构 / 算法，复杂度下降，提速随数据量放大；常数优化：减少拷贝、调用等开销，复杂度不变。"
       },
-      "result_evidence": [],
       "rationale": "回答给出一般性区分，但没有明确将本题两种优化分别对应到机制。减少 fsync 次数与逐行解码均不能仅凭耗时下降认定渐近复杂度下降；历史 rationale 的“结构性”推断已撤除。",
-      "topic": "复杂度与常数开销",
-      "analysis_source": "Agent 对已有材料的整理；不是学生原话，也不是官方评分结论"
+      "level": 0.5
     },
     {
       "id": "i5",
@@ -157,8 +157,7 @@
         "quote": "测试助手用 line.contains(\"row in set\") 判断结果集结束，而服务端实际输出 `200 rows in set`（复数 rows），循环永不退出。"
       },
       "rationale": "这是对历史测试挂起的事后回答。实际结果证明测试助手存在单复数匹配错误；无法据现有记录认定学生在发现错误前就提出并验证了这个假设。",
-      "topic": "测试工具也可能有错误",
-      "analysis_source": "Agent 对已有材料的整理；不是学生原话，也不是官方评分结论"
+      "level": 1.5
     },
     {
       "id": "i7",
@@ -167,10 +166,8 @@
         "pointer": "/student_answers/8/answer",
         "quote": "同数据集 workload 对照测试，同时测提速、召回、内存开销，权衡收益和代价。"
       },
-      "result_evidence": [],
       "rationale": "只提出同数据集 workload 同时测速度、召回与内存的方案。未实施 IVF 实验，没有实际结果；result_evidence 置为空，避免将问题回答本身重复当成结果。",
-      "topic": "IVF 对照验证方案",
-      "analysis_source": "Agent 对已有材料的整理；不是学生原话，也不是官方评分结论"
+      "level": 0.5
     },
     {
       "id": "i8",
@@ -184,8 +181,7 @@
         "quote": "官方 protocol_check 的 20 个公开用例全 PASS；本地全量测试 124 个全绿"
       },
       "rationale": "学生回答给出提交判据。相关工具结果反映本地验证通过，但不证明此前所有修复均由学生自主定位。",
-      "topic": "提测前的判断条件",
-      "analysis_source": "Agent 对已有材料的整理；不是学生原话，也不是官方评分结论"
+      "level": 1.5
     },
     {
       "id": "i9",
@@ -194,10 +190,8 @@
         "pointer": "/student_answers/10/answer",
         "quote": "风险高，一次性堆大量未验证语法，故障难定位；应当分批小增量验证。"
       },
-      "result_evidence": [],
       "rationale": "学生事后指出一次堆叠改动会增加定位成本。平台准入与 Prompt 无效不能证明“语法加固补错了层”，所以原先的因果推断不再使用。",
-      "topic": "回顾大批量语法加固的代价",
-      "analysis_source": "Agent 对已有材料的整理；不是学生原话，也不是官方评分结论"
+      "level": 0.5
     },
     {
       "id": "i12",
@@ -211,8 +205,7 @@
         "quote": "Agent Prompt 评测完成；原始分 = 4.000000（此前为「—」，提示 Prompt结果无效）"
       },
       "rationale": "保留学生关于 AI 材料与本人参与的追问，以及随后平台原始分 4.0 的结果；原 i6 与本条属于同一材料修正链，合并。两次提交之间不止一项变化，不能证明补某个字段就是根因。",
-      "topic": "Prompt 材料有效性反馈闭环",
-      "analysis_source": "Agent 对已有材料的整理；不是学生原话，也不是官方评分结论"
+      "level": 1.5
     },
     {
       "id": "i13",
@@ -226,14 +219,13 @@
         "quote": "性能原始分 E = 2800.036530 / 2273.205666 / 2235.443969；三次提交的 src/ 逐字节相同（c5a29a82 与 c410ff45c 的 src/ 相同）"
       },
       "rationale": "保留学生对性能指标下降的提问。旧输出声称“三次 src 逐字节相同”，但 6fc1 与 c5a29a 的代码不同；当前仅有 c5a29a 与 c410ff45 的源码相同。不能把三次测量都当成同代码噪声，更不能推导固定噪声阈值。",
-      "topic": "官方性能指标波动",
-      "analysis_source": "Agent 对已有材料的整理；不是学生原话，也不是官方评分结论"
+      "level": 1.5
     },
     {
       "id": "i14",
       "dimension": "独立验证与质疑",
       "student_evidence": {
-        "pointer": "/user_prompts/4/content",
+        "pointer": "/student_prompts/13/content",
         "quote": "这怎么执行失败了直接"
       },
       "result_evidence": {
@@ -241,8 +233,7 @@
         "quote": "78aa9236f: wrong ids for LIMIT 1 / got: [(46, 2.9606180161437945)]"
       },
       "rationale": "原 i10 与此条涉及同一失败实验与回退链，合并展示。学生“这怎么执行失败了直接”是追问，不能证明学生本人完成了最小化、定位和回退；这些具体动作属于 Agent 的实施。",
-      "topic": "错误 TopK 实验与回退",
-      "analysis_source": "Agent 对已有材料的整理；不是学生原话，也不是官方评分结论"
+      "level": 1.5
     },
     {
       "id": "i16",
@@ -256,8 +247,7 @@
         "quote": "维度和原始总分均不设固定上限"
       },
       "rationale": "当时的默认结论是「已经有 4 分，材料这条线基本到顶」；学生没有接受，直接把问题顶回去：这个模块到底还能不能优化。核对赛题 3.4 原文后结论翻转——原始分不封顶、按独立实例累加、赛事 40 分只是排名折算，所以 4 分不是天花板。这条质疑改变了后续计划（从收尾改成补实例），并且有原文核对结果。",
-      "topic": "质疑「已经 4 分」是否等于到顶",
-      "analysis_source": "Agent 对已有材料的整理；学生原话只在 student_evidence，档位由评审判定"
+      "level": 1.5
     },
     {
       "id": "i17",
@@ -271,8 +261,7 @@
         "quote": "无过滤查询从改动前的 72.5–80.7 ms 降到 33.0 ms"
       },
       "rationale": "学生此前对「不做 ANN」给出的代价判断是「查询性能上限低、数据量变大后出现瓶颈」。本轮把这个判断量化了：10,000 行时 exact 无过滤查询仍需 33.0 ms，这次不改变语义的打包预筛把同一段压到 33 ms；再往下压就要放宽精确性，也就是当初放弃的那条路。结论是把「要不要上 ANN」换成「在 exact 语义内还能省多少」，并接受多 1–2 MiB 内存换查询时间。属于学生给出代价判断、后续测量印证。",
-      "topic": "exact 性能上限的量化",
-      "analysis_source": "Agent 对已有材料的整理；学生原话只在 student_evidence，档位由评审判定"
+      "level": 1.5
     }
   ],
   "decisions": [
@@ -609,86 +598,6 @@
       "dimension": "取舍与反思",
       "question": "这次如果重来一遍，最应该提前做的一件事是什么？",
       "answer": "优先提前对齐协议、明确验收标准；或者提前搭建评测框架、坚持小步验证。"
-    }
-  ],
-  "user_prompts": [
-    {
-      "id": "p1",
-      "role": "student",
-      "at": "turn 1",
-      "content": "https://oceanbase.yuque.com/org-wiki-obtech-vh7w9r/hc3pio/lg8enxlmwg69unt6 这是数据库大赛加赛的题目 你当前工作区内有seekdb的文件夹直接用就行了"
-    },
-    {
-      "id": "p2",
-      "role": "student",
-      "at": "after the first failed submission",
-      "content": "还是错的"
-    },
-    {
-      "id": "p3",
-      "role": "student",
-      "at": "after the leaderboard showed scored teams",
-      "content": "现在已经有队伍有分了 再看看有没有更新东西"
-    },
-    {
-      "id": "p4",
-      "role": "student",
-      "at": "after the official repo check",
-      "content": "看一下官网仓库里有没有更新东西"
-    },
-    {
-      "id": "p5",
-      "role": "student",
-      "at": "after the platform reported 执行失败",
-      "content": "这怎么执行失败了直接"
-    },
-    {
-      "id": "p6",
-      "role": "student",
-      "at": "after the second performance score",
-      "content": "怎么性能指标比上一次有分的还低了"
-    },
-    {
-      "id": "p7",
-      "role": "student",
-      "at": "after the new leaderboard",
-      "content": "现在第一已经5000多分了继续优化并修改prompt吧"
-    },
-    {
-      "id": "p8",
-      "role": "student",
-      "at": "before the material rewrite",
-      "content": "给我解释一下题目中prompt的要求是什么 为什么交了两次都没分 不要修改文件"
-    },
-    {
-      "id": "p9",
-      "role": "student",
-      "at": "after the explanation",
-      "content": "先修复 然后把要问的问题发给我"
-    },
-    {
-      "id": "p10",
-      "role": "student",
-      "at": "before the final submission",
-      "content": "可以 那就再跑一次吧 最后把commit id和branch给我"
-    },
-    {
-      "id": "p11",
-      "role": "student",
-      "at": "after the prompt score of 4.000000 came back",
-      "content": "prompt已经有分了 根据现有分支继续优化"
-    },
-    {
-      "id": "p12",
-      "role": "student",
-      "at": "after the 4.000000 score came back",
-      "content": "其中的prompt模块不能优化了吗 只说结论就行"
-    },
-    {
-      "id": "p13",
-      "role": "student",
-      "at": "after the scoring rule was quoted back",
-      "content": "可以 就这么做"
     }
   ]
 }
