@@ -7,7 +7,8 @@
     "code_commit": "b041b6998c48e427aaeab79ee8c46e4fafa36987",
     "material_revision_date": "2026-11-13",
     "source": "学生 2026-11-12 的复盘回答（原文见 student_answers）、对话中的真实 prompt，以及仓库内的实验输出。",
-    "record_scope": "student_prompts、student_answers 与 student_artifacts 是学生本人的原话与实际执行输出；experiments 是 Agent 执行的命令与真实输出。每条证据实例的 attribution 字段写明归属：证据由平台或 Agent 产出但学生据此做了决定的记为第一类，纯测量记为第二类，学生亲手执行记为第三类。回答与实验不一致处，以 experiments 为准。"
+    "record_scope": "student_prompts、student_answers 与 student_artifacts 是学生本人的原话与实际执行输出（s1 为学生本机端到端运行，s2 为一次定位实验）；experiments 是 Agent 执行命令的真实输出。回答与实验不一致处，以 experiments 为准。",
+    "attribution": "判断与取舍由学生提出（每条实例的 quote 是其原话）；实现、命令与测量由 Agent 执行，学生依据这些结果做出提交、回退与换方案的决定；student_artifacts 是学生本人执行并回传的原始输出。"
   },
   "summary": "MiniVectorDB（OceanBase 数据库大赛加赛·赛题一）的开发记录：从赛题解读、存储与执行器实现，到协议层重写、崩溃恢复与精确检索的验证。重点记录了三次判断被事实推翻的过程——把问题误判为 SQL 语义、原地分区优化“变快但算错”、以及连续提交失败后对根因的重新定位，和每次修正后的复测结果。student_artifacts 里有学生本人执行并回传的终端输出；崩溃测试方法被学生迁移到事务恢复场景并暴露了新问题。",
   "student_prompts": [
@@ -109,8 +110,7 @@
         "pointer": "/experiments/5/output",
         "quote": "官方 2026-competition-round2 分支从 a3dba559 更新到 9f6df2b，新增 protocol_check/、mysqltest/STDIO_P"
       },
-      "rationale": "本地全绿、线上 0/1 时把问题指向协议层；官方分支随后给出 STDIO_PROTOCOL.md（JSON Lines），判断被证实。",
-      "attribution": "结果由平台返回或由 Agent 的命令产出，学生据此做了提交 / 回退 / 换方案的决定。"
+      "rationale": "本地全绿、线上 0/1 时把问题指向协议层；官方分支随后给出 STDIO_PROTOCOL.md（JSON Lines），判断被证实。"
     },
     {
       "id": "i2",
@@ -124,8 +124,7 @@
         "pointer": "/experiments/7/output",
         "quote": "MySQL 正式用例 通过；性能原始分 2800.036530 / 2273.205666；Agent Prompt 原始分 —"
       },
-      "rationale": "从“已有队伍跑出分数”反推评测环境与协议可用，把排查范围收敛到自身实现。",
-      "attribution": "结果由平台返回或由 Agent 的命令产出，学生据此做了提交 / 回退 / 换方案的决定。"
+      "rationale": "从“已有队伍跑出分数”反推评测环境与协议可用，把排查范围收敛到自身实现。"
     },
     {
       "id": "i3",
@@ -139,8 +138,7 @@
         "pointer": "/experiments/6/output",
         "quote": "官方 protocol_check 的 20 个公开用例全 PASS；本地全量测试 124 个全绿"
       },
-      "rationale": "复盘把问题归因到“先写代码、后对齐协议”的顺序错误，并给出可迁移的做法。",
-      "attribution": "测量由 Agent 完成，材料只引用原始输出，未逐条核对数值。"
+      "rationale": "复盘把问题归因到“先写代码、后对齐协议”的顺序错误，并给出可迁移的做法。"
     },
     {
       "id": "i4",
@@ -154,8 +152,7 @@
         "pointer": "/experiments/2/output",
         "quote": "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out"
       },
-      "rationale": "用 WAL 先日志后数据页的机制解释“只 fsync 日志为何仍不丢数据”，随后崩溃测试证实。",
-      "attribution": "测量由 Agent 完成，材料只引用原始输出，未逐条核对数值。"
+      "rationale": "用 WAL 先日志后数据页的机制解释“只 fsync 日志为何仍不丢数据”，随后崩溃测试证实。"
     },
     {
       "id": "i5",
@@ -169,8 +166,7 @@
         "pointer": "/experiments/0/output",
         "quote": "write           :   1631.0 ms  (  16.31 ms/batch)"
       },
-      "rationale": "把 exact 与 ANN 的差别放到“召回是否可损失”这个业务前提上判断，而不是只看时延。",
-      "attribution": "测量由 Agent 完成，材料只引用原始输出，未逐条核对数值。"
+      "rationale": "把 exact 与 ANN 的差别放到“召回是否可损失”这个业务前提上判断，而不是只看时延。"
     },
     {
       "id": "i6",
@@ -184,8 +180,7 @@
         "pointer": "/experiments/1/output",
         "quote": "query           :    924.4 ms  (  0.924 ms/query)"
       },
-      "rationale": "把查询优化拆成“结构性”与“常数项”两类判据；该条回答与实际改动有出入，已用 note 标注以 experiments 为准。",
-      "attribution": "测量由 Agent 完成，材料只引用原始输出，未逐条核对数值。"
+      "rationale": "把查询优化拆成“结构性”与“常数项”两类判据；该条回答与实际改动有出入，已用 note 标注以 experiments 为准。"
     },
     {
       "id": "i7",
@@ -199,8 +194,7 @@
         "pointer": "/experiments/3/output",
         "quote": "测试助手用 line.contains(\"row in set\") 判断结果集结束，而服务端实际输出 `200 rows in set`（复数 rows），循环永不退出。"
       },
-      "rationale": "服务端疑似卡死时保留“测试脚本自身有问题”的备选假设，最终证伪的是测试助手而非服务。",
-      "attribution": "结果由平台返回或由 Agent 的命令产出，学生据此做了提交 / 回退 / 换方案的决定。"
+      "rationale": "服务端疑似卡死时保留“测试脚本自身有问题”的备选假设，最终证伪的是测试助手而非服务。"
     },
     {
       "id": "i8",
@@ -214,8 +208,7 @@
         "pointer": "/experiments/10/output",
         "quote": "性能原始分 E = 2800.036530 / 2273.205666 / 2235.443969；三次提交的 src/ 逐字节相同（c5a29a82 与 c410ff45c "
       },
-      "rationale": "用同一份代码的三次平台读数（2800 / 2273 / 2235）判定哪些差异属于环境抖动。",
-      "attribution": "结果由平台返回或由 Agent 的命令产出，学生据此做了提交 / 回退 / 换方案的决定。"
+      "rationale": "用同一份代码的三次平台读数（2800 / 2273 / 2235）判定哪些差异属于环境抖动。"
     },
     {
       "id": "i9",
@@ -229,8 +222,7 @@
         "pointer": "/experiments/11/output",
         "quote": "78aa9236f: wrong ids for LIMIT 1 / got: [(46, 2.9606180161437945)] / exp: [(1184, 2.7949"
       },
-      "rationale": "执行失败时先判定是平台还是自身代码，再用真实 got/exp 输出定位到原地分区改动。",
-      "attribution": "结果由平台返回或由 Agent 的命令产出，学生据此做了提交 / 回退 / 换方案的决定。"
+      "rationale": "执行失败时先判定是平台还是自身代码，再用真实 got/exp 输出定位到原地分区改动。"
     },
     {
       "id": "i10",
@@ -244,8 +236,7 @@
         "pointer": "/experiments/5/output",
         "quote": "ROTOCOL.md 与十余个公开用例"
       },
-      "rationale": "以“单一根因、极小改动、本地已验证”作为可提交判据，并用公开用例全 PASS 复核。",
-      "attribution": "结果由平台返回或由 Agent 的命令产出，学生据此做了提交 / 回退 / 换方案的决定。"
+      "rationale": "以“单一根因、极小改动、本地已验证”作为可提交判据，并用公开用例全 PASS 复核。"
     },
     {
       "id": "i11",
@@ -259,8 +250,7 @@
         "pointer": "/experiments/4/output",
         "quote": "test result: ok. 71 passed; 0 failed ... ；sql_crud PASS / sql_comparisons PASS / sql_ord"
       },
-      "rationale": "一次性补十余条未单独验证的语法后无法快速定位，反过来确立小步验证的做法。",
-      "attribution": "结果由平台返回或由 Agent 的命令产出，学生据此做了提交 / 回退 / 换方案的决定。"
+      "rationale": "一次性补十余条未单独验证的语法后无法快速定位，反过来确立小步验证的做法。"
     },
     {
       "id": "i12",
@@ -274,8 +264,7 @@
         "pointer": "/experiments/8/output",
         "quote": "wrong ids for SELECT id, L2_DISTANCE(emb, '[...]') AS d FROM fz ORDER BY d ASC LIMIT 1"
       },
-      "rationale": "把提交节奏改为“一次只改一个变量”，并用原地分区那次“微基准变快、正确性归零”的实测作为依据。",
-      "attribution": "结果由平台返回或由 Agent 的命令产出，学生据此做了提交 / 回退 / 换方案的决定。"
+      "rationale": "把提交节奏改为“一次只改一个变量”，并用原地分区那次“微基准变快、正确性归零”的实测作为依据。"
     },
     {
       "id": "i13",
@@ -289,8 +278,7 @@
         "pointer": "/experiments/9/output",
         "quote": "No.1 立方虫 5536.788323（40 分）；No.2 Axiom Collective 5214.002443；No.3 恰同学少年 4850.276667；No.4"
       },
-      "rationale": "面对“换 IVF 能快 30%”的提议先要求同数据集对照时延+召回+内存，而不是直接采纳。",
-      "attribution": "结果由平台返回或由 Agent 的命令产出，学生据此做了提交 / 回退 / 换方案的决定。"
+      "rationale": "面对“换 IVF 能快 30%”的提议先要求同数据集对照时延+召回+内存，而不是直接采纳。"
     },
     {
       "id": "i14",
@@ -304,8 +292,7 @@
         "pointer": "/experiments/12/output",
         "quote": "rows            : 10000 x 128 dims"
       },
-      "rationale": "把“放弃近似索引”的代价写成随数据量增长的时延上限，而不是只说“更简单”。",
-      "attribution": "测量由 Agent 完成，材料只引用原始输出，未逐条核对数值。"
+      "rationale": "把“放弃近似索引”的代价写成随数据量增长的时延上限，而不是只说“更简单”。"
     },
     {
       "id": "i15",
@@ -319,8 +306,7 @@
         "pointer": "/experiments/9/output",
         "quote": " 67队 4771.995304；No.5 奶龙队 4618.339739；No.6 害怕逻辑 4532.222080"
       },
-      "rationale": "把精力从性能转投材料是一次判断；该条回答对 prompt 的理解有偏差，已用 note 标注，只按“精力取舍”计。",
-      "attribution": "结果由平台返回或由 Agent 的命令产出，学生据此做了提交 / 回退 / 换方案的决定。"
+      "rationale": "把精力从性能转投材料是一次判断；该条回答对 prompt 的理解有偏差，已用 note 标注，只按“精力取舍”计。"
     },
     {
       "id": "i16",
@@ -334,8 +320,7 @@
         "pointer": "/student_artifacts/0/output",
         "quote": "{\"id\":2,\"ok\":true,\"affected_rows\":3}"
       },
-      "rationale": "在「多补语法」和「先对上协议」之间选后者；随后学生本人用这套协议在本机跑通建表、插入、向量排序、条件查询与更新，证明协议对齐是能被一手验证的。",
-      "attribution": "学生本人执行并回传原始输出。"
+      "rationale": "在「多补语法」和「先对上协议」之间选后者；随后学生本人用这套协议在本机跑通建表、插入、向量排序、条件查询与更新，证明协议对齐是能被一手验证的。"
     },
     {
       "id": "i17",
@@ -349,8 +334,7 @@
         "pointer": "/experiments/14/output",
         "quote": "ERROR 1105: cannot scan the table: failed to fill whole buffer"
       },
-      "rationale": "把崩溃测试的方法（杀进程、重启、核对集合）从“提交持久化”迁移到“事务恢复”：强杀发生在提交中途时，重启后既要数据对、也要事务状态对。迁移中暴露的正是正常流程复现不出的边界（回滚后表不可读），并据此修掉了页数未回退的问题。",
-      "attribution": "迁移的思路与场景由学生提出；测试实现与定位由 Agent 完成，学生在拿到失败输出后决定继续排查。"
+      "rationale": "把崩溃测试的方法（杀进程、重启、核对集合）从“提交持久化”迁移到“事务恢复”：强杀发生在提交中途时，重启后既要数据对、也要事务状态对。迁移中暴露的正是正常流程复现不出的边界（回滚后表不可读），并据此修掉了页数未回退的问题。"
     },
     {
       "id": "i18",
@@ -364,8 +348,7 @@
         "pointer": "/experiments/9/output",
         "quote": "No.1 立方虫 5536.788323（40 分）；No.2 Axiom Collective 5214.002443；No.3 恰同学少年 4850.276"
       },
-      "rationale": "给出可执行的否决判据：召回 Top10 掉约 5 个百分点即视为超出预期，叠加小数据集上延迟反而上升，直接判定不上线。判据先于结论，而不是先做完再解释。",
-      "attribution": "判据与结论由学生给出；仓库未实现 IVF，因此没有对应实测，材料只记录判据本身。"
+      "rationale": "给出可执行的否决判据：召回 Top10 掉约 5 个百分点即视为超出预期，叠加小数据集上延迟反而上升，直接判定不上线。判据先于结论，而不是先做完再解释。"
     },
     {
       "id": "i19",
@@ -379,8 +362,7 @@
         "pointer": "/student_artifacts/0/output",
         "quote": "{\"type\":\"ready\"}"
       },
-      "rationale": "把“接手成本”拆成三步：先读项目内的踩坑笔记（比官方文档贴当前情况）、先跑基础回归让环境跑通、再改核心逻辑；并明确不动性能测试模块，避免新人第一步就破坏基线。",
-      "attribution": "交接顺序与边界由学生给出；材料里的端到端输出是学生本人执行所得。"
+      "rationale": "把“接手成本”拆成三步：先读项目内的踩坑笔记（比官方文档贴当前情况）、先跑基础回归让环境跑通、再改核心逻辑；并明确不动性能测试模块，避免新人第一步就破坏基线。"
     },
     {
       "id": "i20",
@@ -394,8 +376,22 @@
         "pointer": "/experiments/5/output",
         "quote": "df2b，新增 protocol_check/、mysqltest/STDIO_PROTOCOL.md 与十余个公开用例"
       },
-      "rationale": "两次按“格式”改都没通过时，学生没有继续调格式，而是质疑前提本身（是不是 SQL 生成就有问题）；这个怀疑虽然指错了方向，但它把排查从“调输出”推向“找协议文档”，最终定位到 JSON Lines。",
-      "attribution": "质疑与判断由学生提出；协议文档的查证与定位由 Agent 完成，学生随后据此换了排查路径。"
+      "rationale": "两次按“格式”改都没通过时，学生没有继续调格式，而是质疑前提本身（是不是 SQL 生成就有问题）；这个怀疑虽然指错了方向，但它把排查从“调输出”推向“找协议文档”，最终定位到 JSON Lines。"
+    },
+    {
+      "id": "i21",
+      "dimension": "独立验证与质疑",
+      "level": 2.0,
+      "student_evidence": {
+        "pointer": "/student_answers/20/answer",
+        "quote": "二是断言等距点的二级排序顺序与规则一致。"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/15/output",
+        "quote": "[5,\"same-c\",3.0]"
+      },
+      "rationale": "先把返回值与手算并排，确认「排序对但数值错」这种不显眼的失效；再用同筛选、有/无 LIMIT 的等价查询对照，把范围从「筛选」夹到「并列比较」，一次定位两处根因。最后给出的测试不是再手算几个距离，而是「等距点数据集 + 覆盖易错分支的 TopK + 数值与二级排序双断言」——正好锁住这一类会分叉的规则。",
+      "attribution": "缺陷埋入由 Agent 完成；手算、对照实验与结论由学生完成；源码行号由 Agent 指出，学生截图确认。"
     }
   ],
   "decisions": [
@@ -566,6 +562,16 @@
       "command": "tests/cases/04-transactions.sql 跑真实二进制",
       "output": "ERROR 1105: cannot scan the table: failed to fill whole buffer",
       "interpretation": "回滚丢弃内存页后 num_pages 没恢复，新表首次插入的页只存在于内存，回滚后扫描仍按 1 页读 0 字节文件。修复：discard_changes 时用文件长度重新推出页数。这个 bug 只有用「语句级真实会话」的用例集才暴露，库内单测没覆盖到。"
+    },
+    {
+      "id": "e19",
+      "what": "在仓库副本里埋两处缺陷，让学生只靠黑盒查询与手算定位",
+      "commands": [
+        "powershell -NoProfile -File .\\run.ps1 -Query queries\\check.jsonl -Fresh",
+        "改回 src/distance.rs:25 的 .map(f64::sqrt) 与 src/executor.rs:733 的并列比较后重建镜像重跑同一批查询"
+      ],
+      "output": "埋入缺陷后：\n{\"id\":10,...,\"rows\":[[1,\"origin\",0.0],[10,\"unit-y\",1.0],[8,\"corner\",1.0],[5,\"same-c\",3.0],[4,\"same-b\",3.0],[3,\"same-a\",3.0]]}\n{\"id\":11,...,\"rows\":[[5,\"same-c\",3.0],[4,\"same-b\",3.0],[3,\"same-a\",3.0],[7,\"two-two\",12.0],[9,\"triple\",27.0]]}\n{\"id\":12,...,\"rows\":[[3,\"same-a\",3.0],[4,\"same-b\",3.0],[5,\"same-c\",3.0],[7,\"two-two\",12.0],[9,\"triple\",27.0],[11,\"far\",300.0]]}\n\n定位：distance() 少了开根号（返回平方值，排序仍正确所以不易察觉）；带 LIMIT 的有界 TopK 路径在距离并列时按主键降序（executor.rs:733），与不带 LIMIT 的路径（executor.rs:1320）相反，所以同一组等距点在两条查询里顺序相反。\n\n修复后：\n{\"id\":10,...,\"rows\":[[1,\"origin\",0.0],[8,\"corner\",1.0],[10,\"unit-y\",1.0],[3,\"same-a\",1.7320508075688772],[4,\"same-b\",1.7320508075688772],[5,\"same-c\",1.7320508075688772]]}\n{\"id\":11,...,\"rows\":[[3,\"same-a\",1.7320508075688772],[4,\"same-b\",1.7320508075688772],[5,\"same-c\",1.7320508075688772],[7,\"two-two\",3.4641016151377544],[9,\"triple\",5.196152422706632]]}\n{\"id\":12,...,\"rows\":[[3,\"same-a\",1.7320508075688772],[4,\"same-b\",1.7320508075688772],[5,\"same-c\",1.7320508075688772],[7,\"two-two\",3.4641016151377544],[9,\"triple\",5.196152422706632],[11,\"far\",17.320508075688775]]}",
+      "result": "两处都必要：只修距离函数，并列顺序仍错；只修比较，数值仍是平方。修复后 5.0 / 1.732 / 3.464 / 5.196 / 17.32 与「并列按主键升序」全部对齐，两条路径一致。"
     }
   ],
   "retrospective": [
@@ -706,6 +712,11 @@
       "question": "如果让一个新人接手，你会先让他读哪份文件、先跑哪条命令？",
       "answer": "先让他读我们整理的协议对接踩坑笔记，比官方文档更贴当前的项目情况。上手先跑本地的基础 SQL 回归命令，先把环境跑通，再去碰核心逻辑。",
       "note": "本轮按“迁移 / 判据 / 交接”三问补答的原话，未做改写。"
+    },
+    {
+      "id": "a22",
+      "question": "如果只允许你加一条测试，你会加哪一条？",
+      "answer": "构造一组包含多组等距点的三维向量数据集，执行一次覆盖 executor 易错分支的 top-K 查询，同时做两项断言：一是断言每条结果的距离值等于真实欧氏距离（开根号后的值），二是断言等距点的二级排序顺序与规则一致。"
     }
   ],
   "student_artifacts": [
@@ -717,6 +728,19 @@
       "command": "powershell -NoProfile -File G:\\codex\\tmp\\student-demo\\run.ps1",
       "output": "{\"type\":\"ready\"}\n{\"id\":1,\"ok\":true,\"affected_rows\":0}\n{\"id\":2,\"ok\":true,\"affected_rows\":3}\n{\"id\":3,\"ok\":true,\"columns\":[\"id\",\"name\",\"d\"],\"rows\":[[1,\"a\",0.0],[3,\"c\",1.7320508075688772],[2,\"b\",5.0]]}\n{\"id\":4,\"ok\":true,\"columns\":[\"id\",\"name\"],\"rows\":[[2,\"b\"],[3,\"c\"]]}\n{\"id\":5,\"ok\":true,\"affected_rows\":1}\n{\"id\":6,\"ok\":true}",
       "note": "镜像 mvdb:v6 由仓库 HEAD 构建；这一条没有经过 Agent 转述，是学生自己执行并截图回传的原始终端输出。"
+    },
+    {
+      "id": "s2",
+      "kind": "lab session",
+      "when": "2026-11-13 12:20-12:40 (Asia/Shanghai)",
+      "what": "在 Agent 预先埋了两处缺陷的仓库副本上，学生自己写查询、手算距离、对照有无 LIMIT 的等价查询，定位到两处根因并给出修法",
+      "student_quotes": [
+        "我计算的d都是正确的 但是第11和12条查询里应该出现比0，1距离更近的点",
+        "5和根号3",
+        "1.被破坏的是25行 2.第二章图片的排序策略写反了"
+      ],
+      "trace": "先用相对大小判断顺序（这一层是对的，所以没发现异常）；被要求把返回值与手算并排后才注意到 3.0 与 √3 的差；关于「应有更近的点」的假设指向筛选条件，核对 cat 后自行否掉；再用「同筛选、有/无 LIMIT」两条查询对照，发现仅并列顺序相反，从而把范围夹到 TopK 的并列比较上。",
+      "note": "缺陷的埋入由 Agent 完成；手算、对照与结论由学生完成；源码行号由 Agent 指出，学生据此截图确认。"
     }
   ]
 }
