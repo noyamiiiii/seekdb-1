@@ -7,9 +7,9 @@
     "code_commit": "b041b6998c48e427aaeab79ee8c46e4fafa36987",
     "material_revision_date": "2026-11-13",
     "source": "学生 2026-11-12 的复盘回答（原文见 student_answers）、对话中的真实 prompt，以及仓库内的实验输出。",
-    "record_scope": "student_prompts 与 student_answers 是学生本人说过的原话；experiments 是 Agent 执行的命令与真实输出，不计入学生贡献。每条证据实例的 attribution 字段写明该判断的归属。回答与实验不一致处，以 experiments 为准。"
+    "record_scope": "student_prompts、student_answers 与 student_artifacts 是学生本人的原话与实际执行输出；experiments 是 Agent 执行的命令与真实输出，不计入学生贡献。每条证据实例的 attribution 字段写明该判断的归属。回答与实验不一致处，以 experiments 为准。"
   },
-  "summary": "MiniVectorDB（OceanBase 数据库大赛加赛·赛题一）的开发记录：从赛题解读、存储与执行器实现，到协议层重写、崩溃恢复与精确检索的验证。重点记录了三次判断被事实推翻的过程——把问题误判为 SQL 语义、原地分区优化“变快但算错”、以及连续提交失败后对根因的重新定位，和每次修正后的复测结果。",
+  "summary": "MiniVectorDB（OceanBase 数据库大赛加赛·赛题一）的开发记录：从赛题解读、存储与执行器实现，到协议层重写、崩溃恢复与精确检索的验证。重点记录了三次判断被事实推翻的过程——把问题误判为 SQL 语义、原地分区优化“变快但算错”、以及连续提交失败后对根因的重新定位，和每次修正后的复测结果。student_artifacts 里有学生本人执行并回传的终端输出。",
   "student_prompts": [
     {
       "id": "m00001",
@@ -321,6 +321,21 @@
       },
       "rationale": "把精力从性能转投材料是一次判断；该条回答对 prompt 的理解有偏差，已用 note 标注，只按“精力取舍”计。",
       "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
+    },
+    {
+      "id": "i16",
+      "dimension": "取舍与反思",
+      "level": 1.5,
+      "student_evidence": {
+        "pointer": "/student_answers/15/answer",
+        "quote": "协议是所有 SQL 语法的底层标准，语法是基于协议的上层实现"
+      },
+      "result_evidence": {
+        "pointer": "/student_artifacts/0/output",
+        "quote": "{\"id\":2,\"ok\":true,\"affected_rows\":3}"
+      },
+      "rationale": "在「多补语法」和「先对上协议」之间选后者；随后学生本人用这套协议在本机跑通建表、插入、向量排序、条件查询与更新，证明协议对齐是能被一手验证的。",
+      "attribution": "判断由学生提出；服务实现与脚本由 Agent 完成；运行与结果由学生本人在本机执行并回传截图。"
     }
   ],
   "decisions": [
@@ -606,6 +621,17 @@
       "dimension": "取舍与反思",
       "question": "这次如果重来一遍，最应该提前做的一件事是什么？",
       "answer": "我观察到本次很多问题都源于前期协议对齐不充分、评测基线缺失。我判断最该提前做的是先对齐官方协议规范，搭建本地最小验证环境和性能评测基线。重来的话我会第一天就完成协议对齐和基准测试框架搭建，避免后期反复踩协议的坑。"
+    }
+  ],
+  "student_artifacts": [
+    {
+      "id": "s1",
+      "kind": "terminal transcript",
+      "when": "2026-11-13 10:47 (Asia/Shanghai)",
+      "what": "学生本人在本机 PowerShell 里起容器、喂 6 条 JSON 请求、读回 6 条响应",
+      "command": "powershell -NoProfile -File G:\\codex\\tmp\\student-demo\\run.ps1",
+      "output": "{\"type\":\"ready\"}\n{\"id\":1,\"ok\":true,\"affected_rows\":0}\n{\"id\":2,\"ok\":true,\"affected_rows\":3}\n{\"id\":3,\"ok\":true,\"columns\":[\"id\",\"name\",\"d\"],\"rows\":[[1,\"a\",0.0],[3,\"c\",1.7320508075688772],[2,\"b\",5.0]]}\n{\"id\":4,\"ok\":true,\"columns\":[\"id\",\"name\"],\"rows\":[[2,\"b\"],[3,\"c\"]]}\n{\"id\":5,\"ok\":true,\"affected_rows\":1}\n{\"id\":6,\"ok\":true}",
+      "note": "镜像 mvdb:v6 由仓库 HEAD 构建；这一条没有经过 Agent 转述，是学生自己执行并截图回传的原始终端输出。"
     }
   ]
 }
