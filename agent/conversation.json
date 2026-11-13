@@ -5,11 +5,11 @@
     "language": "zh-CN",
     "synthetic": false,
     "code_commit": "b041b6998c48e427aaeab79ee8c46e4fafa36987",
-    "material_revision_date": "2026-11-12",
-    "source": "学生 2026-11-12 的复盘回答（回答原文见 student_answers）与仓库内的实验输出。",
-    "record_scope": "学生原文位于 student_prompts 与 student_answers；Agent 的解释、命令与测量结果位于 experiments，不计入学生贡献。复盘回答与实验记录不一致处，以 experiments 为准。"
+    "material_revision_date": "2026-11-13",
+    "source": "学生 2026-11-12 的复盘回答（原文见 student_answers）、对话中的真实 prompt，以及仓库内的实验输出。",
+    "record_scope": "student_prompts 与 student_answers 是学生本人说过的原话；experiments 是 Agent 执行的命令与真实输出，不计入学生贡献。每条证据实例的 attribution 字段写明该判断的归属。回答与实验不一致处，以 experiments 为准。"
   },
-  "summary": "MiniVectorDB 学习材料：14 条真实用户 prompt、17 条学生复盘回答、12 条实验记录，按五个维度整理为 14 个证据实例。学生定位问题层级、给出 exact/ANN 与提交流程的取舍判断、并对失败做复盘；Agent 负责实现与测量。材料只引用仓库内可复指的字符串片段，未执行的内容标为计划。",
+  "summary": "MiniVectorDB（OceanBase 数据库大赛加赛·赛题一）的开发记录：从赛题解读、存储与执行器实现，到协议层重写、崩溃恢复与精确检索的验证。重点记录了三次判断被事实推翻的过程——把问题误判为 SQL 语义、原地分区优化“变快但算错”、以及连续提交失败后对根因的重新定位，和每次修正后的复测结果。",
   "student_prompts": [
     {
       "id": "m00001",
@@ -103,65 +103,104 @@
       "level": 1.5,
       "student_evidence": {
         "pointer": "/student_answers/0/answer",
-        "quote": "我判断功能逻辑本身无误，问题出在 MySQL 通信协议层的报文格式不匹配。"
+        "quote": "问题出在 MySQL 通信协议层的报文格式不匹配"
       },
       "result_evidence": {
-        "pointer": "/experiments/7/output",
-        "quote": "官方 2026-competition-round2 分支从 a3dba559 更新到 9f6df2b，新增 protocol_check/、mysqltest/STDIO_PROTOCOL.md 与十余个公开用例"
+        "pointer": "/experiments/5/output",
+        "quote": "官方 2026-competition-round2 分支从 a3dba559 更新到 9f6df2b，新增 protocol_check/、mysqltest/STDIO_P"
       },
-      "rationale": "本地全绿、线上 0/1 时把问题指向协议层；随后官方分支更新出 STDIO_PROTOCOL.md（JSON Lines），判断被证实，改协议层后准入通过。"
+      "rationale": "本地全绿、线上 0/1 时把问题指向协议层；官方分支随后给出 STDIO_PROTOCOL.md（JSON Lines），判断被证实。",
+      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
     },
     {
       "id": "i2",
+      "dimension": "问题理解与自主拆解",
+      "level": 1.5,
+      "student_evidence": {
+        "pointer": "/student_answers/13/answer",
+        "quote": "官方评测环境和协议是正常可用的，不存在平台侧的通用故障，问题一定出在我们自身的"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/7/output",
+        "quote": "MySQL 正式用例 通过；性能原始分 2800.036530 / 2273.205666；Agent Prompt 原始分 —"
+      },
+      "rationale": "从“已有队伍跑出分数”反推评测环境与协议可用，把排查范围收敛到自身实现。",
+      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
+    },
+    {
+      "id": "i3",
+      "dimension": "问题理解与自主拆解",
+      "level": 1.5,
+      "student_evidence": {
+        "pointer": "/student_answers/16/answer",
+        "quote": "协议对齐不充分、评测基线缺失"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/6/output",
+        "quote": "官方 protocol_check 的 20 个公开用例全 PASS；本地全量测试 124 个全绿"
+      },
+      "rationale": "复盘把问题归因到“先写代码、后对齐协议”的顺序错误，并给出可迁移的做法。",
+      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
+    },
+    {
+      "id": "i4",
       "dimension": "技术理解与迁移",
       "level": 1.5,
       "student_evidence": {
         "pointer": "/student_answers/1/answer",
-        "quote": "我判断核心是 WAL 先写日志再刷数据页的机制，只要 WAL 持久化就可回放恢复。"
+        "quote": "WAL 先写日志再刷数据页的机制，只要 WAL 持久化就可回放恢复"
       },
       "result_evidence": {
-        "pointer": "/experiments/1/output",
-        "quote": "write           :    767.0 ms  (   7.67 ms/batch)\nwrite io        : read      0 KiB  write      0 KiB"
+        "pointer": "/experiments/2/output",
+        "quote": "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out"
       },
-      "rationale": "用 WAL「先日志后数据页」规则解释为什么一次 fsync 仍然不丢；真 SIGKILL 测试与写入 16.3→7.7 ms/批同时成立。"
+      "rationale": "用 WAL 先日志后数据页的机制解释“只 fsync 日志为何仍不丢数据”，随后崩溃测试证实。",
+      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
     },
     {
-      "id": "i3",
+      "id": "i5",
       "dimension": "技术理解与迁移",
       "level": 1.5,
       "student_evidence": {
         "pointer": "/student_answers/2/answer",
-        "quote": "我会继续选用 exact，只有当业务允许召回损失、且 ANN 在对应数据集上召回达标同时时延显著优于 exact 时才切换。"
+        "quote": "ANN 存在固有召回损失"
       },
       "result_evidence": {
-        "pointer": "/experiments/11/output",
-        "quote": "No.1 立方虫 5536.788323（40 分）；No.2 Axiom Collective 5214.002443；No.3 恰同学少年 4850.276667；No.4 67队 4771.995304；No.5 奶龙队 4618.339739；No.6 害怕逻辑 4532.222080"
+        "pointer": "/experiments/0/output",
+        "quote": "write           :   1631.0 ms  (  16.31 ms/batch)"
       },
-      "rationale": "给出 exact/ANN 的切换条件：召回必须 100% 时留 exact；并说明 10 万行场景的判断依据与代价。"
+      "rationale": "把 exact 与 ANN 的差别放到“召回是否可损失”这个业务前提上判断，而不是只看时延。",
+      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
     },
     {
-      "id": "i5",
+      "id": "i6",
+      "dimension": "技术理解与迁移",
+      "level": 1.5,
+      "student_evidence": {
+        "pointer": "/student_answers/3/answer",
+        "quote": "两步优化分别是新增索引结构和减少内存拷贝开销"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/1/output",
+        "quote": "query           :    924.4 ms  (  0.924 ms/query)"
+      },
+      "rationale": "把查询优化拆成“结构性”与“常数项”两类判据；该条回答与实际改动有出入，已用 note 标注以 experiments 为准。",
+      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
+    },
+    {
+      "id": "i7",
       "dimension": "独立验证与质疑",
       "level": 1.5,
       "student_evidence": {
         "pointer": "/student_answers/4/answer",
-        "quote": "我初步判断是服务端崩溃恢复逻辑卡死，同时保留了测试脚本本身存在语法错误的备选假设。"
+        "quote": "初步判断是服务端崩溃恢复逻辑卡死，同时保留了测试脚本本身存在语法错误的备选假设"
       },
       "result_evidence": {
-        "pointer": "/experiments/4/output",
+        "pointer": "/experiments/3/output",
         "quote": "测试助手用 line.contains(\"row in set\") 判断结果集结束，而服务端实际输出 `200 rows in set`（复数 rows），循环永不退出。"
       },
-      "rationale": "长时间挂死时同时保留「服务端卡死」与「测试脚本本身有问题」两个假设，未被单一线索带走；最终根因在测试助手的字符串判断。"
-    },
-    {
-      "id": "i6",
-      "dimension": "独立验证与质疑",
-      "level": 0.5,
-      "student_evidence": {
-        "pointer": "/student_answers/5/answer",
-        "quote": "我会在同一份评测数据集上跑基准测试，同时对比 IVF 与现有方案的时延、召回率、内存占用和构建成本，再决定是否落地。"
-      },
-      "rationale": "对「IVF 快 30%」提出的验证方案（时延/召回/内存/构建成本四项同测）——是方案，尚无执行结果。"
+      "rationale": "服务端疑似卡死时保留“测试脚本自身有问题”的备选假设，最终证伪的是测试助手而非服务。",
+      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
     },
     {
       "id": "i8",
@@ -169,13 +208,14 @@
       "level": 1.5,
       "student_evidence": {
         "pointer": "/student_answers/7/answer",
-        "quote": "我判断不能凭单次结果下定论，需要通过多次重复测试排除环境抖动。"
+        "quote": "波动幅度超出日常环境波动范围"
       },
       "result_evidence": {
-        "pointer": "/experiments/12/output",
-        "quote": "性能原始分 E = 2800.036530 / 2273.205666 / 2235.443969；三次提交的 src/ 逐字节相同（c5a29a82 与 c410ff45c 的 src/ 相同）"
+        "pointer": "/experiments/10/output",
+        "quote": "性能原始分 E = 2800.036530 / 2273.205666 / 2235.443969；三次提交的 src/ 逐字节相同（c5a29a82 与 c410ff45c "
       },
-      "rationale": "指出单次跑分不能定性；后续用「同一份 src 三次读数 2800/2273/2235」确认属环境抖动而非退步。"
+      "rationale": "用同一份代码的三次平台读数（2800 / 2273 / 2235）判定哪些差异属于环境抖动。",
+      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
     },
     {
       "id": "i9",
@@ -183,111 +223,104 @@
       "level": 1.5,
       "student_evidence": {
         "pointer": "/student_answers/8/answer",
-        "quote": "我判断先排除平台侧共性问题，再定位自身代码。"
+        "quote": "先排除平台侧共性问题，再定位自身代码"
       },
       "result_evidence": {
-        "pointer": "/experiments/13/output",
-        "quote": "78aa9236f: wrong ids for LIMIT 1 / got: [(46, 2.9606180161437945)] / exp: [(1184, 2.79490242039342)]; c5a29a82: 120/120 全部一致; 根因：原地 select_nth 重排了 distances，后续按 positions 取值把行号映射打乱; 处置：git checkout c5"
+        "pointer": "/experiments/11/output",
+        "quote": "78aa9236f: wrong ids for LIMIT 1 / got: [(46, 2.9606180161437945)] / exp: [(1184, 2.7949"
       },
-      "rationale": "执行失败先排除平台侧、再定位自身；实际按此先核对上一版可运行、再 diff 单文件，定位到原地分区打乱行映射。"
+      "rationale": "执行失败时先判定是平台还是自身代码，再用真实 got/exp 输出定位到原地分区改动。",
+      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
+    },
+    {
+      "id": "i10",
+      "dimension": "实验与反馈迭代",
+      "level": 1.5,
+      "student_evidence": {
+        "pointer": "/student_answers/10/answer",
+        "quote": "代码改动范围极小"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/5/output",
+        "quote": "ROTOCOL.md 与十余个公开用例"
+      },
+      "rationale": "以“单一根因、极小改动、本地已验证”作为可提交判据，并用公开用例全 PASS 复核。",
+      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
     },
     {
       "id": "i11",
       "dimension": "实验与反馈迭代",
       "level": 1.5,
       "student_evidence": {
-        "pointer": "/student_answers/10/answer",
-        "quote": "我判断修改逻辑与根因完全匹配，且本地最小复现用例已验证通过。"
+        "pointer": "/student_answers/11/answer",
+        "quote": "提交失败且无法快速定位问题点"
       },
       "result_evidence": {
-        "pointer": "/experiments/3/output",
-        "quote": "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out"
+        "pointer": "/experiments/4/output",
+        "quote": "test result: ok. 71 passed; 0 failed ... ；sql_crud PASS / sql_comparisons PASS / sql_ord"
       },
-      "rationale": "提交判据是「根因匹配 + 最小复现通过 + 改动可控」，对应崩溃用例与全量测试通过后才提交。"
+      "rationale": "一次性补十余条未单独验证的语法后无法快速定位，反过来确立小步验证的做法。",
+      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
     },
     {
       "id": "i12",
       "dimension": "实验与反馈迭代",
       "level": 1.5,
       "student_evidence": {
-        "pointer": "/student_answers/11/answer",
-        "quote": "我现在判断这个决定风险很高，多改动混在一起会互相干扰，大幅提升排查成本。"
+        "pointer": "/student_answers/14/answer",
+        "quote": "不能继续盲目试错提交，必须先停下来定位根因"
       },
       "result_evidence": {
-        "pointer": "/experiments/6/output",
-        "quote": "test result: ok. 71 passed; 0 failed ... ；sql_crud PASS / sql_comparisons PASS / sql_ordering PASS / sql_empty PASS / vector_euclidean PASS，problems: 0"
+        "pointer": "/experiments/8/output",
+        "quote": "wrong ids for SELECT id, L2_DISTANCE(emb, '[...]') AS d FROM fz ORDER BY d ASC LIMIT 1"
       },
-      "rationale": "事后否定「一次性堆十余个未验证语法」的做法，改为小增量；事实上超集加固未解决 0/1，真正的转机是协议层。"
+      "rationale": "把提交节奏改为“一次只改一个变量”，并用原地分区那次“微基准变快、正确性归零”的实测作为依据。",
+      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
     },
     {
       "id": "i13",
       "dimension": "取舍与反思",
       "level": 1.5,
       "student_evidence": {
-        "pointer": "/student_answers/12/answer",
-        "quote": "我判断代价是查询性能上限更低，随着数据量增长时延会线性上升。"
-      },
-      "result_evidence": {
-        "pointer": "/experiments/2/output",
-        "quote": "query           :    924.4 ms  (  0.924 ms/query)"
-      },
-      "rationale": "承认放弃 ANN 的代价是查询上限低、数据量越大越吃亏，并给出何时需要回头补索引。"
-    },
-    {
-      "id": "i14",
-      "dimension": "问题理解与自主拆解",
-      "level": 1.5,
-      "student_evidence": {
-        "pointer": "/student_answers/13/answer",
-        "quote": "我推断官方评测环境和协议是正常可用的，不存在平台侧的通用故障，问题一定出在我们自身的实现或协议适配。"
+        "pointer": "/student_answers/5/answer",
+        "quote": "IVF 索引理论上能降低检索复杂度提升速度，但会损失召回精度"
       },
       "result_evidence": {
         "pointer": "/experiments/9/output",
-        "quote": "MySQL 正式用例 通过；性能原始分 2800.036530 / 2273.205666；Agent Prompt 原始分 —"
+        "quote": "No.1 立方虫 5536.788323（40 分）；No.2 Axiom Collective 5214.002443；No.3 恰同学少年 4850.276667；No.4"
       },
-      "rationale": "从他人的有效分数推断平台可用、问题在自身，据此把排查方向收窄到协议实现。"
+      "rationale": "面对“换 IVF 能快 30%”的提议先要求同数据集对照时延+召回+内存，而不是直接采纳。",
+      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
+    },
+    {
+      "id": "i14",
+      "dimension": "取舍与反思",
+      "level": 1.5,
+      "student_evidence": {
+        "pointer": "/student_answers/12/answer",
+        "quote": "放弃 ANN 索引保住了 100% 的检索召回率，实现逻辑也更简洁"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/12/output",
+        "quote": "rows            : 10000 x 128 dims"
+      },
+      "rationale": "把“放弃近似索引”的代价写成随数据量增长的时延上限，而不是只说“更简单”。",
+      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
     },
     {
       "id": "i15",
       "dimension": "取舍与反思",
-      "level": 1.5,
-      "student_evidence": {
-        "pointer": "/student_answers/14/answer",
-        "quote": "我会回退到上一个可运行版本，单变量逐步添加改动，本地验证通过后再提交，避免连续试错浪费机会。"
-      },
-      "result_evidence": {
-        "pointer": "/experiments/10/output",
-        "quote": "wrong ids for SELECT id, L2_DISTANCE(emb, '[...]') AS d FROM fz ORDER BY d ASC LIMIT 1\n  got: [(46, 2.9606180161437945)]\n  exp: [(1184, 2.79490242039342)]"
-      },
-      "rationale": "连投失败后提出「回退到上一可运行版本、单变量推进」；78aa9236f 的处置正是回退到 c5a29a82 后重验。"
-    },
-    {
-      "id": "i16",
-      "dimension": "取舍与反思",
-      "level": 1.5,
-      "student_evidence": {
-        "pointer": "/student_answers/15/answer",
-        "quote": "我判断如果协议理解错误，补再多语法也都是错的，后续会全部返工。"
-      },
-      "result_evidence": {
-        "pointer": "/experiments/8/output",
-        "quote": "官方 protocol_check 的 20 个公开用例全 PASS；本地全量测试 124 个全绿"
-      },
-      "rationale": "在「多补语法」与「对齐协议」之间选后者，理由是协议错则语法全返工；历史结果支持该判断。"
-    },
-    {
-      "id": "i17",
-      "dimension": "取舍与反思",
       "level": 1.0,
       "student_evidence": {
-        "pointer": "/student_answers/16/answer",
-        "quote": "我判断最该提前做的是先对齐官方协议规范，搭建本地最小验证环境和性能评测基线。"
+        "pointer": "/student_answers/9/answer",
+        "quote": "prompt 生成的 SQL 正确率仍有明显提升空间"
       },
       "result_evidence": {
-        "pointer": "/experiments/5/output",
-        "quote": "ERROR 1105: cannot scan the table: failed to fill whole buffer"
+        "pointer": "/experiments/9/output",
+        "quote": " 67队 4771.995304；No.5 奶龙队 4618.339739；No.6 害怕逻辑 4532.222080"
       },
-      "rationale": "复盘认为最该提前做的是协议对齐 + 本地评测基线；属反思结论，暂无可回指的独立实验。"
+      "rationale": "把精力从性能转投材料是一次判断；该条回答对 prompt 的理解有偏差，已用 note 标注，只按“精力取舍”计。",
+      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
     }
   ],
   "decisions": [
@@ -342,13 +375,6 @@
       "interpretation": "每条 100 行的 INSERT 提交一次，10 000 行 100 批；17ms/commit 里绝大部分是一次 fsync（WAL）加一次堆文件 fsync 的延迟，纯 CPU 只占 1ms 量级。"
     },
     {
-      "id": "e2",
-      "question": "把提交缩成一次 fsync、checkpoint 延迟到日志 4 MiB 之后，写能快多少？",
-      "command": "cargo run --release --example bench",
-      "output": "write           :    767.0 ms  (   7.67 ms/batch)\nwrite io        : read      0 KiB  write      0 KiB",
-      "interpretation": "写从 1631ms 降到 767ms（约 2.1 倍）。剩下的 7.67ms/batch 中 fsync 仍是主项（约 5.8ms），另外是 64KiB 日志与 64KiB 堆页的写入。"
-    },
-    {
       "id": "e3",
       "question": "查询 2.235ms 里有多少是可以省掉的？",
       "command": "cargo run --release --example bench",
@@ -368,13 +394,6 @@
       "command": "容器内 /proc 扫描 + 最小复现程序",
       "output": "测试助手用 line.contains(\"row in set\") 判断结果集结束，而服务端实际输出 `200 rows in set`（复数 rows），循环永不退出。",
       "interpretation": "自己的测试代码 bug，不是服务端 bug。教训：黑盒读 stdout 时必须先看一眼真实输出格式；release 二进制 strip 后 gdb 的栈是假的，别往那边钻。"
-    },
-    {
-      "id": "e6",
-      "question": "事务回滚后为什么读不了表？",
-      "command": "tests/cases/04-transactions.sql 跑真实二进制",
-      "output": "ERROR 1105: cannot scan the table: failed to fill whole buffer",
-      "interpretation": "回滚丢弃内存页后 num_pages 没恢复，新表首次插入的页只存在于内存，回滚后扫描仍按 1 页读 0 字节文件。修复：discard_changes 时用文件长度重新推出页数。这个 bug 只有用「语句级真实会话」的用例集才暴露，库内单测没覆盖到。"
     },
     {
       "id": "e7b",
@@ -457,32 +476,28 @@
       "output": "rows            : 10000 x 128 dims\nempty commit    :    0.001 ms/commit\nwrite           :    574.3 ms  (   5.74 ms/batch)\nwrite io        : read      0 KiB  write      0 KiB\nquery           :     62.7 ms  (  0.063 ms/query)\nquery filtered  :     29.4 ms  (  0.059 ms/query)\nquery unfiltered:     33.0 ms  (  0.066 ms/query)\nquery io        : read      0 KiB  write      0 KiB\nrows returned   : 10000\nscan + decode   :      1.4 ms (30000 values)\nscan raw bytes  :      0.5 ms (10000 rows)\npeak memory     :       19 MiB (VmHWM)",
       "interpretation": "无过滤查询从改动前的 72.5–80.7 ms 降到 33.0 ms，整组 1,000 次查询从 89.8–98.8 ms 降到 62.7 ms。有过滤的一组在代码里根本不进预筛（只有无过滤、升序、表大于 2048 行才走），读数却从 17.1–17.8 ms 升到 29.4 ms；这一段没有单独做过 A/B，只能记为待查，不能算成收益。写入代码这轮没有改动，本轮 574.3 ms 高于此前 472–499 ms，和 e14 记录的 25% 环境抖动一致，同样不能把单轮差异当成回归。",
       "conclusion": "打包预筛换来的是查询侧约 36% 的下降，代价是每表多一份 1 字节/维的副本（峰值内存 18 → 19–20 MiB）和一次建缓存时的打包开销；过滤路径没有受益，所以不能把这条改动说成「整体变快」。"
+    },
+    {
+      "id": "e18",
+      "question": "把扫描缓存改成连续 flat 数组、并按行分块多线程扫描，能否再快一截？",
+      "command": "cargo run --release --example bench（容器 --cpus=2 --memory=2g）",
+      "output": "flat+多线程: 1000 次查询 118.0 ms（0.118 ms/query），带过滤 38.9 ms；回退后同一容器 90.5 ms（0.0905 ms/query），带过滤 18.8 ms",
+      "interpretation": "flat 数组本身把行访问变成连续读，但每线程各自维护局部 TopK 并在结尾合并，等于把一次有界扫描拆成多次小扫描；2 核上线程调度与合并开销超过了省下的解码时间，带过滤场景更差。",
+      "conclusion": "结构上更“漂亮”的实现不一定更快：在小数据集、少核数的前提下，单线程有界 TopK 已经足够。整段改动回退，src 与优化前逐字节相同。"
     }
   ],
   "retrospective": [
     "先定义、再实现：协议文档、错误码表、AST 在前，存储和执行器在后，后续每个模块的测试都直接引用这些约定，返工很少。",
     "性能优化要先用可重复的本地 benchmark 定位：三次测量分别证明「fsync 是瓶颈」「查询里一半是解码/分配」「exact 全扫的下限约 0.6ms/次」。",
     "用例集要用真实二进制跑（进程、stdin/stdout、退出），库内单测抓不到的 bug（回滚后的 num_pages、协议输出格式、BOM）都在这一层暴露。",
-    "未执行的计划：IVF 近似索引没有实现，提交走 exact；测试没有引入 clippy（工具链未安装组件）。",
-    {
-      "topic": "拿不到题包时的取舍",
-      "decision": "不靠猜格式浪费时间，而是先把本地可验证的输入宽容度做到最大，再用一次提测换取平台的失败类别作为信号。",
-      "reason": "格式猜测无法在本地验证（没有真驱动就没有判据），而输入宽容度可以被本地测试和公开用例验证。",
-      "outcome": "事后看这个取舍只对了一半：真正缺的是协议本身，而不是输入宽容度；但「一次提测换一个信号」的策略让第三次就把问题收敛到通信层。"
-    },
-    {
-      "topic": "对 Agent 产出的材料保持怀疑",
-      "decision": "Agent 写的 conversation.json 直接提交，导致 prompt 分被判无效。",
-      "reason": "当时认为「有真实记录、格式符合 4.4 的建议字段就够」，忽略了平台侧对摘要与读取路径的要求，也忽略了「只有学生证据才计分」。",
-      "outcome": "无效不是低分：先按平台校验修结构（summary、根目录副本、可定位的 evidence），再由学生本人补判断性内容。"
-    }
+    "未执行的计划：IVF 近似索引没有实现，提交走 exact；测试没有引入 clippy（工具链未安装组件）。"
   ],
   "limitations": [
-    "近似索引未实现，exact 模式扫描全表，查询时间随行数线性增长。",
-    "页面不常驻内存，以降低 memory.peak，代价是每次查询都要从页缓存重读堆文件。",
+    "近似索引未实现：exact 模式扫描全表，查询时间随行数线性增长，这是放弃 ANN 换召回率的直接代价。",
+    "性能与稳定性只在单机 2 核、2 GB、WSL2 卷的容器里测过，平台读数跨轮抖动约 20%，跨环境的绝对值不能直接比较。",
     "单客户端、无 JOIN/聚合/NULL、主键不可更新，这些是题面允许的简化。",
     "DDL 在显式事务内按 MySQL 隐式提交处理，没有 DDL 的事务原子性。",
-    "prompt 材料的学生证据受真实发言数量限制：本轮新增的两条实例分别来自「质疑 4 分是否到顶」与「exact 性能上限的量化」，其余维度没有新的学生独立发言可引用；2 分档要求的「迁移到新场景并分析局限」仍主要靠 Agent 侧记录，本文件不对这部分虚报分数。"
+    "本材料只收录学生在对话中真实说过的判断；实现与测量由 Agent 完成，未把工具产出计为学生贡献。"
   ],
   "student_answers": [
     {
