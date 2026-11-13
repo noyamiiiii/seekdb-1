@@ -26,16 +26,13 @@ use crate::schema::TableSchema;
 
 use catalog::Catalog;
 use heap::{HeapFile, Rid};
+use page::PAGE_SIZE;
 use wal::Wal;
 
 /// Converts an I/O failure into the protocol's generic error.
 fn io_err(context: &str, err: io::Error) -> DbError {
     DbError::new(ErrorCode::Unknown, format!("{context}: {err}"))
 }
-
-/// The log is truncated once it grows past this size: every buffered page is
-/// written back and fsynced first, so replay stays short and memory bounded.
-const CHECKPOINT_BYTES: u64 = 4 * 1024 * 1024;
 
 /// fsyncs a directory so that file creations and removals survive a power cut.
 fn sync_dir(dir: &Path) -> io::Result<()> {
@@ -322,6 +319,16 @@ impl Storage {
     fn make_durable(&mut self, txn_id: u64) -> DbResult<()> {
         let dirty = self.tables.values().any(|t| t.heap.has_dirty());
         if dirty {
+            // Rewind the log before a transaction that would leave the warm
+            // window, so records keep rewriting extents the filesystem already
+            // owns. A transaction bigger than the window grows it instead.
+            let need = self.log_need();
+            if !self.wal.fits(need) {
+                self.rewind_log()?;
+            }
+            self.wal
+                .reserve(need)
+                .map_err(|e| io_err("cannot grow the log", e))?;
             {
                 let Storage { tables, wal, .. } = self;
                 wal.begin(txn_id).map_err(|e| io_err("cannot begin log transaction", e))?;
@@ -333,19 +340,12 @@ impl Storage {
             }
             // The log now survives a crash on its own, so the heap pages can be
             // written back without waiting for their own fsync. They are only
-            // made durable by the next checkpoint, before the log is truncated.
+            // made durable by the next checkpoint, before the log is rewound.
             for table in self.tables.values_mut() {
                 table
                     .heap
                     .write_dirty()
                     .map_err(|e| io_err("cannot write heap pages", e))?;
-            }
-            let log_bytes = self
-                .wal
-                .bytes()
-                .map_err(|e| io_err("cannot size the log", e))?;
-            if log_bytes >= CHECKPOINT_BYTES {
-                self.checkpoint()?;
             }
         }
         if std::mem::take(&mut self.catalog_dirty) {
@@ -356,11 +356,43 @@ impl Storage {
         Ok(())
     }
 
+    /// Log bytes the open transaction's page images will need, including the
+    /// per-record table name and page id.
+    fn log_need(&self) -> u64 {
+        let mut need = 0u64;
+        for (name, table) in &self.tables {
+            let pages = table.heap.dirty_page_count() as u64;
+            let per_record = (PAGE_SIZE + 14 + name.len()) as u64;
+            need = need.saturating_add(pages.saturating_mul(per_record));
+        }
+        // Begin and commit marks.
+        need.saturating_add(2 * 13)
+    }
+
+    /// Makes the heap files durable and rewinds the log, without touching the
+    /// open transaction's pages.
+    ///
+    /// Every committed page already sits in its heap file (the commit path
+    /// writes the images back as soon as the log has them), so one `fsync` per
+    /// heap makes the log disposable. The transaction in flight is still in
+    /// memory: writing it here would persist changes a crash could not undo.
+    fn rewind_log(&mut self) -> DbResult<()> {
+        for table in self.tables.values_mut() {
+            table
+                .heap
+                .sync()
+                .map_err(|e| io_err("cannot sync heap pages", e))?;
+        }
+        self.wal
+            .reset()
+            .map_err(|e| io_err("cannot rewind the log", e))?;
+        Ok(())
+    }
+
     /// Writes every buffered page back to its heap file and truncates the log.
     ///
-    /// Called once the log grows past [`CHECKPOINT_BYTES`], and when the session
-    /// shuts down cleanly, so that a restart does not have to replay a long
-    /// log.
+    /// Called before the log window is rewound, and when the session shuts down
+    /// cleanly, so that a restart does not have to replay a long log.
     pub fn checkpoint(&mut self) -> DbResult<()> {
         for table in self.tables.values_mut() {
             if table.heap.has_dirty() {

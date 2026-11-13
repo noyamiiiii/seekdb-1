@@ -243,6 +243,11 @@ impl HeapFile {
         !self.dirty.is_empty() || !self.spilled.is_empty()
     }
 
+    /// Upper bound on the page images the open transaction would log.
+    pub fn dirty_page_count(&self) -> usize {
+        self.dirty.len() + self.spilled.len()
+    }
+
     pub fn for_each_dirty<F>(&mut self, mut visit: F) -> io::Result<()>
     where F: FnMut(u32, &[u8]) -> io::Result<()> {
         for id in &self.spilled {

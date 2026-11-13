@@ -131,6 +131,53 @@ pub fn quantized_scores(
     true
 }
 
+/// The squared norm of one packed row, precomputed once per table cache.
+pub fn quantized_norm(codes: &[u8]) -> u32 {
+    codes.iter().map(|&code| u32::from(code) * u32::from(code)).sum()
+}
+
+/// The same packed scores as [`quantized_scores`], computed from precomputed
+/// row norms as `|query|^2 + |row|^2 - 2 query·row`.
+///
+/// Every term stays a small integer (`127^2 * dimensions` fits in `i32`), so
+/// the result is bit-identical to the subtract-and-square kernel while the
+/// inner loop needs one multiply-add per byte pair instead of three vector
+/// operations. The caller supplies `norms` from [`quantized_norm`].
+pub fn quantized_scores_dot(
+    query: &[u8],
+    data: &[u8],
+    dimensions: usize,
+    rows: usize,
+    norms: &[u32],
+    out: &mut [u32],
+) -> bool {
+    const MAX_DIMENSIONS: usize = i32::MAX as usize / (127 * 127);
+    if query.len() != dimensions
+        || data.len() != dimensions.saturating_mul(rows)
+        || out.len() != rows
+        || norms.len() != rows
+        || dimensions > MAX_DIMENSIONS
+    {
+        return false;
+    }
+    #[cfg(target_arch = "x86_64")]
+    if std::is_x86_feature_detected!("avx2") {
+        // SAFETY: the length checks above establish every load and store bound.
+        unsafe { quantized_scores_dot_avx2(query, data, dimensions, rows, norms, out) };
+        return true;
+    }
+    let query_norm: i32 = query.iter().map(|&q| i32::from(q) * i32::from(q)).sum();
+    for (row, score) in out.iter_mut().enumerate() {
+        let mut dot = 0i32;
+        for dimension in 0..dimensions {
+            dot += i32::from(query[dimension])
+                * i32::from(data[row * dimensions + dimension]);
+        }
+        *score = (query_norm + norms[row] as i32 - 2 * dot) as u32;
+    }
+    true
+}
+
 /// Scores one packed 7-bit vector. Filtered TopK visits scattered rows, so it
 /// needs the same integer kernel one row at a time instead of a full sweep.
 pub fn quantized_score_row(query: &[u8], row: &[u8]) -> Option<u32> {
@@ -362,6 +409,69 @@ unsafe fn quantized_scores_avx2(
 }
 
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn quantized_scores_dot_avx2(
+    query: &[u8],
+    data: &[u8],
+    dimensions: usize,
+    rows: usize,
+    norms: &[u32],
+    out: &mut [u32],
+) {
+    use std::arch::x86_64::*;
+
+    let ones = _mm256_set1_epi16(1);
+    let blocks = dimensions / 32;
+    let resident = blocks.min(4);
+    let mut query_blocks = [_mm256_setzero_si256(); 4];
+    for (block, slot) in query_blocks.iter_mut().enumerate().take(resident) {
+        *slot = _mm256_loadu_si256(query.as_ptr().add(block * 32).cast());
+    }
+    let mut query_norm = 0i32;
+    for &component in query {
+        query_norm += i32::from(component) * i32::from(component);
+    }
+    for row in 0..rows {
+        let base = data.as_ptr().add(row * dimensions);
+        let mut acc0 = _mm256_setzero_si256();
+        let mut acc1 = _mm256_setzero_si256();
+        let mut block = 0usize;
+        while block + 2 <= resident {
+            acc0 = _mm256_add_epi32(
+                acc0,
+                packed_block_dot(base.add(block * 32), query_blocks[block], ones),
+            );
+            acc1 = _mm256_add_epi32(
+                acc1,
+                packed_block_dot(base.add((block + 1) * 32), query_blocks[block + 1], ones),
+            );
+            block += 2;
+        }
+        if block < resident {
+            acc0 = _mm256_add_epi32(
+                acc0,
+                packed_block_dot(base.add(block * 32), query_blocks[block], ones),
+            );
+            block += 1;
+        }
+        while block < blocks {
+            let q = _mm256_loadu_si256(query.as_ptr().add(block * 32).cast());
+            acc0 = _mm256_add_epi32(acc0, packed_block_dot(base.add(block * 32), q, ones));
+            block += 1;
+        }
+        let mut dot = horizontal_sum(_mm256_add_epi32(acc0, acc1));
+        let mut dimension = blocks * 32;
+        while dimension < dimensions {
+            dot += i32::from(*query.get_unchecked(dimension))
+                * i32::from(*data.get_unchecked(row * dimensions + dimension));
+            dimension += 1;
+        }
+        let score = query_norm + *norms.get_unchecked(row) as i32 - 2 * dot;
+        *out.get_unchecked_mut(row) = score as u32;
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
 type V256 = std::arch::x86_64::__m256i;
 
 #[cfg(target_arch = "x86_64")]
@@ -413,6 +523,19 @@ unsafe fn packed_block_squares(data: *const u8, query: V256, ones: V256) -> V256
     // their 16-bit pair sums stay inside their ranges.
     let difference = _mm256_or_si256(_mm256_subs_epu8(x, query), _mm256_subs_epu8(query, x));
     _mm256_madd_epi16(_mm256_maddubs_epi16(difference, difference), ones)
+}
+
+/// Dot product of one 32-component packed block with the query block. The
+/// stored bytes are unsigned, the query bytes are in `0..=127` so they read as
+/// positive signed bytes, and a pair sum is at most `2 * 127 * 127 = 32258`,
+/// which still fits in `i16`.
+#[cfg(target_arch = "x86_64")]
+#[inline(always)]
+unsafe fn packed_block_dot(data: *const u8, query: V256, ones: V256) -> V256 {
+    use std::arch::x86_64::*;
+
+    let x = _mm256_loadu_si256(data.cast());
+    _mm256_madd_epi16(_mm256_maddubs_epi16(x, query), ones)
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -574,6 +697,28 @@ fn encode(values: &[f32]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dot_kernel_matches_subtract_kernel_exactly() {
+        let mut state = 0x1234_5678u64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            ((state >> 33) & 0x7f) as u8
+        };
+        for dim in [1usize, 7, 31, 32, 33, 64, 100, 128, 129, 256] {
+            let rows = 23;
+            let query: Vec<u8> = (0..dim).map(|_| next()).collect();
+            let data: Vec<u8> = (0..dim * rows).map(|_| next()).collect();
+            let norms: Vec<u32> = data.chunks_exact(dim).map(quantized_norm).collect();
+            let mut expected = vec![0u32; rows];
+            let mut actual = vec![0u32; rows];
+            assert!(quantized_scores(&query, &data, dim, rows, &mut expected));
+            assert!(quantized_scores_dot(&query, &data, dim, rows, &norms, &mut actual));
+            assert_eq!(expected, actual, "dot kernel disagrees at dimension {dim}");
+        }
+    }
 
     #[test]
     fn stored_simd_matches_f64_reference_on_unaligned_bytes_and_all_tails() {

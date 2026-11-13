@@ -53,6 +53,9 @@ struct RawScanCache {
     ranges: Vec<CachedRow>,
     /// Row-major 7-bit vectors and their affine quantization.
     quantized: Vec<u8>,
+    /// Squared norm of each packed row, so one query scores a row with a
+    /// multiply-add instead of a subtract and two multiplies.
+    quant_norms: Vec<u32>,
     quant_dim: usize,
     quant_min: f32,
     quant_step: f32,
@@ -620,17 +623,18 @@ impl Session {
             })?;
         }
         if !fits { bytes = Vec::new(); ranges = Vec::new(); }
-        let (quantized, quant_min, quant_step, quant_dim) = if fits {
+        let (quantized, quant_norms, quant_min, quant_step, quant_dim) = if fits {
             quantize_cached_vectors(&bytes, &ranges, vector_dim, count)
-                .unwrap_or_else(|| (Vec::new(), 0.0, 0.0, 0))
+                .unwrap_or_else(|| (Vec::new(), Vec::new(), 0.0, 0.0, 0))
         } else {
-            (Vec::new(), 0.0, 0.0, 0)
+            (Vec::new(), Vec::new(), 0.0, 0.0, 0)
         };
         self.scan_cache = Some(RawScanCache {
             table: key,
             bytes: fits.then_some(bytes),
             ranges,
             quantized,
+            quant_norms,
             quant_dim,
             quant_min,
             quant_step,
@@ -745,7 +749,7 @@ fn quantize_cached_vectors(
     ranges: &[CachedRow],
     vector_dim: usize,
     count: usize,
-) -> Option<(Vec<u8>, f32, f32, usize)> {
+) -> Option<(Vec<u8>, Vec<u32>, f32, f32, usize)> {
     if vector_dim == 0 || count == 0 {
         return None;
     }
@@ -770,13 +774,15 @@ fn quantize_cached_vectors(
     }
     let inverse_step = 1.0 / step;
     let mut packed = vec![0u8; packed_len];
+    let mut norms = Vec::with_capacity(count);
     for (row_index, row) in ranges.iter().enumerate() {
         let start = row.vector_start as usize;
         let vector = bytes.get(start..start + width)?;
         let target = &mut packed[row_index * vector_dim..(row_index + 1) * vector_dim];
         distance::pack_stored_vector(vector, low, inverse_step, target);
+        norms.push(distance::quantized_norm(target));
     }
-    Some((packed, low, step, vector_dim))
+    Some((packed, norms, low, step, vector_dim))
 }
 
 /// Uses the packed 7-bit vectors as a conservative lower-bound pass. Any row
@@ -794,6 +800,7 @@ fn select_quantized_topk(
         || dimensions == 0
         || cache.quant_dim != dimensions
         || cache.quantized.len() != count.saturating_mul(dimensions)
+        || cache.quant_norms.len() != count
         || !(cache.quant_step > 0.0)
     {
         return Ok(None);
@@ -853,14 +860,16 @@ fn select_quantized_topk(
                 let RawScanCache {
                     query_quantized,
                     quantized,
+                    quant_norms,
                     quant_scores,
                     ..
                 } = cache;
-                distance::quantized_scores(
+                distance::quantized_scores_dot(
                     query_quantized,
                     quantized,
                     dimensions,
                     count,
+                    quant_norms,
                     quant_scores,
                 )
             };
