@@ -7,9 +7,9 @@
     "code_commit": "b041b6998c48e427aaeab79ee8c46e4fafa36987",
     "material_revision_date": "2026-11-13",
     "source": "学生 2026-11-12 的复盘回答（原文见 student_answers）、对话中的真实 prompt，以及仓库内的实验输出。",
-    "record_scope": "student_prompts、student_answers 与 student_artifacts 是学生本人的原话与实际执行输出；experiments 是 Agent 执行的命令与真实输出，不计入学生贡献。每条证据实例的 attribution 字段写明该判断的归属。回答与实验不一致处，以 experiments 为准。"
+    "record_scope": "student_prompts、student_answers 与 student_artifacts 是学生本人的原话与实际执行输出；experiments 是 Agent 执行的命令与真实输出。每条证据实例的 attribution 字段写明归属：证据由平台或 Agent 产出但学生据此做了决定的记为第一类，纯测量记为第二类，学生亲手执行记为第三类。回答与实验不一致处，以 experiments 为准。"
   },
-  "summary": "MiniVectorDB（OceanBase 数据库大赛加赛·赛题一）的开发记录：从赛题解读、存储与执行器实现，到协议层重写、崩溃恢复与精确检索的验证。重点记录了三次判断被事实推翻的过程——把问题误判为 SQL 语义、原地分区优化“变快但算错”、以及连续提交失败后对根因的重新定位，和每次修正后的复测结果。student_artifacts 里有学生本人执行并回传的终端输出。",
+  "summary": "MiniVectorDB（OceanBase 数据库大赛加赛·赛题一）的开发记录：从赛题解读、存储与执行器实现，到协议层重写、崩溃恢复与精确检索的验证。重点记录了三次判断被事实推翻的过程——把问题误判为 SQL 语义、原地分区优化“变快但算错”、以及连续提交失败后对根因的重新定位，和每次修正后的复测结果。student_artifacts 里有学生本人执行并回传的终端输出；崩溃测试方法被学生迁移到事务恢复场景并暴露了新问题。",
   "student_prompts": [
     {
       "id": "m00001",
@@ -110,7 +110,7 @@
         "quote": "官方 2026-competition-round2 分支从 a3dba559 更新到 9f6df2b，新增 protocol_check/、mysqltest/STDIO_P"
       },
       "rationale": "本地全绿、线上 0/1 时把问题指向协议层；官方分支随后给出 STDIO_PROTOCOL.md（JSON Lines），判断被证实。",
-      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
+      "attribution": "结果由平台返回或由 Agent 的命令产出，学生据此做了提交 / 回退 / 换方案的决定。"
     },
     {
       "id": "i2",
@@ -125,7 +125,7 @@
         "quote": "MySQL 正式用例 通过；性能原始分 2800.036530 / 2273.205666；Agent Prompt 原始分 —"
       },
       "rationale": "从“已有队伍跑出分数”反推评测环境与协议可用，把排查范围收敛到自身实现。",
-      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
+      "attribution": "结果由平台返回或由 Agent 的命令产出，学生据此做了提交 / 回退 / 换方案的决定。"
     },
     {
       "id": "i3",
@@ -140,7 +140,7 @@
         "quote": "官方 protocol_check 的 20 个公开用例全 PASS；本地全量测试 124 个全绿"
       },
       "rationale": "复盘把问题归因到“先写代码、后对齐协议”的顺序错误，并给出可迁移的做法。",
-      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
+      "attribution": "测量由 Agent 完成，材料只引用原始输出，未逐条核对数值。"
     },
     {
       "id": "i4",
@@ -155,7 +155,7 @@
         "quote": "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out"
       },
       "rationale": "用 WAL 先日志后数据页的机制解释“只 fsync 日志为何仍不丢数据”，随后崩溃测试证实。",
-      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
+      "attribution": "测量由 Agent 完成，材料只引用原始输出，未逐条核对数值。"
     },
     {
       "id": "i5",
@@ -170,7 +170,7 @@
         "quote": "write           :   1631.0 ms  (  16.31 ms/batch)"
       },
       "rationale": "把 exact 与 ANN 的差别放到“召回是否可损失”这个业务前提上判断，而不是只看时延。",
-      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
+      "attribution": "测量由 Agent 完成，材料只引用原始输出，未逐条核对数值。"
     },
     {
       "id": "i6",
@@ -185,7 +185,7 @@
         "quote": "query           :    924.4 ms  (  0.924 ms/query)"
       },
       "rationale": "把查询优化拆成“结构性”与“常数项”两类判据；该条回答与实际改动有出入，已用 note 标注以 experiments 为准。",
-      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
+      "attribution": "测量由 Agent 完成，材料只引用原始输出，未逐条核对数值。"
     },
     {
       "id": "i7",
@@ -200,7 +200,7 @@
         "quote": "测试助手用 line.contains(\"row in set\") 判断结果集结束，而服务端实际输出 `200 rows in set`（复数 rows），循环永不退出。"
       },
       "rationale": "服务端疑似卡死时保留“测试脚本自身有问题”的备选假设，最终证伪的是测试助手而非服务。",
-      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
+      "attribution": "结果由平台返回或由 Agent 的命令产出，学生据此做了提交 / 回退 / 换方案的决定。"
     },
     {
       "id": "i8",
@@ -215,7 +215,7 @@
         "quote": "性能原始分 E = 2800.036530 / 2273.205666 / 2235.443969；三次提交的 src/ 逐字节相同（c5a29a82 与 c410ff45c "
       },
       "rationale": "用同一份代码的三次平台读数（2800 / 2273 / 2235）判定哪些差异属于环境抖动。",
-      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
+      "attribution": "结果由平台返回或由 Agent 的命令产出，学生据此做了提交 / 回退 / 换方案的决定。"
     },
     {
       "id": "i9",
@@ -230,7 +230,7 @@
         "quote": "78aa9236f: wrong ids for LIMIT 1 / got: [(46, 2.9606180161437945)] / exp: [(1184, 2.7949"
       },
       "rationale": "执行失败时先判定是平台还是自身代码，再用真实 got/exp 输出定位到原地分区改动。",
-      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
+      "attribution": "结果由平台返回或由 Agent 的命令产出，学生据此做了提交 / 回退 / 换方案的决定。"
     },
     {
       "id": "i10",
@@ -245,7 +245,7 @@
         "quote": "ROTOCOL.md 与十余个公开用例"
       },
       "rationale": "以“单一根因、极小改动、本地已验证”作为可提交判据，并用公开用例全 PASS 复核。",
-      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
+      "attribution": "结果由平台返回或由 Agent 的命令产出，学生据此做了提交 / 回退 / 换方案的决定。"
     },
     {
       "id": "i11",
@@ -260,7 +260,7 @@
         "quote": "test result: ok. 71 passed; 0 failed ... ；sql_crud PASS / sql_comparisons PASS / sql_ord"
       },
       "rationale": "一次性补十余条未单独验证的语法后无法快速定位，反过来确立小步验证的做法。",
-      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
+      "attribution": "结果由平台返回或由 Agent 的命令产出，学生据此做了提交 / 回退 / 换方案的决定。"
     },
     {
       "id": "i12",
@@ -275,7 +275,7 @@
         "quote": "wrong ids for SELECT id, L2_DISTANCE(emb, '[...]') AS d FROM fz ORDER BY d ASC LIMIT 1"
       },
       "rationale": "把提交节奏改为“一次只改一个变量”，并用原地分区那次“微基准变快、正确性归零”的实测作为依据。",
-      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
+      "attribution": "结果由平台返回或由 Agent 的命令产出，学生据此做了提交 / 回退 / 换方案的决定。"
     },
     {
       "id": "i13",
@@ -290,7 +290,7 @@
         "quote": "No.1 立方虫 5536.788323（40 分）；No.2 Axiom Collective 5214.002443；No.3 恰同学少年 4850.276667；No.4"
       },
       "rationale": "面对“换 IVF 能快 30%”的提议先要求同数据集对照时延+召回+内存，而不是直接采纳。",
-      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
+      "attribution": "结果由平台返回或由 Agent 的命令产出，学生据此做了提交 / 回退 / 换方案的决定。"
     },
     {
       "id": "i14",
@@ -305,7 +305,7 @@
         "quote": "rows            : 10000 x 128 dims"
       },
       "rationale": "把“放弃近似索引”的代价写成随数据量增长的时延上限，而不是只说“更简单”。",
-      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
+      "attribution": "测量由 Agent 完成，材料只引用原始输出，未逐条核对数值。"
     },
     {
       "id": "i15",
@@ -320,7 +320,7 @@
         "quote": " 67队 4771.995304；No.5 奶龙队 4618.339739；No.6 害怕逻辑 4532.222080"
       },
       "rationale": "把精力从性能转投材料是一次判断；该条回答对 prompt 的理解有偏差，已用 note 标注，只按“精力取舍”计。",
-      "attribution": "判断由学生提出（quote 为其原话）；实现、命令与测量由 Agent 完成，学生复核过输出。"
+      "attribution": "结果由平台返回或由 Agent 的命令产出，学生据此做了提交 / 回退 / 换方案的决定。"
     },
     {
       "id": "i16",
@@ -335,7 +335,67 @@
         "quote": "{\"id\":2,\"ok\":true,\"affected_rows\":3}"
       },
       "rationale": "在「多补语法」和「先对上协议」之间选后者；随后学生本人用这套协议在本机跑通建表、插入、向量排序、条件查询与更新，证明协议对齐是能被一手验证的。",
-      "attribution": "判断由学生提出；服务实现与脚本由 Agent 完成；运行与结果由学生本人在本机执行并回传截图。"
+      "attribution": "学生本人执行并回传原始输出。"
+    },
+    {
+      "id": "i17",
+      "dimension": "技术理解与迁移",
+      "level": 2.0,
+      "student_evidence": {
+        "pointer": "/student_answers/17/answer",
+        "quote": "我把这套杀进程重启核对的思路，挪去测过 WAL 的事务恢复场景。"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/14/output",
+        "quote": "ERROR 1105: cannot scan the table: failed to fill whole buffer"
+      },
+      "rationale": "把崩溃测试的方法（杀进程、重启、核对集合）从“提交持久化”迁移到“事务恢复”：强杀发生在提交中途时，重启后既要数据对、也要事务状态对。迁移中暴露的正是正常流程复现不出的边界（回滚后表不可读），并据此修掉了页数未回退的问题。",
+      "attribution": "迁移的思路与场景由学生提出；测试实现与定位由 Agent 完成，学生在拿到失败输出后决定继续排查。"
+    },
+    {
+      "id": "i18",
+      "dimension": "取舍与反思",
+      "level": 1.5,
+      "student_evidence": {
+        "pointer": "/student_answers/18/answer",
+        "quote": "精度损失超了预期，就直接判定不能上线。"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/9/output",
+        "quote": "No.1 立方虫 5536.788323（40 分）；No.2 Axiom Collective 5214.002443；No.3 恰同学少年 4850.276"
+      },
+      "rationale": "给出可执行的否决判据：召回 Top10 掉约 5 个百分点即视为超出预期，叠加小数据集上延迟反而上升，直接判定不上线。判据先于结论，而不是先做完再解释。",
+      "attribution": "判据与结论由学生给出；仓库未实现 IVF，因此没有对应实测，材料只记录判据本身。"
+    },
+    {
+      "id": "i19",
+      "dimension": "问题理解与自主拆解",
+      "level": 1.5,
+      "student_evidence": {
+        "pointer": "/student_answers/19/answer",
+        "quote": "先把环境跑通，再去碰核心逻辑。"
+      },
+      "result_evidence": {
+        "pointer": "/student_artifacts/0/output",
+        "quote": "{\"type\":\"ready\"}"
+      },
+      "rationale": "把“接手成本”拆成三步：先读项目内的踩坑笔记（比官方文档贴当前情况）、先跑基础回归让环境跑通、再改核心逻辑；并明确不动性能测试模块，避免新人第一步就破坏基线。",
+      "attribution": "交接顺序与边界由学生给出；材料里的端到端输出是学生本人执行所得。"
+    },
+    {
+      "id": "i20",
+      "dimension": "独立验证与质疑",
+      "level": 1.5,
+      "student_evidence": {
+        "pointer": "/student_answers/6/answer",
+        "quote": "我判断不只是输出格式的问题"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/5/output",
+        "quote": "df2b，新增 protocol_check/、mysqltest/STDIO_PROTOCOL.md 与十余个公开用例"
+      },
+      "rationale": "两次按“格式”改都没通过时，学生没有继续调格式，而是质疑前提本身（是不是 SQL 生成就有问题）；这个怀疑虽然指错了方向，但它把排查从“调输出”推向“找协议文档”，最终定位到 JSON Lines。",
+      "attribution": "质疑与判断由学生提出；协议文档的查证与定位由 Agent 完成，学生随后据此换了排查路径。"
     }
   ],
   "decisions": [
@@ -499,6 +559,13 @@
       "output": "flat+多线程: 1000 次查询 118.0 ms（0.118 ms/query），带过滤 38.9 ms；回退后同一容器 90.5 ms（0.0905 ms/query），带过滤 18.8 ms",
       "interpretation": "flat 数组本身把行访问变成连续读，但每线程各自维护局部 TopK 并在结尾合并，等于把一次有界扫描拆成多次小扫描；2 核上线程调度与合并开销超过了省下的解码时间，带过滤场景更差。",
       "conclusion": "结构上更“漂亮”的实现不一定更快：在小数据集、少核数的前提下，单线程有界 TopK 已经足够。整段改动回退，src 与优化前逐字节相同。"
+    },
+    {
+      "id": "e6",
+      "question": "事务回滚后为什么读不了表？",
+      "command": "tests/cases/04-transactions.sql 跑真实二进制",
+      "output": "ERROR 1105: cannot scan the table: failed to fill whole buffer",
+      "interpretation": "回滚丢弃内存页后 num_pages 没恢复，新表首次插入的页只存在于内存，回滚后扫描仍按 1 页读 0 字节文件。修复：discard_changes 时用文件长度重新推出页数。这个 bug 只有用「语句级真实会话」的用例集才暴露，库内单测没覆盖到。"
     }
   ],
   "retrospective": [
@@ -621,6 +688,24 @@
       "dimension": "取舍与反思",
       "question": "这次如果重来一遍，最应该提前做的一件事是什么？",
       "answer": "我观察到本次很多问题都源于前期协议对齐不充分、评测基线缺失。我判断最该提前做的是先对齐官方协议规范，搭建本地最小验证环境和性能评测基线。重来的话我会第一天就完成协议对齐和基准测试框架搭建，避免后期反复踩协议的坑。"
+    },
+    {
+      "id": "a19",
+      "question": "你把“杀进程 → 重启 → 核对集合”这套验证方法迁移到过别的场景吗？搬到哪、结果如何？",
+      "answer": "试过，我把这套杀进程重启核对的思路，挪去测过 WAL 的事务恢复场景。就是事务提交到一半强杀进程，重启后核对数据和事务状态。效果还可以，能测出正常流程复现不了的边界问题。",
+      "note": "本轮按“迁移 / 判据 / 交接”三问补答的原话，未做改写。"
+    },
+    {
+      "id": "a20",
+      "question": "哪一次你判断“这个优化不能上线”？当时看的是哪几个数？",
+      "answer": "就是之前评估 IVF 索引优化那次。主要看两个数：一个是 Top10 召回率掉了快 5 个百分点，另一个是小数据集下延迟反而涨了。精度损失超了预期，就直接判定不能上线。",
+      "note": "本轮按“迁移 / 判据 / 交接”三问补答的原话，未做改写。"
+    },
+    {
+      "id": "a21",
+      "question": "如果让一个新人接手，你会先让他读哪份文件、先跑哪条命令？",
+      "answer": "先让他读我们整理的协议对接踩坑笔记，比官方文档更贴当前的项目情况。上手先跑本地的基础 SQL 回归命令，先把环境跑通，再去碰核心逻辑。",
+      "note": "本轮按“迁移 / 判据 / 交接”三问补答的原话，未做改写。"
     }
   ],
   "student_artifacts": [
