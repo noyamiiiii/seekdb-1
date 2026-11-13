@@ -10,7 +10,11 @@ use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
-use super::page::{Page, PAGE_SIZE};
+use super::page::{Page, PageView, PAGE_SIZE};
+
+/// Resident transaction pages are bounded by bytes, not by count, so shrinking
+/// the page size does not make a large transaction spill eight times earlier.
+const DIRTY_BUDGET: usize = 1024 * 1024;
 
 /// Where a record lives.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -101,7 +105,7 @@ impl HeapFile {
                 Page::new()
             };
             // Bound resident transaction pages independently of table size.
-            if self.dirty.len() >= 16 {
+            if self.dirty.len() >= DIRTY_BUDGET / PAGE_SIZE {
                 let (&victim, _) = self.dirty.first_key_value().unwrap();
                 let old = self.dirty.remove(&victim).unwrap();
                 self.spill.seek(SeekFrom::Start(victim as u64 * PAGE_SIZE as u64))?;
@@ -196,15 +200,34 @@ impl HeapFile {
     where
         F: FnMut(u32, u16, &[u8]) -> io::Result<()>,
     {
-        for id in 0..self.num_pages {
-            let page = self.read_page(id)?;
-            if page.is_overflow() {
-                if page.is_overflow_live() {
-                    if let Some(record) = self.record(Rid { page: id, slot: 0 })? { visit(id, 0, &record)?; }
+        let pages = self.num_pages;
+        for id in 0..pages {
+            // One reusable buffer serves the whole scan: no per-page
+            // allocation and no 8 KiB copy per page.
+            if let Some(page) = self.dirty.get(&id) {
+                self.scratch.copy_from_slice(page.as_bytes());
+            } else if self.spilled.contains(&id) {
+                self.spill.seek(SeekFrom::Start(id as u64 * PAGE_SIZE as u64))?;
+                self.spill.read_exact(&mut self.scratch)?;
+            } else {
+                self.file.seek(SeekFrom::Start(id as u64 * PAGE_SIZE as u64))?;
+                self.file.read_exact(&mut self.scratch)?;
+            }
+            let view = PageView::new(&self.scratch).ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("corrupt page {id} in {}", self.path.display()),
+                )
+            })?;
+            if view.is_overflow() {
+                if view.is_overflow_live() {
+                    if let Some(record) = self.record(Rid { page: id, slot: 0 })? {
+                        visit(id, 0, &record)?;
+                    }
                 }
                 continue;
             }
-            for (slot, record) in page.live_records() {
+            for (slot, record) in view.live_records() {
                 visit(id, slot, record)?;
             }
         }

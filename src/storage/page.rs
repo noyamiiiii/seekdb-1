@@ -1,6 +1,6 @@
 //! Slotted heap pages.
 //!
-//! A page is a fixed-size buffer (64 KiB). The front holds a slot table
+//! A page is a fixed-size buffer (8 KiB). The front holds a slot table
 //! (`offset`, `length`); record payloads grow downwards from the end. A slot
 //! with the high length bit set is a tombstone: the payload bytes stay until the page is
 //! compacted, which keeps record ids stable across deletes.
@@ -16,7 +16,12 @@
 //! [8..]   slot table: (offset u32, length u32, tombstone flag in bit 31)
 //! ```
 
-pub const PAGE_SIZE: usize = 64 * 1024;
+/// Pages are kept small on purpose: a benchmark batch of 100 rows writes about
+/// 55 KiB, and every page a batch touches is logged in full. At 64 KiB that is
+/// a 64 KiB log record (plus the same bytes again on the heap); at 8 KiB the
+/// same batch logs about 56 KiB and the tail page that is rewritten by the next
+/// batch is eight times cheaper.
+pub const PAGE_SIZE: usize = 8 * 1024;
 /// Largest payload a page can hold, leaving room for one slot.
 pub const MAX_RECORD_SIZE: usize = PAGE_SIZE - HEADER - SLOT_SIZE;
 
@@ -45,33 +50,13 @@ impl Page {
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        if bytes.len() != PAGE_SIZE {
-            return None;
-        }
-        let page = Self {
-            buf: bytes.to_vec().into_boxed_slice(),
-        };
+        let view = PageView::new(bytes)?;
         // A freshly allocated file region reads as zeros: treat it as empty
         // rather than as a corrupt page.
-        if page.slot_count() == 0 && page.free_start() == 0 {
+        if view.slot_count() == 0 && view.free_start() == 0 {
             return Some(Self::new());
         }
-        if page.is_overflow() {
-            let n = u32::from_le_bytes(page.buf[12..16].try_into().ok()?) as usize;
-            return (n <= PAGE_SIZE - 16).then_some(page);
-        }
-        let count = page.slot_count() as usize;
-        let free_start = page.free_start() as usize;
-        let free_end = page.free_end() as usize;
-        if count > (PAGE_SIZE - HEADER) / SLOT_SIZE
-            || free_start < HEADER
-            || free_end > PAGE_SIZE
-            || free_start > free_end
-            || free_start != HEADER + count * SLOT_SIZE
-        {
-            return None;
-        }
-        Some(page)
+        Some(Self { buf: bytes.to_vec().into_boxed_slice() })
     }
 
     pub fn overflow(payload: &[u8], next: Option<u32>, head: bool) -> Self {
@@ -225,6 +210,92 @@ impl Page {
 
     /// Iterates live `(slot, payload)` pairs in slot order.
     pub fn live_records(&self) -> impl Iterator<Item = (u16, &[u8])> + '_ {
+        let view = PageView::new(&self.buf).expect("page buffers are validated on construction");
+        view.live_records()
+    }
+}
+
+/// A borrowed page image, validated without copying it.
+///
+/// Scans read a whole heap file through one reusable buffer, so they check each
+/// page in place instead of allocating an owned [`Page`] per 8 KiB image.
+#[derive(Clone, Copy)]
+pub struct PageView<'a> {
+    bytes: &'a [u8],
+}
+
+impl<'a> PageView<'a> {
+    /// Validates a page image; `None` when the bytes cannot be a page.
+    pub fn new(bytes: &'a [u8]) -> Option<Self> {
+        if bytes.len() != PAGE_SIZE {
+            return None;
+        }
+        let view = Self { bytes };
+        // A freshly allocated file region reads as zeros and stands for an
+        // empty page rather than a corrupt one.
+        if view.slot_count() == 0 && view.free_start() == 0 {
+            return Some(view);
+        }
+        if view.is_overflow() {
+            let n = u32::from_le_bytes(bytes[12..16].try_into().ok()?) as usize;
+            return (n <= PAGE_SIZE - 16).then_some(view);
+        }
+        let count = view.slot_count() as usize;
+        let free_start = view.free_start() as usize;
+        let free_end = view.free_end();
+        if count > (PAGE_SIZE - HEADER) / SLOT_SIZE
+            || free_start < HEADER
+            || free_end > PAGE_SIZE
+            || free_start > free_end
+            || free_start != HEADER + count * SLOT_SIZE
+        {
+            return None;
+        }
+        Some(view)
+    }
+
+    pub fn is_overflow(&self) -> bool {
+        self.bytes[6] & 0x80 != 0
+    }
+
+    pub fn is_overflow_live(&self) -> bool {
+        self.bytes[6] & 0x83 == 0x81 && self.bytes[6] & 0x40 == 0
+    }
+
+    fn slot_count(&self) -> u16 {
+        u16::from_le_bytes([self.bytes[0], self.bytes[1]])
+    }
+
+    fn free_start(&self) -> u16 {
+        u16::from_le_bytes([self.bytes[2], self.bytes[3]])
+    }
+
+    fn free_end(&self) -> usize {
+        let end = u16::from_le_bytes([self.bytes[4], self.bytes[5]]);
+        if end == 0 {
+            PAGE_SIZE
+        } else {
+            end as usize
+        }
+    }
+
+    /// Payload of a live slot; `None` for tombstones, overflow images and slots
+    /// that point outside the page.
+    pub fn record(&self, slot: u16) -> Option<&'a [u8]> {
+        if self.is_overflow() || slot >= self.slot_count() {
+            return None;
+        }
+        let base = HEADER + slot as usize * SLOT_SIZE;
+        let off = u32::from_le_bytes(self.bytes[base..base + 4].try_into().ok()?) as usize;
+        let raw = u32::from_le_bytes(self.bytes[base + 4..base + 8].try_into().ok()?);
+        if raw & TOMBSTONE != 0 {
+            return None;
+        }
+        self.bytes.get(off..off.checked_add(raw as usize)?)
+    }
+
+    /// Iterates live `(slot, payload)` pairs in slot order.
+    pub fn live_records(self) -> impl Iterator<Item = (u16, &'a [u8])> {
         (0..self.slot_count()).filter_map(move |slot| self.record(slot).map(|r| (slot, r)))
     }
 }
@@ -267,6 +338,30 @@ mod tests {
     }
 
     #[test]
+    fn borrowed_view_sees_the_same_live_records() {
+        let mut page = Page::new();
+        page.insert(b"alpha").unwrap();
+        page.insert(b"beta").unwrap();
+        page.tombstone(0);
+        let view = PageView::new(page.as_bytes()).unwrap();
+        let owned: Vec<(u16, Vec<u8>)> =
+            page.live_records().map(|(slot, r)| (slot, r.to_vec())).collect();
+        let borrowed: Vec<(u16, Vec<u8>)> =
+            view.live_records().map(|(slot, r)| (slot, r.to_vec())).collect();
+        assert_eq!(owned, borrowed);
+        assert_eq!(owned, vec![(1, b"beta".to_vec())]);
+    }
+
+    #[test]
+    fn borrowed_view_rejects_bad_images() {
+        assert!(PageView::new(&[0u8; PAGE_SIZE - 1]).is_none());
+        let mut bytes = [0u8; PAGE_SIZE];
+        bytes[0..2].copy_from_slice(&1u16.to_le_bytes());
+        bytes[2..4].copy_from_slice(&999u16.to_le_bytes());
+        assert!(PageView::new(&bytes).is_none(), "slot table must abut the header");
+    }
+
+    #[test]
     fn zeroed_region_reads_as_empty_page() {
         let page = Page::from_bytes(&vec![0u8; PAGE_SIZE]).unwrap();
         assert_eq!(page.slot_count(), 0);
@@ -278,10 +373,11 @@ mod tests {
         let mut page = Page::new();
         let mut slots = Vec::new();
         // Fill most of the page with records, then delete every other one.
-        let payload = vec![7u8; 4096];
-        for _ in 0..15 {
-            slots.push(page.insert(&payload).unwrap());
+        let payload = vec![7u8; PAGE_SIZE / 4];
+        while let Some(slot) = page.insert(&payload) {
+            slots.push(slot);
         }
+        assert!(slots.len() >= 3, "page held {} records", slots.len());
         for slot in slots.iter().step_by(2) {
             page.tombstone(*slot);
         }
@@ -291,8 +387,8 @@ mod tests {
         page.compact();
         assert_eq!(page.garbage(), 0);
         let live: Vec<u16> = page.live_records().map(|(s, _)| s).collect();
-        assert_eq!(live.len(), 7);
-        assert!(page.can_fit(4096));
+        assert_eq!(live.len(), slots.len() / 2);
+        assert!(page.can_fit(PAGE_SIZE / 4));
     }
 
     #[test]
