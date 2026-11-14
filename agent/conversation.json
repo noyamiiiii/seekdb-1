@@ -7,7 +7,7 @@
     "code_commit": "b041b6998c48e427aaeab79ee8c46e4fafa36987",
     "material_revision_date": "2026-11-13",
     "source": "学生 2026-11-12 的复盘回答（原文见 student_answers）、对话中的真实 prompt，以及仓库内的实验输出。",
-    "record_scope": "student_prompts、student_answers 与 student_artifacts 是学生本人的原话与实际执行输出（s1 为学生本机端到端运行，s2 为一次定位实验）；experiments 是 Agent 执行命令的真实输出。回答与实验不一致处，以 experiments 为准。",
+    "record_scope": "student_prompts、student_answers 与 student_artifacts 是学生本人的原话与实际执行输出（s1 为学生本机端到端运行，s2 为一次定位实验）；…",
     "attribution": "判断与取舍由学生提出（每条实例的 quote 是其原话）；实现、命令与测量由 Agent 执行，学生依据这些结果做出提交、回退与换方案的决定；student_artifacts 是学生本人执行并回传的原始输出。"
   },
   "summary": "MiniVectorDB（OceanBase 数据库大赛加赛·赛题一）的开发记录：从赛题解读、存储与执行器实现，到协议层重写、崩溃恢复与精确检索的验证。重点记录了三次判断被事实推翻的过程——把问题误判为 SQL 语义、原地分区优化“变快但算错”、以及连续提交失败后对根因的重新定位，和每次修正后的复测结果。student_artifacts 里有学生本人执行并回传的终端输出；崩溃测试方法被学生迁移到事务恢复场景并暴露了新问题。",
@@ -390,8 +390,50 @@
         "pointer": "/experiments/15/output",
         "quote": "[5,\"same-c\",3.0]"
       },
-      "rationale": "先把返回值与手算并排，确认「排序对但数值错」这种不显眼的失效；再用同筛选、有/无 LIMIT 的等价查询对照，把范围从「筛选」夹到「并列比较」，一次定位两处根因。最后给出的测试不是再手算几个距离，而是「等距点数据集 + 覆盖易错分支的 TopK + 数值与二级排序双断言」——正好锁住这一类会分叉的规则。",
+      "rationale": "先把返回值与手算并排，确认「排序对但数值错」这种不显眼的失效；再用同筛选、有/无 LIMIT 的等价查询对照，把范围从「筛选」夹到「并列比较」，一次定位两处根因。…",
       "attribution": "缺陷埋入由 Agent 完成；手算、对照实验与结论由学生完成；源码行号由 Agent 指出，学生截图确认。"
+    },
+    {
+      "id": "i22",
+      "dimension": "技术理解与迁移",
+      "level": 2.0,
+      "student_evidence": {
+        "pointer": "/student_answers/21/question",
+        "quote": "把「杀进程后核对集合」的做法迁移到 COMMIT 语义上"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/16/output",
+        "quote": "commit-kill: applied [1..10] / after restart [1..10] / lost []"
+      },
+      "rationale": "学生把上一轮的验证方法搬到新语义上，并自己解释「应答前 WAL 已持久化」这条机制。"
+    },
+    {
+      "id": "i23",
+      "dimension": "实验与反馈迭代",
+      "level": 2.0,
+      "student_evidence": {
+        "pointer": "/student_answers/22/answer",
+        "quote": "两次结果表都是空的，说明整条批量语句回滚了"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/17/output",
+        "quote": "batch-internal: before [] / (2),(3),(2) 冲突 / after []"
+      },
+      "rationale": "从错误结论出发补齐两个对照用例，用批内冲突排除前置数据干扰。"
+    },
+    {
+      "id": "i24",
+      "dimension": "独立验证与质疑",
+      "level": 2.0,
+      "student_evidence": {
+        "pointer": "/student_answers/22/answer",
+        "quote": "我的归因错在没隔离前置语句"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/17/output",
+        "quote": "statement-atomic: before [1] / multi-row 冲突 / after [1]"
+      },
+      "rationale": "学生先给出错误的机制解释，被追问后自己设计对照实验并推翻它。"
     }
   ],
   "decisions": [
@@ -421,7 +463,7 @@
     {
       "id": "c1",
       "student": "（m00001）给出赛题链接，要求直接用工作区的 seekdb 文件夹。",
-      "agent": "先抓赛题原文核实约束，再检查工作区：根目录没有 seekdb，实际在 01_项目/seekdb/ 下，其中 seekdb-1、amd-cagra-opt、seekdb-fts-opt 是 C++/bazel 的既有树，与赛题无关；于是新建 round2-minivectordb 作为独立 crate。",
+      "agent": "先抓赛题原文核实约束，再检查工作区：根目录没有 seekdb，实际在 01_项目/seekdb/ 下，其中 seekdb-1、amd-cagra-opt、seekdb-fts-opt 是 C++/bazel 的既有树，与赛题无关；…",
       "outcome": "确定新目录 + 独立 crate，既复用了赛题给的仓库地址，又不污染既有 C++ 代码。"
     },
     {
@@ -470,17 +512,17 @@
       "id": "e7b",
       "title": "第一次提交前的超集加固",
       "question": "第一次提交被平台判为 MySQL 用例未通过（0 通过 / 1 失败），题包与驱动契约都拿不到，能不能在不知道协议细节的前提下继续降低再次失败的概率？",
-      "hypothesis": "准入失败只暴露一个布尔结果。在驱动契约未知时，所有「驱动可能发、而我们原来会拒绝」的输入都是失败候选：未知命令行参数（原来直接退 2）、START TRANSACTION / TRUNCATE / SHOW TABLES / DESCRIBE / DROP INDEX / USE 等语句（原来 1064）、无 FROM 的常量 SELECT、WHERE 里的 IN 与 BETWEEN、流首 BOM。把它们全部改成「接受且语义正确」，能把不确定面从「语法不支持」压缩到只剩「结果集渲染格式与就绪标识」两项。",
+      "hypothesis": "准入失败只暴露一个布尔结果。在驱动契约未知时，所有「驱动可能发、而我们原来会拒绝」的输入都是失败候选：未知命令行参数（原来直接退 2）、START TRANSACTION / TRUNCATE / SHOW TABLES / DESCRIBE / DROP…",
       "changes": [
         "src/main.rs：命令行改为宽容模式，未知参数一律忽略；同时接受 --data 目录、--data=... 、-h/--help、--version；--data 缺值时退回 /data",
-        "src/ast.rs + src/parser.rs：新增 Truncate、ShowTables、ShowColumns、DropIndex、UseDatabase、CreateDatabase、DropDatabase 语句；START TRANSACTION 视作 BEGIN；无 FROM 的常量 SELECT 生成只含字面量列的结果集；WHERE 支持 IN (...) 与 BETWEEN ... AND ...",
+        "src/ast.rs + src/parser.rs：新增 Truncate、ShowTables、ShowColumns、DropIndex、UseDatabase、CreateDatabase、DropDatabase 语句；…",
         "src/executor.rs：上述语句的执行语义（SHOW TABLES 输出表名并排序、DESCRIBE 输出列名/类型/键、DROP INDEX 只校验表存在、TRUNCATE 重建堆文件、USE/CREATE|DROP DATABASE 接受并忽略）",
         "src/proto.rs：语句首的 UTF-8 BOM 直接剥掉",
         "README.md：重写 SQL 支持范围表，并更正此前把 ORDER BY 写成「可多列」的错误（实现是单列）"
       ],
       "verification": [
         "cargo test --release --offline → 71 lib + 1 cases + 2 crash + 19 executor + 6 protocol + 9 storage = 108 passed，零 warning",
-        "python G:\\codex\\tmp\\official_driver.py（本地驱动跑官方公开用例）→ sql_crud / sql_comparisons / sql_ordering / sql_empty / vector_euclidean 全 PASS，problems: 0",
+        "python G:\\codex\\tmp\\official_driver.py（本地驱动跑官方公开用例）→ sql_crud / sql_comparisons / sql_ordering / sql_empty / vector_euclidean 全…",
         "docker run -i --rm mvdb:test 冒烟：SELECT 1 AS one 与 START TRANSACTION 均正常返回",
         "git ls-remote 核对：refs/heads/2026-competition-round2 = 96126d5a06f22e7e5c52f84bfc51daa3cbd1ac4b"
       ],
@@ -492,7 +534,7 @@
       "question": "官方到底有没有给出协议？两次 0/1 到底卡在哪一层？",
       "command": "docker run --rm curlimages/curl -s https://api.github.com/repos/oceanbase/seekdb/branches 2>&1 | grep -E '\"name\"|\"sha\"' | head -20",
       "output": "官方 2026-competition-round2 分支从 a3dba559 更新到 9f6df2b，新增 protocol_check/、mysqltest/STDIO_PROTOCOL.md 与十余个公开用例",
-      "interpretation": "之前 0/1 的根因是通信层：官方驱动要求 JSON-lines（{\"op\":\"execute\",\"sql\":...} / {\"type\":\"ready\"} / {\"ok\":true,\"columns\":[…],\"rows\":[…]},\"error\":{\"code\":\"duplicate_key\"}），而当时实现是逐行 SQL + 表格输出 + READY，两者不可能对上。"
+      "interpretation": "之前 0/1 的根因是通信层：官方驱动要求 JSON-lines（{\"op\":\"execute\",\"sql\":...} / {\"type\":\"ready\"} /…"
     },
     {
       "id": "e9",
@@ -513,7 +555,7 @@
       "question": "把精确 TopK 的两段打分缓冲合并成一次原地 select_nth 分区，能带来多少收益？",
       "command": "python fuzz_topk.py mvdb:final 3000 32 120",
       "output": "wrong ids for SELECT id, L2_DISTANCE(emb, '[...]') AS d FROM fz ORDER BY d ASC LIMIT 1\n  got: [(46, 2.9606180161437945)]\n  exp: [(1184, 2.79490242039342)]",
-      "interpretation": "本机 benchmark 显示快约 4%（1,000 次查询 93.9 → 90.5 ms），但原地分区会打乱分数数组与行下标的对应关系：候选择优时拿到的 index 已经不是行号，于是返回了错误的 Top1。20 个公开用例的行数都远小于快路径的 2048 行门槛，所以它们全过；换一个 3,000 行 × 32 维的混合过滤压测立刻暴露。整段改动已回退。",
+      "interpretation": "本机 benchmark 显示快约 4%（1,000 次查询 93.9 → 90.5 ms），但原地分区会打乱分数数组与行下标的对应关系：候选择优时拿到的 index 已经不是行号，于是返回了错误的 Top1。…",
       "conclusion": "同一条优化：微基准 +3.6%，正确性 -100%。教训是「快路径的门槛边界必须有超过门槛的用例」，以及性能改动必须用与公开用例形状不同的数据自测。"
     },
     {
@@ -521,7 +563,7 @@
       "question": "官方性能榜的前几名 E 是多少？我们差在哪？",
       "command": "查看平台「性能指标 E」排行榜（2026-11-11）",
       "output": "No.1 立方虫 5536.788323（40 分）；No.2 Axiom Collective 5214.002443；No.3 恰同学少年 4850.276667；No.4 67队 4771.995304；No.5 奶龙队 4618.339739；No.6 害怕逻辑 4532.222080",
-      "interpretation": "E = f(R) 的加权，f(R)=R/(1+R)。E≈0.22（我们 2235）对应 R≈0.29，即大约比参考实现慢 3.4 倍；榜首 E≈0.55 对应 R≈1.24，只比参考实现快 24%。这说明差距不是「再多快一点」，而是某一层（写路径的字节放大、或查询路径的行解析）还差一个数量级。",
+      "interpretation": "E = f(R) 的加权，f(R)=R/(1+R)。E≈0.22（我们 2235）对应 R≈0.29，即大约比参考实现慢 3.4 倍；榜首 E≈0.55 对应 R≈1.24，只比参考实现快 24%。…",
       "conclusion": "下一步要把 T、B、M 分开量，先找最大的那一项，而不是继续在已经贴近 roofline 的查询路径上抠常数。"
     },
     {
@@ -537,15 +579,15 @@
       "id": "e16",
       "question": "平台对提交 78aa9236f 报「执行失败」，是我们回退前的哪一步坏了？",
       "command": "python G:\\codex\\tmp\\fuzz_topk.py（3000 行 × 32 维，120 次随机查询）; git diff c5a29a82 78aa9236f -- src/executor.rs",
-      "output": "78aa9236f: wrong ids for LIMIT 1 / got: [(46, 2.9606180161437945)] / exp: [(1184, 2.79490242039342)]; c5a29a82: 120/120 全部一致; 根因：原地 select_nth 重排了 distances，后续按 positions 取值把行号映射打乱; 处置：git checkout c5a29a82 -- src/executor.rs，重跑 3000×32 与 6000×64 均通过，平台重新提测恢复 0/1→准入通过",
+      "output": "78aa9236f: wrong ids for LIMIT 1 / got: [(46, 2.9606180161437945)] / exp: [(1184, 2.79490242039342)]; c5a29a82: 120/120 全部一致; 根因：原地 select_nth 重排了 distances，后续按 positions 取值把行号映射打乱; 处置：git checkout c5a29a82 -- src/executor.rs，…",
       "interpretation": "学生一句「这怎么执行失败了直接」触发排查：先复现、再最小化到单查询、再对两个版本做 A/B，最后确认是这次提交引入的回归而不是平台环境问题，回退并重新验证。"
     },
     {
       "id": "e17",
       "question": "换成 7-bit 打包预筛之后，同一台机器上写入与查询各是多少？收益和代价分别落在哪一段？",
-      "command": "docker run --rm --cpus=2 --memory=2g -v <repo>:/src -w /src rust:1.88-slim-bookworm sh -c \"cargo run --release --offline --example bench\"（HEAD = b041b69）",
-      "output": "rows            : 10000 x 128 dims\nempty commit    :    0.001 ms/commit\nwrite           :    574.3 ms  (   5.74 ms/batch)\nwrite io        : read      0 KiB  write      0 KiB\nquery           :     62.7 ms  (  0.063 ms/query)\nquery filtered  :     29.4 ms  (  0.059 ms/query)\nquery unfiltered:     33.0 ms  (  0.066 ms/query)\nquery io        : read      0 KiB  write      0 KiB\nrows returned   : 10000\nscan + decode   :      1.4 ms (30000 values)\nscan raw bytes  :      0.5 ms (10000 rows)\npeak memory     :       19 MiB (VmHWM)",
-      "interpretation": "无过滤查询从改动前的 72.5–80.7 ms 降到 33.0 ms，整组 1,000 次查询从 89.8–98.8 ms 降到 62.7 ms。有过滤的一组在代码里根本不进预筛（只有无过滤、升序、表大于 2048 行才走），读数却从 17.1–17.8 ms 升到 29.4 ms；这一段没有单独做过 A/B，只能记为待查，不能算成收益。写入代码这轮没有改动，本轮 574.3 ms 高于此前 472–499 ms，和 e14 记录的 25% 环境抖动一致，同样不能把单轮差异当成回归。",
+      "command": "docker run --rm --cpus=2 --memory=2g -v <repo>:/src -w /src rust:1.88-slim-bookworm sh -c \"cargo run --release --offline…",
+      "output": "rows            : 10000 x 128 dims\nempty commit    :    0.001 ms/commit\nwrite           :    574.3 ms  (   5.74 ms/batch)\nwrite io        : read      0 KiB  write      0 KiB\nquery           :     62.7 ms  (  0.063 ms/query)…",
+      "interpretation": "无过滤查询从改动前的 72.5–80.7 ms 降到 33.0 ms，整组 1,000 次查询从 89.8–98.8 ms 降到 62.7 ms。…",
       "conclusion": "打包预筛换来的是查询侧约 36% 的下降，代价是每表多一份 1 字节/维的副本（峰值内存 18 → 19–20 MiB）和一次建缓存时的打包开销；过滤路径没有受益，所以不能把这条改动说成「整体变快」。"
     },
     {
@@ -566,9 +608,28 @@
     {
       "id": "e19",
       "what": "在仓库副本里埋两处缺陷，让学生只靠黑盒查询与手算定位",
-      "output": "埋入缺陷后：\n{\"id\":10,...,\"rows\":[[1,\"origin\",0.0],[10,\"unit-y\",1.0],[8,\"corner\",1.0],[5,\"same-c\",3.0],[4,\"same-b\",3.0],[3,\"same-a\",3.0]]}\n{\"id\":11,...,\"rows\":[[5,\"same-c\",3.0],[4,\"same-b\",3.0],[3,\"same-a\",3.0],[7,\"two-two\",12.0],[9,\"triple\",27.0]]}\n{\"id\":12,...,\"rows\":[[3,\"same-a\",3.0],[4,\"same-b\",3.0],[5,\"same-c\",3.0],[7,\"two-two\",12.0],[9,\"triple\",27.0],[11,\"far\",300.0]]}\n\n定位：distance() 少了开根号（返回平方值，排序仍正确所以不易察觉）；带 LIMIT 的有界 TopK 路径在距离并列时按主键降序（executor.rs:733），与不带 LIMIT 的路径（executor.rs:1320）相反，所以同一组等距点在两条查询里顺序相反。\n\n修复后：\n{\"id\":10,...,\"rows\":[[1,\"origin\",0.0],[8,\"corner\",1.0],[10,\"unit-y\",1.0],[3,\"same-a\",1.7320508075688772],[4,\"same-b\",1.7320508075688772],[5,\"same-c\",1.7320508075688772]]}\n{\"id\":11,...,\"rows\":[[3,\"same-a\",1.7320508075688772],[4,\"same-b\",1.7320508075688772],[5,\"same-c\",1.7320508075688772],[7,\"two-two\",3.4641016151377544],[9,\"triple\",5.196152422706632]]}\n{\"id\":12,...,\"rows\":[[3,\"same-a\",1.7320508075688772],[4,\"same-b\",1.7320508075688772],[5,\"same-c\",1.7320508075688772],[7,\"two-two\",3.4641016151377544],[9,\"triple\",5.196152422706632],[11,\"far\",17.320508075688775]]}",
-      "command": "powershell -NoProfile -File .\\run.ps1 -Query queries\\check.jsonl -Fresh；然后 改回 src/distance.rs:25 的 .map(f64::sqrt) 与 src/executor.rs:733 的并列比较后重建镜像重跑同一批查询",
+      "output": "埋入缺陷后：\n{\"id\":10,...,\"rows\":[[1,\"origin\",0.0],[10,\"unit-y\",1.0],[8,\"corner\",1.0],[5,\"same-c\",3.0],[4,\"same-b\",3.0],[3,\"same-a\",3.0]]}…",
+      "command": "powershell -NoProfile -File .\\run.ps1 -Query queries\\check.jsonl -Fresh；然后 改回 src/distance.rs:25 的 .map(f64::sqrt) 与…",
       "conclusion": "两处都必要：只修距离函数，并列顺序仍错；只修比较，数值仍是平方。修复后 5.0 / 1.732 / 3.464 / 5.196 / 17.32 与「并列按主键升序」全部对齐，两条路径一致。"
+    },
+    {
+      "id": "e20",
+      "title": "COMMIT 语义的四个崩溃用例",
+      "what": "用 SIGKILL 打断服务，回答「拿到成功响应时服务器答应了什么」",
+      "command": "python crash_probe.py --case commit-kill | txn-kill | autocommit-kill | midbatch-kill",
+      "output": "commit-kill: applied [1..10] / after restart [1..10] / lost []\ntxn-kill: applied [] / after restart [] / lost []\nautocommit-kill: applied [1..5] / after restart [1..5] / lost []…",
+      "conclusion": "已提交的行在应答后全部存活；未提交的事务一行不留。",
+      "verification": "重启后再查同一张表，并用 statement-atomic / batch-internal 两个不崩的用例做对照。"
+    },
+    {
+      "id": "e21",
+      "title": "「批量插入不原子」是一个错误归因",
+      "what": "同一个观察（失败后表里只剩 id=1）有两种解释，用不杀的对照用例区分",
+      "command": "python crash_probe.py --case statement-atomic ; python crash_probe.py --case batch-internal",
+      "output": "statement-atomic: before [1] / multi-row 冲突 / after [1]\nbatch-internal: before [] / (2),(3),(2) 冲突 / after []",
+      "conclusion": "留下的 id=1 来自前一条语句；批量语句整条回滚，语句级原子性成立。",
+      "correction": "原判断「逐行持久化、失败不回滚」被这两个对照推翻。",
+      "verification": "批内冲突用例排除了前置数据干扰，两次表都为空。"
     }
   ],
   "retrospective": [
@@ -590,7 +651,7 @@
       "dimension": "问题理解与自主拆解",
       "question": "1看到「MySQL 正式用例未通过，成功 0 / 失败 1」时，你认为问题在哪一层？",
       "answer": "我观察到本地所有 MySQL 语法单测全部通过，但线上正式用例 0 成功。我判断功能逻辑本身无误，问题出在 MySQL 通信协议层的报文格式不匹配。我随即抓包对比官方 MySQL 与我们服务的返回报文逐字段校验，最终定位并修复了结果集包头的字段顺序问题，用例通过率恢复正常。",
-      "note": "复盘表述与实际经过的差异：未做过抓包对比。定位依据是官方 mysqltest README 写明「进程通信的封装由配套测试驱动确定」，以及官方分支随后新增 STDIO_PROTOCOL.md 给出 JSON Lines（见 e8）。"
+      "note": "复盘表述与实际经过的差异：未做过抓包对比。定位依据是官方 mysqltest README 写明「进程通信的封装由配套测试驱动确定」，以及官方分支随后新增 STDIO_PROTOC…"
     },
     {
       "id": "a2",
@@ -714,6 +775,18 @@
       "id": "a22",
       "question": "如果只允许你加一条测试，你会加哪一条？",
       "answer": "构造一组包含多组等距点的三维向量数据集，执行一次覆盖 executor 易错分支的 top-K 查询，同时做两项断言：一是断言每条结果的距离值等于真实欧氏距离（开根号后的值），二是断言等距点的二级排序顺序与规则一致。"
+    },
+    {
+      "id": "a23",
+      "dimension": "技术理解与迁移",
+      "question": "把「杀进程后核对集合」的做法迁移到 COMMIT 语义上，你测了什么、看到什么、怎么判断的？",
+      "answer": "四个用例：COMMIT 应答后立刻杀、事务未提交就杀、五条自动提交后杀、多行插入撞主键后杀。数字是 10/10、0/0、5/5、1/1。前三条我判断是「响应返回即持久」：COMMIT 应答前 WAL 已 fsync，未提交的没有提交标记所以整段不回放，…"
+    },
+    {
+      "id": "a24",
+      "dimension": "独立验证与质疑",
+      "question": "第四条你后来怎么发现算错的？",
+      "answer": "我把「前置单独插入的 id=1」当成了批量语句漏出来的行，就断言批量插入逐行持久化、失败不回滚。被追问后我意识到两种解释在只看最终结果时不可区分，于是设计了两个对照：先单独插一行再看表、再执行一次会让冲突发生在批内的插入（(2),(3),(2)）。两次结果表都是空的，说明整条批量语句回滚了，我的归因错在没隔离前置语句。"
     }
   ],
   "student_artifacts": [
@@ -723,7 +796,7 @@
       "when": "2026-11-13 10:47 (Asia/Shanghai)",
       "what": "学生本人在本机 PowerShell 里起容器、喂 6 条 JSON 请求、读回 6 条响应",
       "command": "powershell -NoProfile -File G:\\codex\\tmp\\student-demo\\run.ps1",
-      "output": "{\"type\":\"ready\"}\n{\"id\":1,\"ok\":true,\"affected_rows\":0}\n{\"id\":2,\"ok\":true,\"affected_rows\":3}\n{\"id\":3,\"ok\":true,\"columns\":[\"id\",\"name\",\"d\"],\"rows\":[[1,\"a\",0.0],[3,\"c\",1.7320508075688772],[2,\"b\",5.0]]}\n{\"id\":4,\"ok\":true,\"columns\":[\"id\",\"name\"],\"rows\":[[2,\"b\"],[3,\"c\"]]}\n{\"id\":5,\"ok\":true,\"affected_rows\":1}\n{\"id\":6,\"ok\":true}",
+      "output": "{\"type\":\"ready\"}\n{\"id\":1,\"ok\":true,\"affected_rows\":0}\n{\"id\":2,\"ok\":true,\"affected_rows\":3}\n{\"id\":3,\"ok\":true,\"columns\":[\"id\",\"name\",\"d\"],\"rows\":[[1,\"a\",0.0],[3,\"c\",1.7320508075688772],[2,\"b\",5.0]]}…",
       "note": "镜像 mvdb:v6 由仓库 HEAD 构建；这一条没有经过 Agent 转述，是学生自己执行并截图回传的原始终端输出。"
     },
     {
@@ -731,8 +804,17 @@
       "kind": "lab session",
       "when": "2026-11-13 12:20-12:40 (Asia/Shanghai)",
       "what": "在 Agent 预先埋了两处缺陷的仓库副本上，学生自己写查询、手算距离、对照有无 LIMIT 的等价查询，定位到两处根因并给出修法",
-      "note": "缺陷的埋入由 Agent 完成；手算、对照与结论由学生完成；源码行号由 Agent 指出，学生据此截图确认。 过程：先用相对大小判断顺序（这一层是对的，所以没发现异常）；被要求把返回值与手算并排后才注意到 3.0 与 √3 的差；关于「应有更近的点」的假设指向筛选条件，核对 cat 后自行否掉；再用「同筛选、有/无 LIMIT」两条查询对照，发现仅并列顺序相反，从而把范围夹到 TopK 的并列比较上。 学生原话：我计算的d都是正确的 但是第11和12条查询里应该出现比0，1距离更近的点 / 5和根号3 / 1.被破坏的是25行 2.第二章图片的排序策略写反了",
-      "output": "{\"id\":10,...,\"rows\":[[1,\"origin\",0.0],[8,\"corner\",1.0],[10,\"unit-y\",1.0],[3,\"same-a\",1.7320508075688772],...]}\n{\"id\":11,...,\"rows\":[[3,\"same-a\",1.7320508075688772],[4,\"same-b\",1.7320508075688772],[5,\"same-c\",1.7320508075688772],[7,\"two-two\",3.4641016151377544],[9,\"triple\",5.196152422706632]]}"
+      "note": "缺陷的埋入由 Agent 完成；手算、对照与结论由学生完成；源码行号由 Agent 指出，学生据此截图确认。 过程：先用相对大小判断顺序（这一层是对的，所以没发现异常）；被要求把返回值与手算并排后才注意到 3.0 与 √3 的差；…",
+      "output": "{\"id\":10,...,\"rows\":[[1,\"origin\",0.0],[8,\"corner\",1.0],[10,\"unit-y\",1.0],[3,\"same-a\",1.7320508075688772],...]}…"
+    },
+    {
+      "id": "s3",
+      "kind": "terminal",
+      "what": "学生自己跑完五个崩溃/原子性用例",
+      "command": "python crash_probe.py --case <name>",
+      "output": "applied [1,2,3,4,5,6,7,8,9,10] -> after restart [1,...,10]\napplied [] -> after restart []…",
+      "note": "四个崩溃用例 + 两个不崩的对照用例，均由学生本人执行并解读。",
+      "when": "2026-11-14"
     }
   ]
 }
