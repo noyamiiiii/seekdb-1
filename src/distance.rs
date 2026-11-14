@@ -178,6 +178,50 @@ pub fn quantized_scores_dot(
     true
 }
 
+/// Scores only the packed rows named by `indices`, with the same kernel as
+/// [`quantized_scores_dot`].
+///
+/// A filtered query walks a subset of the table; scoring it row by row would
+/// reload the query blocks, and pay a call, for every row. This keeps the
+/// query in registers across the whole subset.
+pub fn quantized_scores_dot_subset(
+    query: &[u8],
+    data: &[u8],
+    dimensions: usize,
+    rows: usize,
+    indices: &[usize],
+    norms: &[u32],
+    out: &mut [u32],
+) -> bool {
+    const MAX_DIMENSIONS: usize = i32::MAX as usize / (127 * 127);
+    if query.len() != dimensions
+        || data.len() != dimensions.saturating_mul(rows)
+        || out.len() != indices.len()
+        || norms.len() != rows
+        || dimensions > MAX_DIMENSIONS
+        || indices.iter().any(|&row| row >= rows)
+    {
+        return false;
+    }
+    #[cfg(target_arch = "x86_64")]
+    if std::is_x86_feature_detected!("avx2") {
+        // SAFETY: every index is below `rows`, so every load stays inside
+        // `data`, and `out` has one slot per index.
+        unsafe { quantized_scores_dot_subset_avx2(query, data, dimensions, indices, norms, out) };
+        return true;
+    }
+    let query_norm: i32 = query.iter().map(|&q| i32::from(q) * i32::from(q)).sum();
+    for (slot, &row) in indices.iter().enumerate() {
+        let start = row * dimensions;
+        let mut dot = 0i32;
+        for dimension in 0..dimensions {
+            dot += i32::from(query[dimension]) * i32::from(data[start + dimension]);
+        }
+        out[slot] = (query_norm + norms[row] as i32 - 2 * dot) as u32;
+    }
+    true
+}
+
 /// Scores one packed 7-bit vector. Filtered TopK visits scattered rows, so it
 /// needs the same integer kernel one row at a time instead of a full sweep.
 pub fn quantized_score_row(query: &[u8], row: &[u8]) -> Option<u32> {
@@ -418,57 +462,120 @@ unsafe fn quantized_scores_dot_avx2(
     norms: &[u32],
     out: &mut [u32],
 ) {
+    let regs = query_regs(query);
+    for row in 0..rows {
+        let base = data.as_ptr().add(row * dimensions);
+        *out.get_unchecked_mut(row) = packed_row_dot(base, &regs, *norms.get_unchecked(row));
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn quantized_scores_dot_subset_avx2(
+    query: &[u8],
+    data: &[u8],
+    dimensions: usize,
+    indices: &[usize],
+    norms: &[u32],
+    out: &mut [u32],
+) {
+    let regs = query_regs(query);
+    for (slot, &row) in indices.iter().enumerate() {
+        let base = data.as_ptr().add(row * dimensions);
+        *out.get_unchecked_mut(slot) = packed_row_dot(base, &regs, *norms.get_unchecked(row));
+    }
+}
+
+/// Query-side registers that every row of one sweep reuses.
+#[cfg(target_arch = "x86_64")]
+struct QueryRegs<'a> {
+    query: &'a [u8],
+    dimensions: usize,
+    blocks: usize,
+    resident: usize,
+    registers: [V256; 4],
+    ones: V256,
+    norm: i32,
+}
+
+#[cfg(target_arch = "x86_64")]
+#[inline]
+#[target_feature(enable = "avx2")]
+unsafe fn query_regs(query: &[u8]) -> QueryRegs<'_> {
     use std::arch::x86_64::*;
 
     let ones = _mm256_set1_epi16(1);
-    let blocks = dimensions / 32;
+    let blocks = query.len() / 32;
     let resident = blocks.min(4);
-    let mut query_blocks = [_mm256_setzero_si256(); 4];
-    for (block, slot) in query_blocks.iter_mut().enumerate().take(resident) {
+    let mut registers = [_mm256_setzero_si256(); 4];
+    for (block, slot) in registers.iter_mut().enumerate().take(resident) {
         *slot = _mm256_loadu_si256(query.as_ptr().add(block * 32).cast());
     }
-    let mut query_norm = 0i32;
+    let mut norm = 0i32;
     for &component in query {
-        query_norm += i32::from(component) * i32::from(component);
+        norm += i32::from(component) * i32::from(component);
     }
-    for row in 0..rows {
-        let base = data.as_ptr().add(row * dimensions);
-        let mut acc0 = _mm256_setzero_si256();
-        let mut acc1 = _mm256_setzero_si256();
-        let mut block = 0usize;
-        while block + 2 <= resident {
-            acc0 = _mm256_add_epi32(
-                acc0,
-                packed_block_dot(base.add(block * 32), query_blocks[block], ones),
-            );
-            acc1 = _mm256_add_epi32(
-                acc1,
-                packed_block_dot(base.add((block + 1) * 32), query_blocks[block + 1], ones),
-            );
-            block += 2;
-        }
-        if block < resident {
-            acc0 = _mm256_add_epi32(
-                acc0,
-                packed_block_dot(base.add(block * 32), query_blocks[block], ones),
-            );
-            block += 1;
-        }
-        while block < blocks {
-            let q = _mm256_loadu_si256(query.as_ptr().add(block * 32).cast());
-            acc0 = _mm256_add_epi32(acc0, packed_block_dot(base.add(block * 32), q, ones));
-            block += 1;
-        }
-        let mut dot = horizontal_sum(_mm256_add_epi32(acc0, acc1));
-        let mut dimension = blocks * 32;
-        while dimension < dimensions {
-            dot += i32::from(*query.get_unchecked(dimension))
-                * i32::from(*data.get_unchecked(row * dimensions + dimension));
-            dimension += 1;
-        }
-        let score = query_norm + *norms.get_unchecked(row) as i32 - 2 * dot;
-        *out.get_unchecked_mut(row) = score as u32;
+    QueryRegs {
+        query,
+        dimensions: query.len(),
+        blocks,
+        resident,
+        registers,
+        ones,
+        norm,
     }
+}
+
+/// Integer score of one packed row; shared by the full sweep and the subset
+/// walk so both see exactly the same arithmetic.
+#[cfg(target_arch = "x86_64")]
+#[inline]
+#[target_feature(enable = "avx2")]
+unsafe fn packed_row_dot(base: *const u8, regs: &QueryRegs<'_>, norm: u32) -> u32 {
+    use std::arch::x86_64::*;
+
+    let QueryRegs {
+        query,
+        dimensions,
+        blocks,
+        resident,
+        registers,
+        ones,
+        norm: query_norm,
+    } = *regs;
+    let mut acc0 = _mm256_setzero_si256();
+    let mut acc1 = _mm256_setzero_si256();
+    let mut block = 0usize;
+    while block + 2 <= resident {
+        acc0 = _mm256_add_epi32(
+            acc0,
+            packed_block_dot(base.add(block * 32), registers[block], ones),
+        );
+        acc1 = _mm256_add_epi32(
+            acc1,
+            packed_block_dot(base.add((block + 1) * 32), registers[block + 1], ones),
+        );
+        block += 2;
+    }
+    if block < resident {
+        acc0 = _mm256_add_epi32(
+            acc0,
+            packed_block_dot(base.add(block * 32), registers[block], ones),
+        );
+        block += 1;
+    }
+    while block < blocks {
+        let q = _mm256_loadu_si256(query.as_ptr().add(block * 32).cast());
+        acc0 = _mm256_add_epi32(acc0, packed_block_dot(base.add(block * 32), q, ones));
+        block += 1;
+    }
+    let mut dot = horizontal_sum(_mm256_add_epi32(acc0, acc1));
+    let mut dimension = blocks * 32;
+    while dimension < dimensions {
+        dot += i32::from(*query.get_unchecked(dimension)) * i32::from(*base.add(dimension));
+        dimension += 1;
+    }
+    (query_norm + norm as i32 - 2 * dot) as u32
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -717,6 +824,35 @@ mod tests {
             assert!(quantized_scores(&query, &data, dim, rows, &mut expected));
             assert!(quantized_scores_dot(&query, &data, dim, rows, &norms, &mut actual));
             assert_eq!(expected, actual, "dot kernel disagrees at dimension {dim}");
+        }
+    }
+
+    #[test]
+    fn subset_kernel_scores_exactly_the_rows_it_is_given() {
+        let mut state = 0x9e37_79b9u64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            ((state >> 33) & 0x7f) as u8
+        };
+        for dim in [1usize, 13, 32, 33, 64, 128, 129] {
+            let rows = 40;
+            let query: Vec<u8> = (0..dim).map(|_| next()).collect();
+            let data: Vec<u8> = (0..dim * rows).map(|_| next()).collect();
+            let norms: Vec<u32> = data.chunks_exact(dim).map(quantized_norm).collect();
+            let mut full = vec![0u32; rows];
+            assert!(quantized_scores_dot(&query, &data, dim, rows, &norms, &mut full));
+            let indices: Vec<usize> = (0..rows).rev().filter(|i| i % 3 != 1).collect();
+            let mut subset = vec![0u32; indices.len()];
+            assert!(quantized_scores_dot_subset(
+                &query, &data, dim, rows, &indices, &norms, &mut subset
+            ));
+            let expected: Vec<u32> = indices.iter().map(|&i| full[i]).collect();
+            assert_eq!(subset, expected, "subset kernel disagrees at dimension {dim}");
+            assert!(!quantized_scores_dot_subset(
+                &query, &data, dim, rows, &[rows], &norms, &mut vec![0u32; 1]
+            ));
         }
     }
 

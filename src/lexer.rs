@@ -202,6 +202,7 @@ fn read_string(input: &str, start: usize) -> DbResult<(String, usize)> {
     let bytes = input.as_bytes();
     let mut out = String::new();
     let mut i = start + 1;
+    let mut run = i;
     loop {
         let Some(&b) = bytes.get(i) else {
             return Err(syntax_at(start, "unterminated string literal"));
@@ -210,9 +211,12 @@ fn read_string(input: &str, start: usize) -> DbResult<(String, usize)> {
             b'\'' => {
                 // `''` is an escaped quote and continues the literal.
                 if bytes.get(i + 1) == Some(&b'\'') {
+                    out.push_str(&input[run..i]);
                     out.push('\'');
                     i += 2;
+                    run = i;
                 } else {
+                    out.push_str(&input[run..i]);
                     return Ok((out, i + 1));
                 }
             }
@@ -220,6 +224,7 @@ fn read_string(input: &str, start: usize) -> DbResult<(String, usize)> {
                 let Some(&esc) = bytes.get(i + 1) else {
                     return Err(syntax_at(start, "unterminated string literal"));
                 };
+                out.push_str(&input[run..i]);
                 out.push(match esc {
                     b'\'' => '\'',
                     b'"' => '"',
@@ -236,13 +241,12 @@ fn read_string(input: &str, start: usize) -> DbResult<(String, usize)> {
                     }
                 });
                 i += 2;
+                run = i;
             }
-            _ => {
-                // Copy the whole UTF-8 scalar, not the byte.
-                let ch = input[i..].chars().next().unwrap_or('?');
-                out.push(ch);
-                i += ch.len_utf8();
-            }
+            // Plain text is copied in one slice when the next quote or escape
+            // arrives; both delimiters are ASCII, so the slice stays on a
+            // character boundary.
+            _ => i += 1,
         }
     }
 }

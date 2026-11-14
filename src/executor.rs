@@ -63,6 +63,8 @@ struct RawScanCache {
     candidate_flags: Vec<u8>,
     /// Integer packed scores and their bucket histogram for one query.
     quant_scores: Vec<u32>,
+    /// Packed scores of a filtered query's rows, in subset order.
+    quant_subset_scores: Vec<u32>,
     quant_histogram: Vec<u32>,
     filters: Vec<CachedFilter>,
     filter_bytes: usize,
@@ -641,6 +643,7 @@ impl Session {
             query_quantized: Vec::new(),
             candidate_flags: Vec::new(),
             quant_scores: Vec::new(),
+            quant_subset_scores: Vec::new(),
             quant_histogram: Vec::new(),
             filters: Vec::new(),
             filter_bytes: 0,
@@ -839,19 +842,28 @@ fn select_quantized_topk(
             let RawScanCache {
                 query_quantized,
                 quantized,
+                quant_norms,
                 quant_scores,
+                quant_subset_scores,
                 ..
             } = cache;
-            for &index in list {
-                if index >= count {
-                    return Ok(None);
-                }
-                let start = index * dimensions;
-                let row_codes = &quantized[start..start + dimensions];
-                let Some(score) = distance::quantized_score_row(query_quantized, row_codes)
-                else {
-                    return Ok(None);
-                };
+            if list.iter().any(|&index| index >= count) {
+                return Ok(None);
+            }
+            quant_subset_scores.clear();
+            quant_subset_scores.resize(list.len(), 0);
+            if !distance::quantized_scores_dot_subset(
+                query_quantized,
+                quantized,
+                dimensions,
+                count,
+                list,
+                quant_norms,
+                quant_subset_scores,
+            ) {
+                return Ok(None);
+            }
+            for (&index, &score) in list.iter().zip(quant_subset_scores.iter()) {
                 quant_scores[index] = score;
             }
         }

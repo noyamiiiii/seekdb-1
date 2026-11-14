@@ -40,6 +40,18 @@ impl Parser {
         tok
     }
 
+    /// Consumes the current token and moves its text out, leaving an empty
+    /// string behind. Used where the parser only needs the token's body.
+    fn take_text_of_current(&mut self) -> String {
+        let len = self.tokens.len();
+        let tok = &mut self.tokens[self.pos];
+        let text = std::mem::take(&mut tok.text);
+        if tok.kind != Kind::End && self.pos + 1 < len {
+            self.pos += 1;
+        }
+        text
+    }
+
     fn at_word(&self, keyword: &str) -> bool {
         self.peek().is_word(keyword)
     }
@@ -612,27 +624,27 @@ impl Parser {
         self.expect_kind(Kind::LBracket, "'['")?;
         let mut values = Vec::new();
         loop {
-            let tok = self.peek().clone();
-            if tok.kind != Kind::Number {
+            if self.peek().kind != Kind::Number {
+                let pos = self.peek().pos;
                 return Err(DbError::new(
                     ErrorCode::WrongValue,
-                    format!(
-                        "vector element at character {} is not a number",
-                        tok.pos + 1
-                    ),
+                    format!("vector element at character {} is not a number", pos + 1),
                 ));
             }
-            self.bump();
-            let parsed = tok.text.parse::<f32>().map_err(|_| {
+            // Takes the token's text instead of cloning it: a large INSERT
+            // holds one numeric token per component, and the copy dominated
+            // parsing a batch of vector rows.
+            let text = self.take_text_of_current();
+            let parsed = text.parse::<f32>().map_err(|_| {
                 DbError::new(
                     ErrorCode::WrongValue,
-                    format!("'{}' is not a valid float32", tok.text),
+                    format!("'{text}' is not a valid float32"),
                 )
             })?;
             if !parsed.is_finite() {
                 return Err(DbError::new(
                     ErrorCode::WrongValue,
-                    format!("'{}' is not a finite float32", tok.text),
+                    format!("'{text}' is not a finite float32"),
                 ));
             }
             values.push(parsed);
@@ -753,20 +765,7 @@ pub(crate) fn parse_vector_string(text: &str) -> DbResult<Vec<f32>> {
     // allocating two SQL tokens and owned text for every comma/number pair.
     let trimmed=text.trim_matches([' ','\t','\r','\n']);
     if let Some(body)=trimmed.strip_prefix('[').and_then(|v|v.strip_suffix(']')) {
-        if body.bytes().all(|c| c.is_ascii_digit() || matches!(c,b'+'|b'-'|b'.'|b'e'|b'E'|b','|b' '|b'\t'|b'\r'|b'\n')) {
-            let error=||DbError::new(ErrorCode::WrongValue,"invalid finite float32 vector literal");
-            let mut values=Vec::with_capacity(body.bytes().filter(|&c|c==b',').count()+1);
-            for part in body.split(',') {
-                let number=part.trim_matches([' ','\t','\r','\n']);
-                let bytes=number.as_bytes();
-                let first=if bytes.first()==Some(&b'-'){1}else{0};
-                if !bytes.get(first).is_some_and(u8::is_ascii_digit) || crate::lexer::number_end(bytes,0)!=bytes.len() {return Err(error());}
-                let value=number.parse::<f32>().map_err(|_|error())?;
-                if !value.is_finite(){return Err(error());}
-                values.push(value);
-            }
-            return Ok(values);
-        }
+        if let Some(values)=parse_plain_vector(body) { return values; }
     }
     let tokens = tokenize(text).map_err(|_| {
         DbError::new(
@@ -790,6 +789,60 @@ pub(crate) fn parse_vector_string(text: &str) -> DbResult<Vec<f32>> {
     Ok(values)
 }
 
+/// Parses a plain `1,2,3` body with one forward scan, keeping
+/// `str::parse::<f32>` for each component so stored numbers stay
+/// bit-identical to every other parse path.
+///
+/// Returns `None` when the body is not a plain decimal list; the caller then
+/// keeps the general tokenizer path and its error text.
+fn parse_plain_vector(body: &str) -> Option<DbResult<Vec<f32>>> {
+    let error = || DbError::new(ErrorCode::WrongValue, "invalid finite float32 vector literal");
+    let bytes = body.as_bytes();
+    let mut values = Vec::with_capacity((bytes.len() / 4 + 1).min(4096));
+    let mut i = 0usize;
+    loop {
+        while i < bytes.len() && is_blank(bytes[i]) {
+            i += 1;
+        }
+        let start = i;
+        let first = if bytes.get(i) == Some(&b'-') { i + 1 } else { i };
+        if !bytes.get(first).is_some_and(u8::is_ascii_digit) {
+            return None;
+        }
+        let num_end = crate::lexer::number_end(bytes, i);
+        let mut end = num_end;
+        while end < bytes.len() && is_blank(bytes[end]) {
+            end += 1;
+        }
+        // `number_end` already stopped on the last digit, so the component is
+        // exactly `start..num_end`; only the separator may carry blanks.
+        let number = &body[start..num_end];
+        match bytes.get(end) {
+            None => {
+                let value = number.parse::<f32>().ok()?;
+                if !value.is_finite() {
+                    return Some(Err(error()));
+                }
+                values.push(value);
+                return Some(Ok(values));
+            }
+            Some(b',') => {
+                let value = number.parse::<f32>().ok()?;
+                if !value.is_finite() {
+                    return Some(Err(error()));
+                }
+                values.push(value);
+                i = end + 1;
+            }
+            Some(_) => return None,
+        }
+    }
+}
+
+fn is_blank(byte: u8) -> bool {
+    matches!(byte, b' ' | b'\t' | b'\r' | b'\n')
+}
+
 fn is_reserved(word: &str) -> bool {
     const RESERVED: &[&str] = &[
         "select", "from", "where", "insert", "into", "values", "update", "set", "delete", "create",
@@ -805,6 +858,64 @@ mod tests {
 
     fn parse_ok(sql: &str) -> Statement {
         parse(sql).unwrap_or_else(|e| panic!("{sql}: {e}"))
+    }
+
+    /// The tokenizer path the fast literal parser has to stay identical to.
+    fn parse_vector_reference(text: &str) -> DbResult<Vec<f32>> {
+        let tokens = crate::lexer::tokenize(text)?;
+        let mut parser = Parser { tokens, pos: 0 };
+        let values = parser.parse_vector_literal()?;
+        parser.expect_end()?;
+        Ok(values)
+    }
+
+    #[test]
+    fn plain_vector_fast_path_matches_the_tokenizer_bit_for_bit() {
+        let mut corpus: Vec<String> = vec![
+            "[1,2,3]".into(),
+            "[-1.5, 2e3 , 0]".into(),
+            "[1e-7,-0.000001,123456789]".into(),
+            "[ 1 ,2 ]".into(),
+            "[0.1,-0.1,3.14159265]".into(),
+            "[1E5,2E-5]".into(),
+            "[0.000001]".into(),
+            "[-0.999999,1.000001]".into(),
+        ];
+        // Deterministic pseudo-random magnitudes exercise the rounding paths.
+        let mut state = 0x12345678u32;
+        let mut wide = String::from("[");
+        for index in 0..256 {
+            state = state.wrapping_mul(1664525).wrapping_add(1013904223);
+            let unit = (state >> 8) as f64 / (1u32 << 24) as f64;
+            if index > 0 {
+                wide.push(',');
+            }
+            wide.push_str(&format!("{:.6}", unit * 40.0 - 20.0));
+        }
+        wide.push(']');
+        corpus.push(wide);
+
+        for text in corpus {
+            let expected = parse_vector_reference(&text)
+                .unwrap_or_else(|e| panic!("reference rejected {text}: {e}"));
+            let actual = parse_vector_string(&text)
+                .unwrap_or_else(|e| panic!("fast path rejected {text}: {e}"));
+            assert_eq!(actual.len(), expected.len(), "{text}");
+            for (a, b) in actual.iter().zip(&expected) {
+                assert_eq!(a.to_bits(), b.to_bits(), "{text}: {a} vs {b}");
+            }
+        }
+    }
+
+    #[test]
+    fn malformed_vectors_stay_value_errors() {
+        for text in ["[]", "[1,,2]", "[1.2.3]", "[abc]", "[1,]", "[,1]"] {
+            let fast = parse_vector_string(text);
+            let reference = parse_vector_reference(text);
+            assert!(reference.is_err(), "{text} should be rejected");
+            let err = fast.expect_err(text);
+            assert_eq!(err.code, ErrorCode::WrongValue, "{text}");
+        }
     }
 
     #[test]
