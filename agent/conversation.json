@@ -101,6 +101,7 @@
     {
       "id": "i1",
       "dimension": "问题理解与自主拆解",
+      "level": 1.0,
       "student_evidence": {
         "pointer": "/student_prompts/3/content",
         "quote": "现在已经有队伍有分了 再看看有没有更新东西"
@@ -115,6 +116,7 @@
     {
       "id": "i2",
       "dimension": "问题理解与自主拆解",
+      "level": 1.0,
       "student_evidence": {
         "pointer": "/student_answers/16/answer",
         "quote": "本次很多问题都源于前期协议对齐不充分、评测基线缺失"
@@ -129,6 +131,7 @@
     {
       "id": "i3",
       "dimension": "问题理解与自主拆解",
+      "level": 1.0,
       "student_evidence": {
         "pointer": "/student_answers/19/answer",
         "quote": "先让他读我们整理的协议对接踩坑笔记，比官方文档更贴当前的项目情况。上手先跑本地的基础 SQL 回归命令，先把环境跑通，再去碰核心逻辑。"
@@ -143,6 +146,7 @@
     {
       "id": "i4",
       "dimension": "技术理解与迁移",
+      "level": 1.5,
       "student_evidence": {
         "pointer": "/student_answers/1/answer",
         "quote": "WAL 先写日志再刷数据页的机制，只要 WAL 持久化就可回放恢复"
@@ -157,6 +161,7 @@
     {
       "id": "i5",
       "dimension": "技术理解与迁移",
+      "level": 2.0,
       "student_evidence": {
         "pointer": "/student_answers/21/answer",
         "quote": "四个用例：COMMIT 应答后立刻杀、事务未提交就杀、五条自动提交后杀、多行插入撞主键后杀。数字是 10/10、0/0、5/5、1/1。"
@@ -171,6 +176,7 @@
     {
       "id": "i6",
       "dimension": "技术理解与迁移",
+      "level": 1.0,
       "student_evidence": {
         "pointer": "/student_answers/2/answer",
         "quote": "当前数据集规模下 exact 能同时满足精度和时延要求，ANN 存在固有召回损失"
@@ -185,6 +191,7 @@
     {
       "id": "i7",
       "dimension": "独立验证与质疑",
+      "level": 1.5,
       "student_evidence": {
         "pointer": "/student_answers/4/answer",
         "quote": "我初步判断是服务端崩溃恢复逻辑卡死，同时保留了测试脚本本身存在语法错误的备选假设"
@@ -199,6 +206,7 @@
     {
       "id": "i8",
       "dimension": "独立验证与质疑",
+      "level": 1.0,
       "student_evidence": {
         "pointer": "/student_answers/8/answer",
         "quote": "先查看同批次其他队伍的提交状态，再用前一天的可运行版本重新提交；若旧版本也失败则是平台问题，若旧版本正常则是本次代码引入的问题"
@@ -213,6 +221,7 @@
     {
       "id": "i9",
       "dimension": "独立验证与质疑",
+      "level": 1.5,
       "student_evidence": {
         "pointer": "/student_answers/20/answer",
         "quote": "同时做两项断言：一是断言每条结果的距离值等于真实欧氏距离（开根号后的值），二是断言等距点的二级排序顺序与规则一致。"
@@ -227,6 +236,7 @@
     {
       "id": "i10",
       "dimension": "独立验证与质疑",
+      "level": 1.0,
       "student_evidence": {
         "pointer": "/student_prompts/8/content",
         "quote": "怎么性能指标比上一次有分的还低了"
@@ -241,6 +251,7 @@
     {
       "id": "i11",
       "dimension": "实验与反馈迭代",
+      "level": 1.0,
       "student_evidence": {
         "pointer": "/student_answers/11/answer",
         "quote": "一次性补充十余个未单独验证的语法后，提交失败且无法快速定位问题点"
@@ -255,6 +266,7 @@
     {
       "id": "i12",
       "dimension": "实验与反馈迭代",
+      "level": 1.5,
       "student_evidence": {
         "pointer": "/student_answers/10/answer",
         "quote": "本次修改只针对定位到的单一根因，代码改动范围极小"
@@ -269,6 +281,7 @@
     {
       "id": "i13",
       "dimension": "实验与反馈迭代",
+      "level": 1.5,
       "student_evidence": {
         "pointer": "/student_answers/22/answer",
         "quote": "我意识到两种解释在只看最终结果时不可区分，于是设计了两个对照"
@@ -283,6 +296,7 @@
     {
       "id": "i14",
       "dimension": "取舍与反思",
+      "level": 1.0,
       "student_evidence": {
         "pointer": "/student_answers/12/answer",
         "quote": "代价是查询性能上限更低，随着数据量增长时延会线性上升"
@@ -293,17 +307,6 @@
       },
       "rationale": "承认放弃 ANN 的代价不是「实现更简单」，而是可测量的：首版 exact 全扫在 10 000 行时 2.235 ms/次，打包预筛后降到 0.063 ms/次，但查询仍是全表扫描，行数增加时线性上升。把召回率与性能上限放在一起权衡，而不是只报优点。",
       "attribution": "代价分析由学生给出；基线测量由 Agent 执行。"
-    },
-    {
-      "id": "i15",
-      "dimension": "取舍与反思",
-      "student_evidence": {
-        "pointer": "/student_answers/18/answer",
-        "quote": "一个是 Top10 召回率掉了快 5 个百分点，另一个是小数据集下延迟反而涨了。精度损失超了预期，就直接判定不能上线。"
-      },
-      "result_evidence": {},
-      "rationale": "给出可执行的上线判据：召回 Top10 掉约 5 个百分点、且小数据集上延迟反升，就直接否决；判据先于结论，而不是做完再解释。IVF 对照实验没有保存原始输出，因此本条只按「提出判据」收录，不计实际验证结果。",
-      "attribution": "判据与结论由学生给出（quote 为其原话）；对照实验由 Agent 执行但未留存输出文件。"
     }
   ],
   "decisions": [
